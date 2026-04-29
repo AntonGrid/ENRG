@@ -1,0 +1,70 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ENRG – Pitch Deck</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { background:#000; overflow:hidden; height:100vh; font-family:Inter,sans-serif; }
+        canvas { position:fixed; top:0; left:0; width:100%; height:100%; }
+        .slide { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:2rem; opacity:0; transition:opacity 1.2s; background:radial-gradient(circle at 30% 40%, #132035, #0A0F14); color:#E0E6ED; pointer-events:none; }
+        .slide.active { opacity:1; pointer-events:auto; }
+        .slide.cover { background:linear-gradient(145deg,#02060c,#0A1F3F,#02060c); }
+        .logo { font-size:5rem; font-weight:900; color:#00E5FF; text-shadow:0 0 40px #00E5FF66; animation: flicker 3s infinite; }
+        .logo span { color:#FF6B00; }
+        @keyframes flicker { 0%,19%,21%,23%,25%,54%,56%,100%{opacity:1} 20%,24%,55%{opacity:0.6} }
+        h1 { font-size:3rem; color:#00E5FF; }
+        .controls { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); display:flex; gap:1.5rem; z-index:10; }
+        .controls button { background:rgba(0,0,0,0.5); border:2px solid #00E5FF44; color:#00E5FF; font-size:1.8rem; border-radius:50%; width:3.5rem; height:3.5rem; cursor:pointer; }
+    </style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="slides">
+    <div class="slide cover active"><div class="logo">E<span>NRG</span></div><h1>Energy Rights</h1><p>Decentralized Energy Corporation</p><p><em>&ldquo;Bitcoin fixed money. ENRG fixes energy.&rdquo;</em></p><p style="color:#FF6B00; margin-top:2rem;">Anton Grid, Founder & CEO</p></div>
+    <div class="slide"><h2>1. THE PROBLEM</h2><p>Centralized $8T energy market. You have zero control.</p></div>
+    <div class="slide"><h2>2. OUR SOLUTION</h2><p>Mine real kilowatt-hours, not waste electricity.</p><p>Any source: solar, wind, hydro, biogas, gas.</p></div>
+    <div class="slide"><h2>Proof-of-Production</h2><p>Connect → IoT proof → Verification → Mint ENRG</p></div>
+    <div class="slide"><h2>ENERGY VAULT</h2><p>Revenue from assets → Buyback & Burn → Scarcity</p></div>
+    <div class="slide"><h2>TOKENOMICS</h2><p>1B ENRG · Solana · $0.01 · 60% community mining</p></div>
+    <div class="slide"><h2>WHY WE WIN</h2><p>Arkreen = solar. Starpower = storage. <span style="color:#FF6B00;">ENRG = any source.</span></p><p>We build an asset, not loyalty points.</p></div>
+    <div class="slide"><h2>ROADMAP</h2><p>Genesis Q2–Q3 2026 · Mainnet Q4 · Vault 2027 · Expansion 2028+</p></div>
+    <div class="slide"><h2>PRE-SEED: $150k–$250k</h2><p>Audit · MVP · Legal · Marketing · Liquidity</p></div>
+    <div class="slide"><h2>VAULT FORECAST</h2><p><span style="font-size:3rem;color:#FF6B00;">$500K</span> 2027 · <span style="font-size:3rem;color:#FF6B00;">$2M</span> 2028 · <span style="font-size:3rem;color:#FF6B00;">$10M</span> 2029</p></div>
+    <div class="slide"><h2>LEGAL</h2><p>Utility token · UAE/Switzerland · SAFT + KYC</p></div>
+    <div class="slide"><h2>TEAM</h2><p style="font-size:1.8rem;color:#FF6B00;">Anton Grid</p><p>Founder & CEO</p></div>
+    <div class="slide cover"><div class="logo">E<span>NRG</span></div><p style="font-size:2rem;color:#FF6B00;">Nobody owns your energy.</p><p>enrg.project@gmail.com</p></div>
+</div>
+<div class="controls"><button onclick="prev()">◀</button><button onclick="next()">▶</button></div>
+<script>
+    (function() {
+        const canvas=document.getElementById('bg'),ctx=canvas.getContext('2d');
+        let w,h,particles=[];
+        function resize(){ w=canvas.width=window.innerWidth; h=canvas.height=window.innerHeight; init(); }
+        function init(){ particles=[]; for(let i=0;i<90;i++) particles.push({ x:Math.random()*w, y:Math.random()*h, vx:(Math.random()-0.5)*0.8, vy:(Math.random()-0.5)*0.8, r:Math.random()*2+1, c:Math.random()<0.5?'rgba(0,229,255,'+(Math.random()*0.6+0.2)+')':'rgba(255,107,0,'+(Math.random()*0.6+0.2)+')' }); }
+        function draw(){
+            ctx.clearRect(0,0,w,h);
+            for(let p of particles){
+                p.x+=p.vx; p.y+=p.vy;
+                if(p.x<0||p.x>w) p.vx*=-1;
+                if(p.y<0||p.y>h) p.vy*=-1;
+                ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fillStyle=p.c; ctx.fill();
+                for(let q of particles){
+                    if(p===q) continue;
+                    const dx=p.x-q.x,dy=p.y-q.y,dist=Math.sqrt(dx*dx+dy*dy);
+                    if(dist<130){ ctx.beginPath(); ctx.moveTo(p.x,p.y); ctx.lineTo(q.x,q.y); ctx.strokeStyle=`rgba(0,229,255,${(1-dist/130)*0.3})`; ctx.lineWidth=0.7; ctx.stroke(); }
+                }
+            }
+            requestAnimationFrame(draw);
+        }
+        resize(); window.addEventListener('resize',resize); draw();
+    })();
+    let idx=0; const s=document.querySelectorAll('.slide');
+    function show(n){ s.forEach(e=>e.classList.remove('active')); idx=(n+s.length)%s.length; s[idx].classList.add('active'); }
+    function next(){ show(idx+1); } function prev(){ show(idx-1); }
+    document.addEventListener('keydown',e=>{ if(e.key==='ArrowRight')next(); if(e.key==='ArrowLeft')prev(); });
+    setInterval(next,7000);
+</script>
+</body>
+</html>
