@@ -1,21 +1,18 @@
-
 <p align="center">
   <img src="assets/ENRG_Logo.svg" width="150" alt="ENRG Logo" />
 </p>
 
-<h1 align="center" style="color:#00E5FF;">ENRG (Energy Rights)</h1>
-<h3 align="center">Decentralized Energy Corporation: Proof-of-Production</h3>
+# ENRG (Energy Rights)
+### Decentralized Energy Corporation: Proof-of-Production
 
-<p align="center">
-  <em>"Bitcoin fixed money without central banks. ENRG will fix energy without monopolies."</em><br/>
-  — <strong>Anton Grid</strong>, Founder & CEO
-</p>
+> *"Bitcoin fixed money without central banks. ENRG will fix energy without monopolies."*
+> — Anton Grid, Founder & CEO
 
 ---
 
 ## About
 
-**ENRG** is a DePIN protocol turning any energy production into a liquid digital asset. Every token is physically backed by verified kilowatt-hours. The **Energy Vault** buys real assets and distributes revenue via **Buyback & Burn**, creating a self-growing economy.
+ENRG is a DePIN protocol turning any energy production into a liquid digital asset. Every token is physically backed by verified kilowatt-hours. The **Energy Vault** buys real assets and distributes revenue via **Buyback & Burn**, creating a self-growing economy.
 
 ## Why ENRG
 
@@ -27,17 +24,17 @@
 
 ## Quick Links
 
-- [Whitepaper](./ENRG_Whitepaper_v1.2_EN.html)
-- [Pitch Deck](./ENRG_Pitch_Deck_EN.html)
-- [Technical Documentation](./ENRG_Technical_Documentation_EN.html)
+- [Whitepaper](docs/ENRG_Whitepaper_v1.2_EN.html)
+- [Pitch Deck](docs/ENRG_Pitch_Deck_EN.html)
+- [Technical Documentation](docs/ENRG_Technical_Documentation_EN.html)
 
 ## Tokenomics
 
-- **Ticker:** ENRG  
-- **Blockchain:** Solana  
-- **Total Supply:** 1,000,000,000 (fixed)  
-- **Initial Price:** $0.01  
-- **Allocation:** 60% community mining · 15% DEX · 10% Vault · 10% team · 5% private sale  
+- **Ticker:** ENRG
+- **Blockchain:** Solana
+- **Total Supply:** 1,000,000,000 (fixed)
+- **Initial Price:** $0.01
+- **Allocation:** 60% community mining · 15% DEX · 10% Vault · 10% team · 5% private sale
 
 ## Roadmap (April 2026)
 
@@ -50,7 +47,7 @@
 
 ## Contact
 
-- **Email:** [enrg.project@gmail.com](mailto:enrg.project@gmail.com)  
+- **Email:** [enrg.project@gmail.com](mailto:enrg.project@gmail.com)
 - **GitHub:** [AntonGrid/enrg](https://github.com/AntonGrid/enrg)
 
 ---
