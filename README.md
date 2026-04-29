@@ -1,67 +1,57 @@
-# ENRG (Energy Rights)
 
-**Decentralized Energy Corporation: Proof-of-Production**
+<p align="center">
+  <img src="assets/ENRG_Logo.svg" width="150" alt="ENRG Logo" />
+</p>
 
-> *"Bitcoin fixed money without central banks. ENRG will fix energy without monopolies."*
-> — Anton Grid, Founder & CEO
+<h1 align="center" style="color:#00E5FF;">ENRG (Energy Rights)</h1>
+<h3 align="center">Decentralized Energy Corporation: Proof-of-Production</h3>
 
----
-
-## About ENRG
-
-ENRG is a DePIN protocol that turns energy production into mining of a liquid digital asset. Every token is physically backed by a verified kilowatt-hour. The **Proof-of-Production (PoP)** mechanism rewards any generation source — solar, wind, hydro, biogas, or even flare gas.
-
-The **Energy Vault** liquidity pool acquires real energy assets and distributes revenue via **Buyback & Burn** and staking, creating a self-growing economy.
+<p align="center">
+  <em>"Bitcoin fixed money without central banks. ENRG will fix energy without monopolies."</em><br/>
+  — <strong>Anton Grid</strong>, Founder & CEO
+</p>
 
 ---
 
-## Key Highlights
+## About
 
-- 🔌 **Any energy source** – Solar, wind, hydro, biogas, gas. No discrimination.
-- ⚡ **Proof-of-Production** – Mint tokens for real kWh, not wasted computation.
-- 🏦 **Energy Vault** – Revenue from physical assets buys back ENRG, creating scarcity.
-- 📈 **Self-growing economy** – Real yields for holders, deflationary pressure.
-- 🌍 **DePIN / RWA** – Physical infrastructure meets blockchain.
+**ENRG** is a DePIN protocol turning any energy production into a liquid digital asset. Every token is physically backed by verified kilowatt-hours. The **Energy Vault** buys real assets and distributes revenue via **Buyback & Burn**, creating a self-growing economy.
 
----
+## Why ENRG
+
+| Competitor | Energy type | Model | Buyback & Burn |
+|------------|-------------|-------|:---:|
+| Arkreen | Solar only | Loyalty points | ❌ |
+| Starpower | Storage only | Loyalty points | ❌ |
+| **ENRG** | **Sun, wind, hydro, biogas, gas** | **Real asset** | ✅ |
+
+## Quick Links
+
+- [Whitepaper](./ENRG_Whitepaper_v1.2_EN.html)
+- [Pitch Deck](./ENRG_Pitch_Deck_EN.html)
+- [Technical Documentation](./ENRG_Technical_Documentation_EN.html)
 
 ## Tokenomics
 
-- **Ticker:** ENRG
-- **Blockchain:** Solana
-- **Total Supply:** 1,000,000,000 (fixed)
-- **Initial price:** $0.01
-- **Allocation:** 60% community mining · 15% DEX · 10% Vault · 10% team · 5% private sale
+- **Ticker:** ENRG  
+- **Blockchain:** Solana  
+- **Total Supply:** 1,000,000,000 (fixed)  
+- **Initial Price:** $0.01  
+- **Allocation:** 60% community mining · 15% DEX · 10% Vault · 10% team · 5% private sale  
 
----
+## Roadmap (April 2026)
 
-## Documents (Russian, English versions coming soon)
-
-- [Whitepaper v1.2 (RU)](./ENRG_Whitepaper_v1.2_April2026.pdf)
-- [Technical Documentation v1.1 (RU)](./ENRG_Technical_Documentation_v1.1_April2026.pdf)
-- [Pitch Deck (HTML)](./ENRG_Pitch_Deck_April2026.html)
-- [Brand Assets](./assets/)
-
----
-
-## Team & Vision
-
-**Anton Grid** – Founder & CEO  
-*Energy engineer, Web3 enthusiast. Created the Proof-of-Production concept to give power back to the people.*
-
----
-
-## Legal
-
-ENRG is a **utility token**. It does not represent equity, profit shares, or any security. Participation is subject to KYC/AML procedures where required.
-
----
+| Phase | Timeline | Milestones |
+|-------|----------|------------|
+| **Genesis** | Q2–Q3 2026 | Testnet, audit, private sale |
+| **Mainnet** | Q4 2026 – Q1 2027 | IoT integration, DEX listing |
+| **Vault Growth** | Q2–Q3 2027 | Buyback & Burn, commercial producers |
+| **Expansion** | 2028+ | Tier-1 CEX, global DePIN, DAO |
 
 ## Contact
 
-- Email: [enrg.project@gmail.com](mailto:enrg.project@gmail.com)
-- Telegram: [@ENRG_Official](https://t.me/ENRG_Official)
-- GitHub: [github.com/AntonGrid/enrg](https://github.com/AntonGrid/enrg)
+- **Email:** [enrg.project@gmail.com](mailto:enrg.project@gmail.com)  
+- **GitHub:** [AntonGrid/enrg](https://github.com/AntonGrid/enrg)
 
 ---
 
