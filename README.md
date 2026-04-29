@@ -53,3 +53,8 @@ ENRG is a DePIN protocol turning any energy production into a liquid digital ass
 ---
 
 © 2026 Anton Grid. All rights reserved.
+---
+
+## For Partners & Auditors
+
+Full technical specifications (including smart contract details and IoT specifications) are available upon request for partners, auditors, and accredited investors. Contact us at [enrg.project@gmail.com](mailto:enrg.project@gmail.com) to request access.
