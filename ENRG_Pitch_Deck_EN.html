@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ENRG – Pitch Deck</title>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { background:#000; overflow:hidden; height:100vh; font-family:Inter,sans-serif; }
+        .slide { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:2rem; opacity:0; transition:opacity 1.2s; background:radial-gradient(circle at 30% 40%, #132035, #0A0F14); color:#E0E6ED; pointer-events:none; }
+        .slide.active { opacity:1; pointer-events:auto; }
+        .slide.cover { background:linear-gradient(145deg, #02060c, #0A1F3F, #02060c); }
+        .logo { font-size:5rem; font-weight:900; color:#00E5FF; text-shadow:0 0 40px #00E5FF66; animation: flicker 3s infinite; }
+        .logo span { color:#FF6B00; text-shadow:0 0 30px #FF6B0066; }
+        @keyframes flicker { 0%,19%,21%,23%,25%,54%,56%,100% { opacity:1; } 20%,24%,55% { opacity:0.6; } }
+        h1 { font-size:3rem; color:#00E5FF; }
+        h2 { font-size:2.4rem; color:#00E5FF; }
+        p { font-size:1.2rem; color:#C8D0D8; }
+        .big { font-size:3rem; color:#FF6B00; font-weight:800; }
+        .controls { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); display:flex; gap:1.5rem; z-index:10; }
+        .controls button { background:rgba(0,0,0,0.5); border:2px solid #00E5FF44; color:#00E5FF; font-size:1.8rem; border-radius:50%; width:3.5rem; height:3.5rem; cursor:pointer; }
+    </style>
+</head>
+<body>
+<div class="slides">
+    <div class="slide cover active"><div class="logo">E<span>NRG</span></div><h1>Energy Rights</h1><p>Decentralized Energy Corporation</p><p><em>“Bitcoin fixed money. ENRG fixes energy.”</em></p><p style="color:#FF6B00; margin-top:2rem;">Anton Grid, Founder & CEO</p></div>
+    <div class="slide"><h2>1. THE PROBLEM</h2><p>Centralized energy. $8T market, zero control for you.</p><p>Private producers cannot sell surplus fairly.</p></div>
+    <div class="slide"><h2>2. OUR SOLUTION</h2><p>Mining real kilowatt-hours, not wasting electricity.</p><p>Any source: solar, wind, hydro, biogas, gas.</p></div>
+    <div class="slide"><h2>Proof-of-Production</h2><p>Connect → IoT proof → Verification → Mint ENRG</p></div>
+    <div class="slide"><h2>ENERGY VAULT</h2><p>Real assets → Revenue → Buyback & Burn → Scarcity</p></div>
+    <div class="slide"><h2>TOKENOMICS</h2><p>1B ENRG · Solana · $0.01 · 60% community mining</p></div>
+    <div class="slide"><h2>WHY WE AREN'T AFRAID</h2><p>Arkreen = solar. Starpower = storage. <span style="color:#FF6B00;">ENRG = any source.</span></p><p>We build an asset, not loyalty points.</p></div>
+    <div class="slide"><h2>ROADMAP (April 2026)</h2><p>Genesis Q2-Q3 · Mainnet Q4 · Vault 2027 · Expansion 2028+</p></div>
+    <div class="slide"><h2>PRE-SEED: $150k–$250k</h2><p>Audit · MVP · Legal · Marketing · Liquidity</p></div>
+    <div class="slide"><h2>VAULT FORECAST</h2><p><span class="big">$500K</span> 2027 · <span class="big">$2M</span> 2028 · <span class="big">$10M</span> 2029</p></div>
+    <div class="slide"><h2>LEGAL</h2><p>Utility token · UAE/Switzerland · SAFT + KYC</p></div>
+    <div class="slide"><h2>TEAM</h2><p style="font-size:1.8rem; color:#FF6B00;">Anton Grid</p><p>Founder & CEO</p></div>
+    <div class="slide cover"><div class="logo">E<span>NRG</span></div><p style="font-size:2rem; color:#FF6B00;">Nobody owns your energy.</p><p>enrg.project@gmail.com</p></div>
+</div>
+<div class="controls"><button onclick="prev()">◀</button><button onclick="next()">▶</button></div>
+<script>
+    let idx=0; const s=document.querySelectorAll('.slide');
+    function show(n){ s.forEach(el=>el.classList.remove('active')); idx=(n+s.length)%s.length; s[idx].classList.add('active'); }
+    function next(){ show(idx+1); } function prev(){ show(idx-1); }
+    document.addEventListener('keydown',e=>{ if(e.key==='ArrowRight')next(); if(e.key==='ArrowLeft')prev(); });
+    setInterval(next,7000);
+</script>
+</body>
+</html>
