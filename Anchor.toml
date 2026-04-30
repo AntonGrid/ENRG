@@ -1,0 +1,16 @@
+[toolchain]
+package_manager = "yarn"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+enrg_mvp = "4QaSxJeu7CFecVAHzp2bFRQ45bESmZajjruCD7sigpa6"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+
+[hooks]
