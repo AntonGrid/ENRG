@@ -5,25 +5,134 @@
  * IDL can be found at `target/idl/enrg_mvp.json`.
  */
 export type EnrgMvp = {
-  "address": "FczG4xFGPmCPAhZVqwVnKu5RXC3VytC5w4MPVDkFjXiN",
+  "address": "DFBxDwLNW8W54yizuwWthD48md13RrJJurfJCz4hcbmJ",
   "metadata": {
     "name": "enrgMvp",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "Created with Anchor"
+    "description": "ENRG Protocol MVP"
   },
   "instructions": [
     {
-      "name": "addEnergy",
+      "name": "createProducer",
       "discriminator": [
-        64,
-        130,
-        33,
-        219,
+        178,
+        175,
         236,
-        230,
-        251,
-        6
+        217,
+        176,
+        189,
+        164,
+        211
+      ],
+      "accounts": [
+        {
+          "name": "producer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "deviceId",
+          "type": "pubkey"
+        },
+        {
+          "name": "maxPowerW",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "initializeVault",
+      "discriminator": [
+        48,
+        191,
+        163,
+        44,
+        71,
+        129,
+        63,
+        164
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "mint"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint"
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "mintEnergy",
+      "discriminator": [
+        76,
+        31,
+        77,
+        219,
+        98,
+        60,
+        1,
+        241
       ],
       "accounts": [
         {
@@ -186,115 +295,14 @@ export type EnrgMvp = {
       ],
       "args": [
         {
-          "name": "amount",
-          "type": "u64"
+          "name": "proof",
+          "type": {
+            "defined": {
+              "name": "proof"
+            }
+          }
         }
       ]
-    },
-    {
-      "name": "createProducer",
-      "discriminator": [
-        178,
-        175,
-        236,
-        217,
-        176,
-        189,
-        164,
-        211
-      ],
-      "accounts": [
-        {
-          "name": "producer",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  100,
-                  117,
-                  99,
-                  101,
-                  114
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "authority"
-              }
-            ]
-          }
-        },
-        {
-          "name": "authority",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": [
-        {
-          "name": "deviceId",
-          "type": "pubkey"
-        }
-      ]
-    },
-    {
-      "name": "initializeVault",
-      "discriminator": [
-        48,
-        191,
-        163,
-        44,
-        71,
-        129,
-        63,
-        164
-      ],
-      "accounts": [
-        {
-          "name": "vault",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  118,
-                  97,
-                  117,
-                  108,
-                  116
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "mint"
-              }
-            ]
-          }
-        },
-        {
-          "name": "authority",
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "mint"
-        },
-        {
-          "name": "systemProgram",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
     }
   ],
   "accounts": [
@@ -329,7 +337,27 @@ export type EnrgMvp = {
     {
       "code": 6000,
       "name": "unauthorized",
-      "msg": "Only the registered authority can add energy"
+      "msg": "unauthorized"
+    },
+    {
+      "code": 6001,
+      "name": "staleProof",
+      "msg": "Stale proof"
+    },
+    {
+      "code": 6002,
+      "name": "invalidSignature",
+      "msg": "Invalid signature"
+    },
+    {
+      "code": 6003,
+      "name": "excessiveEnergy",
+      "msg": "Excessive energy"
+    },
+    {
+      "code": 6004,
+      "name": "invalidNonce",
+      "msg": "Invalid nonce"
     }
   ],
   "types": [
@@ -370,6 +398,39 @@ export type EnrgMvp = {
           {
             "name": "isInitialized",
             "type": "bool"
+          },
+          {
+            "name": "maxPowerW",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "proof",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          },
+          {
+            "name": "energyWh",
+            "type": "u64"
+          },
+          {
+            "name": "signature",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
           }
         ]
       }

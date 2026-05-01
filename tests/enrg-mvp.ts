@@ -1,4 +1,3 @@
-// @ts-nocheck
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { EnrgMvp } from "../target/types/enrg_mvp";
@@ -11,6 +10,7 @@ import {
   AuthorityType,
 } from "@solana/spl-token";
 import { expect } from "chai";
+import nacl from "tweetnacl";
 
 describe("ENRG MVP with minting", () => {
   const provider = anchor.AnchorProvider.local();
@@ -18,34 +18,30 @@ describe("ENRG MVP with minting", () => {
   const program = anchor.workspace.EnrgMvp as Program<EnrgMvp>;
 
   let authority: anchor.web3.Keypair;
+  let deviceKeypair: anchor.web3.Keypair;
   let mint: anchor.web3.PublicKey;
   let producerPda: anchor.web3.PublicKey;
   let vaultPda: anchor.web3.PublicKey;
   let destinationAta: anchor.web3.PublicKey;
-  let deviceKeypair: anchor.web3.Keypair; // имитация IoT-устройства
 
   before(async () => {
     authority = anchor.web3.Keypair.generate();
-    // Генерируем уникальный идентификатор устройства
     deviceKeypair = anchor.web3.Keypair.generate();
 
-    // Airdrop 10 SOL
     const sig = await provider.connection.requestAirdrop(
       authority.publicKey,
       10 * LAMPORTS_PER_SOL
     );
     await provider.connection.confirmTransaction(sig);
 
-    // Создаём Mint токена ENRG (пока authority = authority)
     mint = await createMint(
       provider.connection,
       authority,
-      authority.publicKey, // временный authority, позже передадим Vault
+      authority.publicKey,
       null,
-      0 // 1 ENRG = 1 кВт·ч, без знаков после запятой
+      0
     );
 
-    // Вычисляем PDA
     [producerPda] = PublicKey.findProgramAddressSync(
       [Buffer.from("producer"), authority.publicKey.toBuffer()],
       program.programId
@@ -55,7 +51,6 @@ describe("ENRG MVP with minting", () => {
       program.programId
     );
 
-    // Вычисляем адрес ATA получателя
     destinationAta = getAssociatedTokenAddressSync(
       mint,
       authority.publicKey
@@ -63,7 +58,6 @@ describe("ENRG MVP with minting", () => {
   });
 
   it("Initialize Vault, create producer and mint tokens", async () => {
-    // 1. Инициализация Vault
     await program.methods
       .initializeVault()
       .accounts({
@@ -71,11 +65,10 @@ describe("ENRG MVP with minting", () => {
         authority: authority.publicKey,
         mint: mint,
         systemProgram: anchor.web3.SystemProgram.programId,
-      })
+      } as any)
       .signers([authority])
       .rpc();
 
-    // 2. Передаём право минтинга от authority к Vault PDA
     await setAuthority(
       provider.connection,
       authority,
@@ -85,20 +78,36 @@ describe("ENRG MVP with minting", () => {
       vaultPda
     );
 
-    // 3. Регистрация производителя с привязкой device_id
     await program.methods
-      .createProducer(deviceKeypair.publicKey) // передаём device_id
+      .createProducer(deviceKeypair.publicKey, new anchor.BN(1000))
       .accounts({
         producer: producerPda,
         authority: authority.publicKey,
         systemProgram: anchor.web3.SystemProgram.programId,
-      })
+      } as any)
       .signers([authority])
       .rpc();
 
-    // 4. Добавление энергии (150 Вт·ч) – вызовет минтинг
+    const nonce = 1;
+    const timestamp = Math.floor(Date.now() / 1000);
+    const energyWh = 150;
+
+    const msgBuf = Buffer.alloc(24);
+    msgBuf.writeBigUInt64LE(BigInt(nonce), 0);
+    msgBuf.writeBigInt64LE(BigInt(timestamp), 8);
+    msgBuf.writeBigUInt64LE(BigInt(energyWh), 16);
+
+    // ИСПРАВЛЕНО: убираем .slice(0, 32), передаём полный 64-байтный secretKey
+    const signature = nacl.sign.detached(msgBuf, deviceKeypair.secretKey);
+    const sigArray = Array.from(signature);
+
     await program.methods
-      .addEnergy(new anchor.BN(150))
+      .mintEnergy({
+        nonce: new anchor.BN(nonce),
+        timestamp: new anchor.BN(timestamp),
+        energyWh: new anchor.BN(energyWh),
+        signature: sigArray,
+      } as any)
       .accounts({
         producer: producerPda,
         authority: authority.publicKey,
@@ -108,18 +117,17 @@ describe("ENRG MVP with minting", () => {
         tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
         associatedTokenProgram: anchor.utils.token.ASSOCIATED_PROGRAM_ID,
         systemProgram: anchor.web3.SystemProgram.programId,
-      })
+      } as any)
       .signers([authority])
       .rpc();
 
-    // Проверяем баланс токенов у authority
     const tokenAccount = await getOrCreateAssociatedTokenAccount(
       provider.connection,
       authority,
       mint,
       authority.publicKey
     );
-    expect(Number(tokenAccount.amount)).to.equal(150);
+    expect(Number(tokenAccount.amount)).to.equal(energyWh);
     console.log("✅ Token balance:", Number(tokenAccount.amount), "ENRG");
   });
 });

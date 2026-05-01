@@ -4,7 +4,7 @@ use anchor_spl::{
     token::{self, Mint, Token, TokenAccount},
 };
 
-declare_id!("FczG4xFGPmCPAhZVqwVnKu5RXC3VytC5w4MPVDkFjXiN");
+declare_id!("DFBxDwLNW8W54yizuwWthD48md13RrJJurfJCz4hcbmJ");
 
 #[program]
 pub mod enrg_mvp {
@@ -17,7 +17,7 @@ pub mod enrg_mvp {
         Ok(())
     }
 
-    pub fn create_producer(ctx: Context<CreateProducer>, device_id: Pubkey) -> Result<()> {
+    pub fn create_producer(ctx: Context<CreateProducer>, device_id: Pubkey, max_power_w: u64) -> Result<()> {
         let producer = &mut ctx.accounts.producer;
         producer.authority = ctx.accounts.authority.key();
         producer.device_id = device_id;
@@ -26,12 +26,15 @@ pub mod enrg_mvp {
         producer.timestamp = 0;
         producer.signature = [0u8; 64];
         producer.is_initialized = true;
+        producer.max_power_w = max_power_w;
         msg!("Producer registered: {} with device {}", producer.authority, device_id);
         Ok(())
     }
 
-    pub fn add_energy(ctx: Context<AddEnergy>, amount: u64) -> Result<()> {
+    pub fn mint_energy(ctx: Context<MintEnergy>, proof: Proof) -> Result<()> {
         let producer = &mut ctx.accounts.producer;
+        let clock = Clock::get()?;
+        let now = clock.unix_timestamp;
 
         require_keys_eq!(
             producer.authority,
@@ -39,12 +42,31 @@ pub mod enrg_mvp {
             ErrorCode::Unauthorized
         );
 
-        // Пока просто накапливаем энергию, полная проверка Proof будет добавлена позже
-        producer.energy_wh += amount;
-        producer.nonce += 1;
-        producer.timestamp = Clock::get()?.unix_timestamp;
+        require!(
+            (now - proof.timestamp).abs() <= 900,
+            ErrorCode::StaleProof
+        );
 
-        // Минтинг ENRG токенов
+        require!(proof.nonce > producer.nonce, ErrorCode::InvalidNonce);
+
+        let max_energy_per_interval = producer.max_power_w
+            .checked_mul(10)
+            .unwrap()
+            .checked_div(60)
+            .unwrap();
+        require!(
+            proof.energy_wh <= max_energy_per_interval,
+            ErrorCode::ExcessiveEnergy
+        );
+
+        // TODO: Ed25519 signature verification will be added after CPI issues resolved
+        // (currently disabled for MVP testing)
+
+        producer.nonce = proof.nonce;
+        producer.timestamp = now;
+        producer.energy_wh = producer.energy_wh.checked_add(proof.energy_wh).unwrap();
+        producer.signature = proof.signature;
+
         let mint_key = ctx.accounts.mint.key();
         let vault_bump = ctx.bumps.vault;
         let signer_seeds: &[&[&[u8]]] = &[&[
@@ -62,14 +84,9 @@ pub mod enrg_mvp {
             },
             signer_seeds,
         );
-        token::mint_to(cpi_ctx, amount)?;
+        token::mint_to(cpi_ctx, proof.energy_wh)?;
 
-        msg!(
-            "Energy added: {} Wh. Total: {} Wh. Minted {} ENRG",
-            amount,
-            producer.energy_wh,
-            amount
-        );
+        msg!("Minted {} ENRG for {} Wh", proof.energy_wh, proof.energy_wh);
         Ok(())
     }
 }
@@ -106,7 +123,7 @@ pub struct CreateProducer<'info> {
 }
 
 #[derive(Accounts)]
-pub struct AddEnergy<'info> {
+pub struct MintEnergy<'info> {
     #[account(
         mut,
         seeds = [b"producer", authority.key().as_ref()],
@@ -118,7 +135,7 @@ pub struct AddEnergy<'info> {
 
     #[account(
         seeds = [b"vault", mint.key().as_ref()],
-        bump
+        bump,
     )]
     pub vault: Account<'info, Vault>,
 
@@ -126,7 +143,7 @@ pub struct AddEnergy<'info> {
     pub mint: Account<'info, Mint>,
 
     #[account(
-        init_if_needed,
+        init,
         payer = authority,
         associated_token::mint = mint,
         associated_token::authority = authority,
@@ -157,14 +174,31 @@ pub struct EnergyProducer {
     pub timestamp: i64,
     pub signature: [u8; 64],
     pub is_initialized: bool,
+    pub max_power_w: u64,
 }
 
 impl EnergyProducer {
-    pub const LEN: usize = 32 + 32 + 8 + 8 + 8 + 64 + 1;
+    pub const LEN: usize = 32 + 32 + 8 + 8 + 8 + 64 + 1 + 8;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
+pub struct Proof {
+    pub nonce: u64,
+    pub timestamp: i64,
+    pub energy_wh: u64,
+    pub signature: [u8; 64],
 }
 
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Only the registered authority can add energy")]
+    #[msg("Unauthorized")]
     Unauthorized,
+    #[msg("Stale proof")]
+    StaleProof,
+    #[msg("Invalid signature")]
+    InvalidSignature,
+    #[msg("Excessive energy")]
+    ExcessiveEnergy,
+    #[msg("Invalid nonce")]
+    InvalidNonce,
 }

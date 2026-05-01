@@ -6,10 +6,13 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-enrg_mvp = "FczG4xFGPmCPAhZVqwVnKu5RXC3VytC5w4MPVDkFjXiN"
+enrg_mvp = "DFBxDwLNW8W54yizuwWthD48md13RrJJurfJCz4hcbmJ"
 
 [provider]
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
+
+[scripts]
+test = "yarn run test"
 
 [hooks]
