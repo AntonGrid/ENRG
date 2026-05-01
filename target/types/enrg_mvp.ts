@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/enrg_mvp.json`.
  */
 export type EnrgMvp = {
-  "address": "DFBxDwLNW8W54yizuwWthD48md13RrJJurfJCz4hcbmJ",
+  "address": "CcRjGroz7tsDAroZayWak58KtfAczJ7vbPddnRJDSeL4",
   "metadata": {
     "name": "enrgMvp",
     "version": "0.1.0",

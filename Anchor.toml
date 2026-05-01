@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-enrg_mvp = "DFBxDwLNW8W54yizuwWthD48md13RrJJurfJCz4hcbmJ"
+enrg_mvp = "CcRjGroz7tsDAroZayWak58KtfAczJ7vbPddnRJDSeL4"
 
 [provider]
 cluster = "localnet"

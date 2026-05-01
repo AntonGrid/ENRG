@@ -4,7 +4,7 @@ use anchor_spl::{
     token::{self, Mint, Token, TokenAccount},
 };
 
-declare_id!("DFBxDwLNW8W54yizuwWthD48md13RrJJurfJCz4hcbmJ");
+declare_id!("CcRjGroz7tsDAroZayWak58KtfAczJ7vbPddnRJDSeL4");
 
 #[program]
 pub mod enrg_mvp {
@@ -27,7 +27,12 @@ pub mod enrg_mvp {
         producer.signature = [0u8; 64];
         producer.is_initialized = true;
         producer.max_power_w = max_power_w;
-        msg!("Producer registered: {} with device {}", producer.authority, device_id);
+        msg!(
+            "Producer registered: {} with device {} max_power {}W",
+            producer.authority,
+            device_id,
+            max_power_w
+        );
         Ok(())
     }
 
@@ -59,8 +64,8 @@ pub mod enrg_mvp {
             ErrorCode::ExcessiveEnergy
         );
 
-        // TODO: Ed25519 signature verification will be added after CPI issues resolved
-        // (currently disabled for MVP testing)
+        // TODO: включить проверку Ed25519 подписи после решения проблем с импортом в Anchor 1.0.1
+        // Пока полагаемся на проверку на уровне клиента и оракулов
 
         producer.nonce = proof.nonce;
         producer.timestamp = now;
@@ -86,7 +91,12 @@ pub mod enrg_mvp {
         );
         token::mint_to(cpi_ctx, proof.energy_wh)?;
 
-        msg!("Minted {} ENRG for {} Wh", proof.energy_wh, proof.energy_wh);
+        msg!(
+            "Energy minted: {} Wh. Total: {} Wh. Nonce: {}",
+            proof.energy_wh,
+            producer.energy_wh,
+            proof.nonce
+        );
         Ok(())
     }
 }
