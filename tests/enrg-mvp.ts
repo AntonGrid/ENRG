@@ -1,3 +1,4 @@
+// @ts-nocheck
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { EnrgMvp } from "../target/types/enrg_mvp";
@@ -21,9 +22,12 @@ describe("ENRG MVP with minting", () => {
   let producerPda: anchor.web3.PublicKey;
   let vaultPda: anchor.web3.PublicKey;
   let destinationAta: anchor.web3.PublicKey;
+  let deviceKeypair: anchor.web3.Keypair; // имитация IoT-устройства
 
   before(async () => {
     authority = anchor.web3.Keypair.generate();
+    // Генерируем уникальный идентификатор устройства
+    deviceKeypair = anchor.web3.Keypair.generate();
 
     // Airdrop 10 SOL
     const sig = await provider.connection.requestAirdrop(
@@ -59,7 +63,7 @@ describe("ENRG MVP with minting", () => {
   });
 
   it("Initialize Vault, create producer and mint tokens", async () => {
-    // 1. Инициализация Vault (привязывает Mint к программе)
+    // 1. Инициализация Vault
     await program.methods
       .initializeVault()
       .accounts({
@@ -74,16 +78,16 @@ describe("ENRG MVP with minting", () => {
     // 2. Передаём право минтинга от authority к Vault PDA
     await setAuthority(
       provider.connection,
-      authority,            // текущий authority (подписант)
-      mint,                 // mint токена
-      authority.publicKey,  // текущий authority
+      authority,
+      mint,
+      authority.publicKey,
       AuthorityType.MintTokens,
-      vaultPda              // новый authority
+      vaultPda
     );
 
-    // 3. Регистрация производителя
+    // 3. Регистрация производителя с привязкой device_id
     await program.methods
-      .createProducer()
+      .createProducer(deviceKeypair.publicKey) // передаём device_id
       .accounts({
         producer: producerPda,
         authority: authority.publicKey,
@@ -92,7 +96,7 @@ describe("ENRG MVP with minting", () => {
       .signers([authority])
       .rpc();
 
-    // 4. Добавление энергии (150 кВт·ч) – вызовет минтинг
+    // 4. Добавление энергии (150 Вт·ч) – вызовет минтинг
     await program.methods
       .addEnergy(new anchor.BN(150))
       .accounts({

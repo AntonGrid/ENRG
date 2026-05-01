@@ -4,7 +4,7 @@ use anchor_spl::{
     token::{self, Mint, Token, TokenAccount},
 };
 
-declare_id!("4QaSxJeu7CFecVAHzp2bFRQ45bESmZajjruCD7sigpa6");
+declare_id!("FczG4xFGPmCPAhZVqwVnKu5RXC3VytC5w4MPVDkFjXiN");
 
 #[program]
 pub mod enrg_mvp {
@@ -17,11 +17,16 @@ pub mod enrg_mvp {
         Ok(())
     }
 
-    pub fn create_producer(ctx: Context<CreateProducer>) -> Result<()> {
+    pub fn create_producer(ctx: Context<CreateProducer>, device_id: Pubkey) -> Result<()> {
         let producer = &mut ctx.accounts.producer;
         producer.authority = ctx.accounts.authority.key();
-        producer.energy_produced = 0;
-        msg!("Producer registered: {}", producer.authority);
+        producer.device_id = device_id;
+        producer.nonce = 0;
+        producer.energy_wh = 0;
+        producer.timestamp = 0;
+        producer.signature = [0u8; 64];
+        producer.is_initialized = true;
+        msg!("Producer registered: {} with device {}", producer.authority, device_id);
         Ok(())
     }
 
@@ -34,7 +39,10 @@ pub mod enrg_mvp {
             ErrorCode::Unauthorized
         );
 
-        producer.energy_produced += amount;
+        // Пока просто накапливаем энергию, полная проверка Proof будет добавлена позже
+        producer.energy_wh += amount;
+        producer.nonce += 1;
+        producer.timestamp = Clock::get()?.unix_timestamp;
 
         // Минтинг ENRG токенов
         let mint_key = ctx.accounts.mint.key();
@@ -57,9 +65,9 @@ pub mod enrg_mvp {
         token::mint_to(cpi_ctx, amount)?;
 
         msg!(
-            "Energy added: {} kWh. Total: {} kWh. Minted {} ENRG",
+            "Energy added: {} Wh. Total: {} Wh. Minted {} ENRG",
             amount,
-            producer.energy_produced,
+            producer.energy_wh,
             amount
         );
         Ok(())
@@ -143,11 +151,16 @@ impl Vault {
 #[account]
 pub struct EnergyProducer {
     pub authority: Pubkey,
-    pub energy_produced: u64,
+    pub device_id: Pubkey,
+    pub nonce: u64,
+    pub energy_wh: u64,
+    pub timestamp: i64,
+    pub signature: [u8; 64],
+    pub is_initialized: bool,
 }
 
 impl EnergyProducer {
-    pub const LEN: usize = 32 + 8;
+    pub const LEN: usize = 32 + 32 + 8 + 8 + 8 + 64 + 1;
 }
 
 #[error_code]
