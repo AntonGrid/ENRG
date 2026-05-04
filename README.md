@@ -7,8 +7,9 @@
 
 <p align="center">
   <a href="https://enrg.network"><img src="https://img.shields.io/badge/website-enrg.network-00d4aa?style=flat-square" alt="Website"></a>
-  <a href="https://enrg.network/whitepaper.pdf"><img src="https://img.shields.io/badge/read-whitepaper-00d4aa?style=flat-square" alt="Whitepaper"></a>
-  <a href="https://enrg.network/technical-overview.pdf"><img src="https://img.shields.io/badge/read-tech_docs-00d4aa?style=flat-square" alt="Tech Docs"></a>
+  <a href="https://enrg.network/whitepaper.html"><img src="https://img.shields.io/badge/read-whitepaper-00d4aa?style=flat-square" alt="Whitepaper"></a>
+  <a href="https://enrg.network/technical-overview.html"><img src="https://img.shields.io/badge/read-tech_docs-00d4aa?style=flat-square" alt="Tech Docs"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg?style=flat-square" alt="License"></a>
 </p>
 
 ---
@@ -71,8 +72,8 @@ The **Energy Vault** buys real assets and distributes revenue via **Buyback & Bu
 ## Quick Links
 
 - 🌐 [Website (enrg.network)](https://enrg.network)
-- 📄 [Whitepaper v3.0 (PDF)](https://enrg.network/whitepaper.pdf)
-- 📘 [Technical Documentation (PDF)](https://enrg.network/technical-overview.pdf)
+- 📄 [Whitepaper v3.0](https://enrg.network/whitepaper.html)
+- 📘 [Technical Documentation](https://enrg.network/technical-overview.html)
 - 🛠 [Smart Contract Repository](https://github.com/AntonGrid/enrg-mvp)
 - 🎨 [Landing Page Repository](https://github.com/AntonGrid/enrg-landing)
 
