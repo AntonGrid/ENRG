@@ -1,1 +1,4 @@
-/private/
+target/
+node_modules/
+.anchor/
+.env
