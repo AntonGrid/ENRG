@@ -40,7 +40,25 @@ pub mod enrg_mvp {
         require!((now - proof.timestamp).abs() <= 900, ErrorCode::StaleProof);
         require!(proof.nonce > producer.nonce, ErrorCode::InvalidNonce);
 
-        let max_energy_per_interval = producer.max_power_w.checked_mul(10).unwrap().checked_div(60).unwrap();
+        // ✅ Правильная проверка Ed25519-подписи
+        use solana_program::syscalls;
+        let message = {
+            let mut data = Vec::with_capacity(24);
+            data.extend_from_slice(&proof.nonce.to_le_bytes());
+            data.extend_from_slice(&proof.timestamp.to_le_bytes());
+            data.extend_from_slice(&proof.energy_wh.to_le_bytes());
+            data
+        };
+        let verified = syscalls::ed25519_verify(
+            &proof.signature,
+            &producer.device_id.to_bytes(),
+            &message,
+        );
+        require!(verified, ErrorCode::InvalidSignature);
+
+        let max_energy_per_interval = producer.max_power_w
+            .checked_mul(10).unwrap()
+            .checked_div(60).unwrap();
         require!(proof.energy_wh <= max_energy_per_interval, ErrorCode::ExcessiveEnergy);
 
         producer.nonce = proof.nonce;
@@ -49,18 +67,15 @@ pub mod enrg_mvp {
         producer.signature = proof.signature;
 
         let total_mint = proof.energy_wh;
-        // Пользовательская доля: 85% от total_mint с округлением вниз
         let user_amount = total_mint.checked_mul(85).unwrap().checked_div(100).unwrap();
-        // Вся комиссия = оставшаяся часть
         let commission = total_mint.checked_sub(user_amount).unwrap();
 
-        // Распределение комиссии между фондами (доли в % от комиссии)
         let buyback_amount = commission.checked_mul(20).unwrap().checked_div(100).unwrap();
         let staking_amount = commission.checked_mul(40).unwrap().checked_div(100).unwrap();
         let dao_amount = commission.checked_mul(30).unwrap().checked_div(100).unwrap();
         let emergency_amount = commission.checked_sub(buyback_amount).unwrap()
             .checked_sub(staking_amount).unwrap()
-            .checked_sub(dao_amount).unwrap(); // остаток (10%)
+            .checked_sub(dao_amount).unwrap();
 
         let mint_key = ctx.accounts.mint.key();
         let vault_bump = ctx.bumps.vault;
@@ -124,13 +139,16 @@ pub mod enrg_mvp {
     }
 
     pub fn buyback_and_burn(ctx: Context<BuybackBurn>, amount: u64) -> Result<()> {
-        let cpi_burn = CpiContext::new(
+        let vault_bump = ctx.bumps.vault;
+        let signer_seeds: &[&[&[u8]]] = &[&[b"vault", ctx.accounts.mint.key().as_ref(), &[vault_bump]]];
+        let cpi_burn = CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
             token::Burn {
                 mint: ctx.accounts.mint.to_account_info(),
                 from: ctx.accounts.buyback_account.to_account_info(),
                 authority: ctx.accounts.vault.to_account_info(),
             },
+            signer_seeds,
         );
         burn(cpi_burn, amount)?;
         msg!("Buyback & Burn: burned {} ENRG", amount);
@@ -182,7 +200,7 @@ pub mod enrg_mvp {
         let reward = pool.amount.checked_mul(user_stake.staked_amount).unwrap().checked_div(total_staked).unwrap();
         if reward > 0 {
             let pool_bump = ctx.bumps.staking_pool;
-            let signer_seeds: &[&[&[u8]]] = &[&[b"staking-pool", &[pool_bump]]];
+            let signer_seeds: &[&[&[u8]]] = &[&[b"staking-pool", ctx.accounts.mint.key().as_ref(), &[pool_bump]]];
             let cpi_transfer = CpiContext::new_with_signer(
                 ctx.accounts.token_program.key(),
                 SplTransfer {
@@ -211,7 +229,7 @@ pub mod enrg_mvp {
         let new_claimable = total_vested.checked_sub(vesting.withdrawn).unwrap();
         require!(new_claimable > 0, ErrorCode::NothingToClaim);
         vesting.withdrawn = vesting.withdrawn.checked_add(new_claimable).unwrap();
-        let seeds: &[&[u8]] = &[b"founder-vesting", &[ctx.bumps.vesting]];
+        let seeds: &[&[u8]] = &[b"founder-vesting", ctx.accounts.founder.key().as_ref(), &[ctx.bumps.vesting]];
         let signer_seeds: &[&[&[u8]]] = &[seeds];
         let cpi_transfer = CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
