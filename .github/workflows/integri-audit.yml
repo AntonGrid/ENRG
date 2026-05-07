@@ -1,0 +1,17 @@
+name: Integri Audit
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Integri AI Audit
+        uses: Integri-AI/action@v1
+        with:
+          path: programs
