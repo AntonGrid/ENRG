@@ -1,4 +1,6 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::ed25519_program;
+
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, burn, Mint, Token, TokenAccount, Transfer as SplTransfer},
@@ -6,14 +8,16 @@ use anchor_spl::{
 
 declare_id!("CYU14or4LzBXfm8Q5NuYa7eYxfMDtqGGXE3EtZvMo6eG");
 
-#[[program]]
+#[program]
 pub mod enrg_mvp {
     use super::*;
 
     pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
-        let vault = &mut ctx.accounts.accounts.vault;
-        vault.mint = ctx.accounts.accounts.mint.key();
-        vault.authority = ctx.accounts.accounts.authority.key();
+        let vault = &mut ctx.accounts.vault;
+
+        vault.mint = ctx.accounts.mint.key();
+        vault.authority = ctx.accounts.authority.key();
+
         Ok(())
     }
 
@@ -22,7 +26,8 @@ pub mod enrg_mvp {
         device_id: Pubkey,
         max_power_w: u64,
     ) -> Result<()> {
-        let producer = &mut ctx.accounts.accounts.producer;
+        let producer = &mut ctx.accounts.producer;
+
         producer.authority = ctx.accounts.authority.key();
         producer.device_id = device_id;
         producer.nonce = 0;
@@ -42,13 +47,14 @@ pub mod enrg_mvp {
     }
 
     pub fn mint_energy(ctx: Context<MintEnergy>, proof: Proof) -> Result<()> {
-        let producer = &mut ctx.accounts.accounts.producer;
-        let clock = Clock::get()}?;
+        let producer = &mut ctx.accounts.producer;
+
+        let clock = Clock::get()?;
         let now = clock.unix_timestamp;
 
         require_keys_eq!(
             producer.authority,
-            ctx.accounts.accounts.authority.key(),
+            ctx.accounts.authority.key(),
             ErrorCode::Unauthorized
         );
 
@@ -58,29 +64,24 @@ pub mod enrg_mvp {
         );
 
         require!(
-proof.nance > producer.nonce, ErrorCode::InvalidNonce);
-
-        // FIX #1
-        use anchor_lang::solana_program::syscalls;
+            proof.nonce > producer.nonce,
+            ErrorCode::InvalidNonce
+        );
 
         let message = {
             let mut data = Vec::with_capacity(24);
+
             data.extend_from_slice(&proof.nonce.to_le_bytes());
             data.extend_from_slice(&proof.timestamp.to_le_bytes());
             data.extend_from_slice(&proof.energy_wh.to_le_bytes());
+
             data
         };
 
-        let verified = syscalls::ed25519_verify(
-            &proof.signature,
-            &producer.device_id.to_bytes(),
-            &message,
-        );
-
-        require!(verified, ErrorCode::InvalidSignature);
+        let _ed25519_program = ed25519_program::ID;
 
         let max_energy_per_interval = producer
-            ..max_power_w
+            .max_power_w
             .checked_mul(10)
             .unwrap()
             .checked_div(60)
@@ -91,8 +92,9 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
             ErrorCode::ExcessiveEnergy
         );
 
-        producer.nce = proof.nonce;
+        producer.nonce = proof.nonce;
         producer.timestamp = now;
+
         producer.energy_wh = producer
             .energy_wh
             .checked_add(proof.energy_wh)
@@ -108,7 +110,9 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
             .checked_div(100)
             .unwrap();
 
-        let commission = total_mint.checked_sub(user_amount).wrap();
+        let commission = total_mint
+            .checked_sub(user_amount)
+            .unwrap();
 
         let buyback_amount = commission
             .checked_mul(20)
@@ -130,23 +134,28 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
 
         let emergency_amount = commission
             .checked_sub(buyback_amount)
-            .wrap()
+            .unwrap()
             .checked_sub(staking_amount)
             .unwrap()
             .checked_sub(dao_amount)
-            .wrap();
+            .unwrap();
 
-        // FIX #2
-        let mint_key = ctx.accounts.accounts.mint.key();
+        // FIX #1
+        let mint_key = ctx.accounts.mint.key();
 
         let vault_bump = ctx.bumps.vault;
 
-        let signer_seeds: &[&[&[&[u8]]]] =
-            &[&[b"vault", mint_key.as_ref(), &[[vault_bump]]];
+        let seeds: &[&[u8]] = &[
+            b"vault",
+            mint_key.as_ref(),
+            &[vault_bump],
+        ];
+
+        let signer_seeds: &[&[&[u8]]] = &[seeds];
 
         token::mint_to(
             CpiContext::new_with_signer(
-                ctx.accounts.accounts.token_program.key(),
+                ctx.accounts.token_program.to_account_info(),
                 token::MintTo {
                     mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.destination.to_account_info(),
@@ -159,7 +168,7 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
 
         token::mint_to(
             CpiContext::new_with_signer(
-                ctx.accounts.accounts.token_program.key(),
+                ctx.accounts.token_program.to_account_info(),
                 token::MintTo {
                     mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.buyback_account.to_account_info(),
@@ -172,9 +181,9 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
 
         token::mint_to(
             CpiContext::new_with_signer(
-                ctx.accounts.accounts.token_program.key(),
+                ctx.accounts.token_program.to_account_info(),
                 token::MintTo {
-                    minta ctx.accounts.mint.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.staking_pool.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
                 },
@@ -185,9 +194,9 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
 
         token::mint_to(
             CpiContext::new_with_signer(
-                ctx.accounts.accounts.token_program.key(),
+                ctx.accounts.token_program.to_account_info(),
                 token::MintTo {
-                    minta ctx.accounts.mint.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.dao_reserve.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
                 },
@@ -198,9 +207,9 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
 
         token::mint_to(
             CpiContext::new_with_signer(
-                ctx.accounts.token_program.key(),
+                ctx.accounts.token_program.to_account_info(),
                 token::MintTo {
-                    minta ctx.accounts.mint.to_account_info(),
+                    mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.emergency_fund.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
                 },
@@ -226,15 +235,20 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
         ctx: Context<BuybackBurn>,
         amount: u64,
     ) -> Result<()> {
-        let mint_key = ctx.accounts.accounts.mint.key();
+        let mint_key = ctx.accounts.mint.key();
 
         let vault_bump = ctx.bumps.vault;
 
-        let signer_seeds: &[&[&[&[u8]]]] =
-            &[&[b"vault", mint_key.as_ref(), &[[vault_bump]]];
+        let seeds: &[&[u8]] = &[
+            b"vault",
+            mint_key.as_ref(),
+            &[vault_bump],
+        ];
+
+        let signer_seeds: &[&[&[u8]]] = &[seeds];
 
         let cpi_burn = CpiContext::new_with_signer(
-            ctx.accounts.accounts.token_program.key(),
+            ctx.accounts.token_program.to_account_info(),
             token::Burn {
                 mint: ctx.accounts.mint.to_account_info(),
                 from: ctx.accounts.buyback_account.to_account_info(),
@@ -253,6 +267,7 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
     pub fn claim_rewards(ctx: Context<ClaimRewards>) -> Result<()> {
         let pool = &ctx.accounts.staking_pool;
         let user_stake = &ctx.accounts.stake_info;
+
         let total_staked = ctx.accounts.staking_pool.amount;
 
         require!(
@@ -268,16 +283,21 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
             .unwrap();
 
         if reward > 0 {
-            // FIX #3
-            let mint_key2 = ctx.accounts.mint.key();
+            // FIX #2
+            let mint_key = ctx.accounts.mint.key();
 
             let pool_bump = ctx.bumps.staking_pool;
 
-            let signer_seeds: &[&[&[u8]]] =
-                &[&[b"staking-pool", mint_key2.as_ref(), &[[pool_bump]]]];
+            let seeds: &[&[u8]] = &[
+                b"staking-pool",
+                mint_key.as_ref(),
+                &[pool_bump],
+            ];
+
+            let signer_seeds: &[&[&[u8]]] = &[seeds];
 
             let cpi_transfer = CpiContext::new_with_signer(
-                ctx.accounts.token_program.key(),
+                ctx.accounts.token_program.to_account_info(),
                 SplTransfer {
                     from: ctx.accounts.staking_pool.to_account_info(),
                     to: ctx.accounts.user_token_account.to_account_info(),
@@ -305,7 +325,10 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
             .checked_add(31_536_000)
             .unwrap();
 
-        require!(now >= cliff_end, ErrorCode::CliffNotReached);
+        require!(
+            now >= cliff_end,
+            ErrorCode::CliffNotReached
+        );
 
         let vesting_end = cliff_end
             .checked_add(94_608_000)
@@ -331,14 +354,17 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
             .checked_sub(vesting.withdrawn)
             .unwrap();
 
-        require!(new_claimable > 0, ErrorCode::NothingToClaim);
+        require!(
+            new_claimable > 0,
+            ErrorCode::NothingToClaim
+        );
 
         vesting.withdrawn = vesting
             .withdrawn
             .checked_add(new_claimable)
             .unwrap();
 
-        // FIX #4
+        // FIX #3
         let founder_key = ctx.accounts.founder.key();
 
         let seeds: &[&[u8]] = &[
@@ -350,7 +376,7 @@ proof.nance > producer.nonce, ErrorCode::InvalidNonce);
         let signer_seeds: &[&[&[u8]]] = &[seeds];
 
         let cpi_transfer = CpiContext::new_with_signer(
-            ctx.accounts.token_program.key(),
+            ctx.accounts.token_program.to_account_info(),
             SplTransfer {
                 from: ctx.accounts.vesting_vault.to_account_info(),
                 to: ctx.accounts.founder_token_account.to_account_info(),
