@@ -91,8 +91,15 @@ pub mod enrg_mvp {
             data
         };
 
-        let _ed25519_program = ed25519_program::ID;
-        let _unused_message = message;
+        // ed25519 verification placeholder
+        // real verification should be done through instruction sysvar
+        let _ = ed25519_program::ID;
+        let _ = message;
+
+        require!(
+            proof.signature != [0u8; 64],
+            ErrorCode::InvalidSignature
+        );
 
         let max_energy_per_interval = producer
             .max_power_w
@@ -412,4 +419,202 @@ pub mod enrg_mvp {
 
         Ok(())
     }
+}
+
+#[derive(Accounts)]
+pub struct InitializeVault<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Vault::LEN,
+        seeds = [b"vault", mint.key().as_ref()],
+        bump
+    )]
+    pub vault: Account<'info, Vault>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CreateProducer<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Producer::LEN,
+        seeds = [b"producer", authority.key().as_ref()],
+        bump
+    )]
+    pub producer: Account<'info, Producer>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct MintEnergy<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(mut)]
+    pub producer: Account<'info, Producer>,
+
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [b"vault", mint.key().as_ref()],
+        bump
+    )]
+    pub vault: Account<'info, Vault>,
+
+    #[account(mut)]
+    pub destination: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub buyback_account: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub staking_pool: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub dao_reserve: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub emergency_fund: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct BuybackBurn<'info> {
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [b"vault", mint.key().as_ref()],
+        bump
+    )]
+    pub vault: Account<'info, Vault>,
+
+    #[account(mut)]
+    pub buyback_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimRewards<'info> {
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(mut)]
+    pub staking_pool: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub user_token_account: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub stake_info: Account<'info, StakeInfo>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimVested<'info> {
+    #[account(mut)]
+    pub founder: Signer<'info>,
+
+    #[account(mut)]
+    pub vesting: Account<'info, Vesting>,
+
+    #[account(mut)]
+    pub vesting_vault: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub founder_token_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[account]
+pub struct Vault {
+    pub mint: Pubkey,
+    pub authority: Pubkey,
+}
+
+impl Vault {
+    pub const LEN: usize = 32 + 32;
+}
+
+#[account]
+pub struct Producer {
+    pub authority: Pubkey,
+    pub device_id: Pubkey,
+    pub nonce: u64,
+    pub energy_wh: u64,
+    pub timestamp: i64,
+    pub signature: [u8; 64],
+    pub is_initialized: bool,
+    pub max_power_w: u64,
+}
+
+impl Producer {
+    pub const LEN: usize = 32 + 32 + 8 + 8 + 8 + 64 + 1 + 8;
+}
+
+#[account]
+pub struct StakeInfo {
+    pub staked_amount: u64,
+}
+
+#[account]
+pub struct Vesting {
+    pub total_amount: u64,
+    pub withdrawn: u64,
+    pub start_time: i64,
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct Proof {
+    pub nonce: u64,
+    pub timestamp: i64,
+    pub energy_wh: u64,
+    pub signature: [u8; 64],
+}
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("Unauthorized")]
+    Unauthorized,
+
+    #[msg("Proof timestamp is stale")]
+    StaleProof,
+
+    #[msg("Invalid nonce")]
+    InvalidNonce,
+
+    #[msg("Invalid signature")]
+    InvalidSignature,
+
+    #[msg("Excessive energy")]
+    ExcessiveEnergy,
+
+    #[msg("No stake")]
+    NoStake,
+
+    #[msg("Cliff not reached")]
+    CliffNotReached,
+
+    #[msg("Nothing to claim")]
+    NothingToClaim,
 }
