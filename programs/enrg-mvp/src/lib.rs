@@ -3,7 +3,14 @@ use anchor_lang::solana_program::ed25519_program;
 
 use anchor_spl::{
     associated_token::AssociatedToken,
-    token::{self, burn, Mint, Token, TokenAccount, Transfer as SplTransfer},
+    token::{
+        self,
+        burn,
+        Mint,
+        Token,
+        TokenAccount,
+        Transfer as SplTransfer,
+    },
 };
 
 declare_id!("CYU14or4LzBXfm8Q5NuYa7eYxfMDtqGGXE3EtZvMo6eG");
@@ -12,7 +19,9 @@ declare_id!("CYU14or4LzBXfm8Q5NuYa7eYxfMDtqGGXE3EtZvMo6eG");
 pub mod enrg_mvp {
     use super::*;
 
-    pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
+    pub fn initialize_vault(
+        ctx: Context<InitializeVault>,
+    ) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
 
         vault.mint = ctx.accounts.mint.key();
@@ -46,7 +55,10 @@ pub mod enrg_mvp {
         Ok(())
     }
 
-    pub fn mint_energy(ctx: Context<MintEnergy>, proof: Proof) -> Result<()> {
+    pub fn mint_energy(
+        ctx: Context<MintEnergy>,
+        proof: Proof,
+    ) -> Result<()> {
         let producer = &mut ctx.accounts.producer;
 
         let clock = Clock::get()?;
@@ -264,7 +276,9 @@ pub mod enrg_mvp {
         Ok(())
     }
 
-    pub fn claim_rewards(ctx: Context<ClaimRewards>) -> Result<()> {
+    pub fn claim_rewards(
+        ctx: Context<ClaimRewards>,
+    ) -> Result<()> {
         let pool = &ctx.accounts.staking_pool;
         let user_stake = &ctx.accounts.stake_info;
 
@@ -314,7 +328,9 @@ pub mod enrg_mvp {
         Ok(())
     }
 
-    pub fn claim_vested(ctx: Context<ClaimVested>) -> Result<()> {
+    pub fn claim_vested(
+        ctx: Context<ClaimVested>,
+    ) -> Result<()> {
         let vesting = &mut ctx.accounts.vesting;
 
         let clock = Clock::get()?;
@@ -387,7 +403,10 @@ pub mod enrg_mvp {
 
         token::transfer(cpi_transfer, new_claimable)?;
 
-        msg!("Claimed {} ENRG vesting", new_claimable);
+        msg!(
+            "Claimed {} ENRG vesting",
+            new_claimable
+        );
 
         Ok(())
     }
