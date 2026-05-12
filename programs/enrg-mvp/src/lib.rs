@@ -4,7 +4,7 @@ use anchor_spl::{
     token::{self, burn, Mint, Token, TokenAccount, Transfer as SplTransfer},
 };
 
-declare_id!("CcRjGroz7tsDAroZayWak58KtfAczJ7vbPddnRJDSeL4");
+declare_id!("CYU14or4LzBXfm8Q5NuYa7eYxfMDtqGGXE3EtZvMo6eG");
 
 #[program]
 pub mod enrg_mvp {
@@ -40,8 +40,9 @@ pub mod enrg_mvp {
         require!((now - proof.timestamp).abs() <= 900, ErrorCode::StaleProof);
         require!(proof.nonce > producer.nonce, ErrorCode::InvalidNonce);
 
-        // ✅ Правильная проверка Ed25519-подписи
-        use solana_program::syscalls;
+        // ✅ Проверка подписи Proof
+        use anchor_lang::solana_program::syscalls;
+
         let message = {
             let mut data = Vec::with_capacity(24);
             data.extend_from_slice(&proof.nonce.to_le_bytes());
@@ -49,6 +50,7 @@ pub mod enrg_mvp {
             data.extend_from_slice(&proof.energy_wh.to_le_bytes());
             data
         };
+
         let verified = syscalls::ed25519_verify(
             &proof.signature,
             &producer.device_id.to_bytes(),
@@ -56,9 +58,7 @@ pub mod enrg_mvp {
         );
         require!(verified, ErrorCode::InvalidSignature);
 
-        let max_energy_per_interval = producer.max_power_w
-            .checked_mul(10).unwrap()
-            .checked_div(60).unwrap();
+        let max_energy_per_interval = producer.max_power_w.checked_mul(10).unwrap().checked_div(60).unwrap();
         require!(proof.energy_wh <= max_energy_per_interval, ErrorCode::ExcessiveEnergy);
 
         producer.nonce = proof.nonce;
@@ -77,6 +77,7 @@ pub mod enrg_mvp {
             .checked_sub(staking_amount).unwrap()
             .checked_sub(dao_amount).unwrap();
 
+        // Исправление lifetime: сохраняем mint.key() в переменную
         let mint_key = ctx.accounts.mint.key();
         let vault_bump = ctx.bumps.vault;
         let signer_seeds: &[&[&[u8]]] = &[&[b"vault", mint_key.as_ref(), &[vault_bump]]];
@@ -139,8 +140,9 @@ pub mod enrg_mvp {
     }
 
     pub fn buyback_and_burn(ctx: Context<BuybackBurn>, amount: u64) -> Result<()> {
+        let mint_key = ctx.accounts.mint.key();
         let vault_bump = ctx.bumps.vault;
-        let signer_seeds: &[&[&[u8]]] = &[&[b"vault", ctx.accounts.mint.key().as_ref(), &[vault_bump]]];
+        let signer_seeds: &[&[&[u8]]] = &[&[b"vault", mint_key.as_ref(), &[vault_bump]]];
         let cpi_burn = CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
             token::Burn {
@@ -199,8 +201,9 @@ pub mod enrg_mvp {
         require!(total_staked > 0 && user_stake.staked_amount > 0, ErrorCode::NoStake);
         let reward = pool.amount.checked_mul(user_stake.staked_amount).unwrap().checked_div(total_staked).unwrap();
         if reward > 0 {
+            let mint_key = ctx.accounts.mint.key();
             let pool_bump = ctx.bumps.staking_pool;
-            let signer_seeds: &[&[&[u8]]] = &[&[b"staking-pool", ctx.accounts.mint.key().as_ref(), &[pool_bump]]];
+            let signer_seeds: &[&[&[u8]]] = &[&[b"staking-pool", mint_key.as_ref(), &[pool_bump]]];
             let cpi_transfer = CpiContext::new_with_signer(
                 ctx.accounts.token_program.key(),
                 SplTransfer {
@@ -229,8 +232,12 @@ pub mod enrg_mvp {
         let new_claimable = total_vested.checked_sub(vesting.withdrawn).unwrap();
         require!(new_claimable > 0, ErrorCode::NothingToClaim);
         vesting.withdrawn = vesting.withdrawn.checked_add(new_claimable).unwrap();
-        let seeds: &[&[u8]] = &[b"founder-vesting", ctx.accounts.founder.key().as_ref(), &[ctx.bumps.vesting]];
+
+        // Исправление lifetime для founder-vesting
+        let founder_key = ctx.accounts.founder.key();
+        let seeds: &[&[u8]] = &[b"founder-vesting", founder_key.as_ref(), &[ctx.bumps.vesting]];
         let signer_seeds: &[&[&[u8]]] = &[seeds];
+
         let cpi_transfer = CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
             SplTransfer {
