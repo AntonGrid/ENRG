@@ -7,6 +7,7 @@ use anchor_spl::{
         self,
         burn,
         Mint,
+        MintTo,
         Token,
         TokenAccount,
         Transfer as SplTransfer,
@@ -91,6 +92,7 @@ pub mod enrg_mvp {
         };
 
         let _ed25519_program = ed25519_program::ID;
+        let _unused_message = message;
 
         let max_energy_per_interval = producer
             .max_power_w
@@ -168,7 +170,7 @@ pub mod enrg_mvp {
         token::mint_to(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
-                token::MintTo {
+                MintTo {
                     mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.destination.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
@@ -181,7 +183,7 @@ pub mod enrg_mvp {
         token::mint_to(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
-                token::MintTo {
+                MintTo {
                     mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.buyback_account.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
@@ -194,7 +196,7 @@ pub mod enrg_mvp {
         token::mint_to(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
-                token::MintTo {
+                MintTo {
                     mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.staking_pool.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
@@ -207,7 +209,7 @@ pub mod enrg_mvp {
         token::mint_to(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
-                token::MintTo {
+                MintTo {
                     mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.dao_reserve.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
@@ -220,7 +222,7 @@ pub mod enrg_mvp {
         token::mint_to(
             CpiContext::new_with_signer(
                 ctx.accounts.token_program.to_account_info(),
-                token::MintTo {
+                MintTo {
                     mint: ctx.accounts.mint.to_account_info(),
                     to: ctx.accounts.emergency_fund.to_account_info(),
                     authority: ctx.accounts.vault.to_account_info(),
