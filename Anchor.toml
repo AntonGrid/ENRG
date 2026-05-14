@@ -1,18 +1,15 @@
 [toolchain]
-package_manager = "yarn"
+anchor_version = "1.0.2"
 
 [features]
 resolution = true
 skip-lint = false
 
 [programs.localnet]
-enrg_mvp = "CcRjGroz7tsDAroZayWak58KtfAczJ7vbPddnRJDSeL4"
+enrg_mvp = "ENhF7SADSBUvcNgwsv5Ph5GYMgbqQRJTNa26ia313MEp"
 
 [provider]
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
-
-[scripts]
-test = "yarn run test"
 
 [hooks]

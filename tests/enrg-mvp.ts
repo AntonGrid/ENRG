@@ -82,9 +82,14 @@ describe("ENRG Tokenomics", () => {
       .signers([authority])
       .rpc();
 
+    // Получаем реальный слот и время блока от валидатора
+    const slot = await provider.connection.getSlot();
+    const blockTime = await provider.connection.getBlockTime(slot);
+    if (!blockTime) throw new Error("Could not get block time");
+    const timestamp = Math.floor(blockTime);
+
     const energyWh = 150;
     const nonce = 1;
-    const timestamp = Math.floor(Date.now() / 1000);
     const msgBuf = Buffer.alloc(24);
     msgBuf.writeBigUInt64LE(BigInt(nonce), 0);
     msgBuf.writeBigInt64LE(BigInt(timestamp), 8);
@@ -136,7 +141,7 @@ describe("ENRG Tokenomics", () => {
       .signers([authority])
       .rpc();
 
-    // Читаем балансы напрямую через getTokenAccountBalance (для PDA фондов)
+    // Читаем балансы
     const userBal = (
       await getOrCreateAssociatedTokenAccount(
         provider.connection,
@@ -164,13 +169,12 @@ describe("ENRG Tokenomics", () => {
     console.log("DAO balance:", daoBal);
     console.log("Emergency balance:", emergencyBal);
 
-    // Ожидаемые значения (расчёт вручную)
-    const expectedUser = 127; // 150*85/100 = 127
-    const commission = 150 - expectedUser; // 23
-    const expectedBuyback = Math.floor(commission * 0.2); // 4
-    const expectedStaking = Math.floor(commission * 0.4); // 9
-    const expectedDao = Math.floor(commission * 0.3); // 6
-    const expectedEmergency = commission - expectedBuyback - expectedStaking - expectedDao; // 4
+    const expectedUser = 127;
+    const commission = 23;
+    const expectedBuyback = 4;
+    const expectedStaking = 9;
+    const expectedDao = 6;
+    const expectedEmergency = 4;
 
     expect(Number(userBal)).to.equal(expectedUser);
     expect(Number(buybackBal)).to.equal(expectedBuyback);

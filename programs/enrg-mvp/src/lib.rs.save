@@ -1,0 +1,794 @@
+use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token::{
+        self,
+        burn,
+        Mint,
+        MintTo,
+        Token,
+        TokenAccount,
+        Transfer as SplTransfer,
+    },
+};
+
+declare_id!("2Z2XHHMV7nmbS6CWeNf7revJAR8pq3BYqRuuHvGZmXEg");
+
+// Константы
+pub const MAX_TIME_DRIFT: i64 = 900; // 15 минут
+pub const VESTING_CLIFF_SECONDS: i64 = 31_536_000; // 1 год
+pub const VESTING_DURATION_AFTER_CLIFF: i64 = 94_608_000; // 3 года
+
+#[program]
+pub mod enrg_mvp {
+    use super::*;
+
+    pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
+        let vault = &mut ctx.accounts.vault;
+        vault.mint = ctx.accounts.mint.key();
+        vault.authority = ctx.accounts.authority.key();
+        Ok(())
+    }
+
+    pub fn create_producer(
+        ctx: Context<CreateProducer>,
+        device_id: Pubkey,
+        max_power_w: u64,
+    ) -> Result<()> {
+        let producer = &mut ctx.accounts.producer;
+        producer.authority = ctx.accounts.authority.key();
+        producer.device_id = device_id;
+        producer.nonce = 0;
+        producer.energy_wh = 0;
+        producer.timestamp = 0;
+        producer.signature = [0u8; 64];
+        producer.is_initialized = true;
+        producer.max_power_w = max_power_w;
+
+        msg!(
+            "Producer registered: {} with device {}",
+            producer.authority,
+            device_id
+        );
+        Ok(())
+    }
+
+    pub fn initialize_staking_pool(ctx: Context<InitializeStakingPool>) -> Result<()> {
+        let pool = &mut ctx.accounts.staking_pool_state;
+        pool.mint = ctx.accounts.mint.key();
+        pool.authority = ctx.accounts.authority.key();
+        pool.total_staked = 0;
+        Ok(())
+    }
+
+    pub fn initialize_vesting(
+        ctx: Context<InitializeVesting>,
+        total_amount: u64,
+        start_time: i64,
+    ) -> Result<()> {
+        let vesting = &mut ctx.accounts.vesting;
+        vesting.total_amount = total_amount;
+        vesting.withdrawn = 0;
+        vesting.start_time = start_time;
+        vesting.founder = ctx.accounts.founder.key();
+        vesting.mint = ctx.accounts.mint.key();
+        Ok(())
+    }
+
+    pub fn mint_energy(
+        ctx: Context<MintEnergy>,
+        proof: Proof,
+    ) -> Result<()> {
+        let producer = &mut ctx.accounts.producer;
+        let clock = Clock::get()?;
+        let now = clock.unix_timestamp;
+
+        // Авторизация: отправитель транзы = authority производителя
+        require_keys_eq!(
+            producer.authority,
+            ctx.accounts.authority.key(),
+            ErrorCode::Unauthorized
+        );
+
+        require!(producer.is_initialized, ErrorCode::ProducerNotInitialized);
+
+        // Свежесть таймстампа
+        require!(
+            (now - proof.timestamp).abs() <= MAX_TIME_DRIFT,
+            ErrorCode::StaleProof
+        );
+
+        // nonce
+        require!(
+            proof.nonce > producer.nonce,
+            ErrorCode::InvalidNonce
+        );
+
+        // ВРЕМЕННО: без ончейн ed25519‑проверки
+        // TODO: добавить проверку через sysvar instructions + ed25519_program
+        require!(
+            proof.signature != [0u8; 64],
+            ErrorCode::InvalidSignature
+        );
+
+        // Лимит энергии за интервал
+        let max_energy_per_interval = producer
+            .max_power_w
+            .checked_mul(10)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(60)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        require!(
+            proof.energy_wh <= max_energy_per_interval,
+            ErrorCode::ExcessiveEnergy
+        );
+
+        // Обновление состояния производителя
+        producer.nonce = proof.nonce;
+        producer.timestamp = now;
+        producer.energy_wh = producer
+            .energy_wh
+            .checked_add(proof.energy_wh)
+            .ok_or(ErrorCode::MathOverflow)?;
+        producer.signature = proof.signature;
+
+        // Распределение
+        let total_mint = proof.energy_wh;
+
+        let user_amount = total_mint
+            .checked_mul(85)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(100)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let commission = total_mint
+            .checked_sub(user_amount)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let buyback_amount = commission
+            .checked_mul(20)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(100)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let staking_amount = commission
+            .checked_mul(40)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(100)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let dao_amount = commission
+            .checked_mul(30)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(100)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let emergency_amount = commission
+            .checked_sub(buyback_amount)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_sub(staking_amount)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_sub(dao_amount)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        // Проверяем соответствие mint
+        require_keys_eq!(ctx.accounts.mint.key(), ctx.accounts.vault.mint, ErrorCode::InvalidMint);
+
+        // Проверяем владельцев токен-аккаунтов
+        require_keys_eq!(
+            ctx.accounts.destination.owner,
+            ctx.accounts.authority.key(),
+            ErrorCode::InvalidDestinationOwner
+        );
+        require_keys_eq!(
+            ctx.accounts.buyback_account.owner,
+            ctx.accounts.vault.authority,
+            ErrorCode::InvalidBuybackOwner
+        );
+        require_keys_eq!(
+            ctx.accounts.staking_pool.owner,
+            ctx.accounts.staking_pool_authority.key(),
+            ErrorCode::InvalidStakingPoolOwner
+        );
+        require_keys_eq!(
+            ctx.accounts.dao_reserve.owner,
+            ctx.accounts.vault.authority,
+            ErrorCode::InvalidDaoReserveOwner
+        );
+        require_keys_eq!(
+            ctx.accounts.emergency_fund.owner,
+            ctx.accounts.vault.authority,
+            ErrorCode::InvalidEmergencyFundOwner
+        );
+
+        // PDA Vault как минтер
+        let mint_key = ctx.accounts.mint.key();
+        let vault_bump = ctx.bumps.vault;
+
+        let seeds: &[&[u8]] = &[
+            b"vault",
+            mint_key.as_ref(),
+            &[vault_bump],
+        ];
+        let signer_seeds: &[&[&[u8]]] = &[seeds];
+
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.destination.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            user_amount,
+        )?;
+
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.buyback_account.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            buyback_amount,
+        )?;
+
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.staking_pool.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            staking_amount,
+        )?;
+
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.dao_reserve.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            dao_amount,
+        )?;
+
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.emergency_fund.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            emergency_amount,
+        )?;
+
+        msg!(
+            "Minted {} ENRG (user={}, buyback={}, staking={}, dao={}, emergency={})",
+            total_mint,
+            user_amount,
+            buyback_amount,
+            staking_amount,
+            dao_amount,
+            emergency_amount
+        );
+
+        Ok(())
+    }
+
+    pub fn buyback_and_burn(
+        ctx: Context<BuybackBurn>,
+        amount: u64,
+    ) -> Result<()> {
+        let mint_key = ctx.accounts.mint.key();
+        let vault_bump = ctx.bumps.vault;
+
+        require_keys_eq!(ctx.accounts.vault.mint, mint_key, ErrorCode::InvalidMint);
+        require_keys_eq!(ctx.accounts.buyback_account.owner, ctx.accounts.vault.authority, ErrorCode::InvalidBuybackOwner);
+
+        let seeds: &[&[u8]] = &[
+            b"vault",
+            mint_key.as_ref(),
+            &[vault_bump],
+        ];
+        let signer_seeds: &[&[&[u8]]] = &[seeds];
+
+        let cpi_burn = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::Burn {
+                mint: ctx.accounts.mint.to_account_info(),
+                from: ctx.accounts.buyback_account.to_account_info(),
+                authority: ctx.accounts.vault.to_account_info(),
+            },
+            signer_seeds,
+        );
+
+        burn(cpi_burn, amount)?;
+
+        msg!("Buyback & Burn: burned {} ENRG", amount);
+
+        Ok(())
+    }
+
+    pub fn claim_rewards(
+        ctx: Context<ClaimRewards>,
+    ) -> Result<()> {
+        let pool_state = &ctx.accounts.staking_pool_authority;
+        let user_stake = &ctx.accounts.stake_info;
+
+        require_keys_eq!(pool_state.mint, ctx.accounts.mint.key(), ErrorCode::InvalidMint);
+        require_keys_eq!(user_stake.owner, ctx.accounts.owner.key(), ErrorCode::Unauthorized);
+        require_keys_eq!(ctx.accounts.staking_pool.owner, ctx.accounts.staking_pool_authority.key(), ErrorCode::InvalidStakingPoolOwner);
+
+        let total_staked = pool_state.total_staked;
+
+        require!(
+            total_staked > 0 && user_stake.staked_amount > 0,
+            ErrorCode::NoStake
+        );
+
+        let pool_balance = ctx.accounts.staking_pool.amount;
+
+        let reward = pool_balance
+            .checked_mul(user_stake.staked_amount)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(total_staked)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        if reward > 0 {
+            let mint_key = ctx.accounts.mint.key();
+            let pool_bump = ctx.bumps.staking_pool_authority;
+
+            let seeds: &[&[u8]] = &[
+                b"staking-pool",
+                mint_key.as_ref(),
+                &[pool_bump],
+            ];
+            let signer_seeds: &[&[&[u8]]] = &[seeds];
+
+            let cpi_transfer = CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                SplTransfer {
+                    from: ctx.accounts.staking_pool.to_account_info(),
+                    to: ctx.accounts.user_token_account.to_account_info(),
+                    authority: ctx.accounts.staking_pool_authority.to_account_info(),
+                },
+                signer_seeds,
+            );
+
+            token::transfer(cpi_transfer, reward)?;
+
+            msg!("Claimed {} ENRG reward", reward);
+        }
+
+        Ok(())
+    }
+
+    pub fn claim_vested(
+        ctx: Context<ClaimVested>,
+    ) -> Result<()> {
+        let vesting = &mut ctx.accounts.vesting;
+
+        require_keys_eq!(vesting.founder, ctx.accounts.founder.key(), ErrorCode::Unauthorized);
+        require_keys_eq!(vesting.mint, ctx.accounts.mint.key(), ErrorCode::InvalidMint);
+
+        let clock = Clock::get()?;
+        let now = clock.unix_timestamp;
+
+        let cliff_end = vesting
+            .start_time
+            .checked_add(VESTING_CLIFF_SECONDS)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        require!(
+            now >= cliff_end,
+            ErrorCode::CliffNotReached
+        );
+
+        let vesting_end = cliff_end
+            .checked_add(VESTING_DURATION_AFTER_CLIFF)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let total_duration = vesting_end
+            .checked_sub(cliff_end)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let elapsed = now
+            .checked_sub(cliff_end)
+            .ok_or(ErrorCode::MathOverflow)?
+            .min(total_duration);
+
+        let total_vested = vesting
+            .total_amount
+            .checked_mul(elapsed as u64)
+            .ok_or(ErrorCode::MathOverflow)?
+            .checked_div(total_duration as u64)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let new_claimable = total_vested
+            .checked_sub(vesting.withdrawn)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        require!(
+            new_claimable > 0,
+            ErrorCode::NothingToClaim
+        );
+
+        vesting.withdrawn = vesting
+            .withdrawn
+            .checked_add(new_claimable)
+            .ok_or(ErrorCode::MathOverflow)?;
+
+        let seeds: &[&[u8]] = &[
+            b"founder-vesting",
+            vesting.founder.as_ref(),
+            &[ctx.bumps.vesting],
+        ];
+        let signer_seeds: &[&[&[u8]]] = &[seeds];
+
+        let cpi_transfer = CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            SplTransfer {
+                from: ctx.accounts.vesting_vault.to_account_info(),
+                to: ctx.accounts.founder_token_account.to_account_info(),
+                authority: ctx.accounts.vesting.to_account_info(),
+            },
+            signer_seeds,
+        );
+
+        token::transfer(cpi_transfer, new_claimable)?;
+
+        msg!(
+            "Claimed {} ENRG vesting",
+            new_claimable
+        );
+
+        Ok(())
+    }
+}
+
+/* ===================== Accounts ===================== */
+
+#[derive(Accounts)]
+pub struct InitializeVault<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Vault::LEN,
+        seeds = [b"vault", mint.key().as_ref()],
+        bump
+    )]
+    pub vault: Account<'info, Vault>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct CreateProducer<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Producer::LEN,
+        seeds = [b"producer", authority.key().as_ref()],
+        bump
+    )]
+    pub producer: Account<'info, Producer>,
+
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeStakingPool<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + StakingPoolState::LEN,
+        seeds = [b"staking-pool", mint.key().as_ref()],
+        bump
+    )]
+    pub staking_pool_state: Account<'info, StakingPoolState>,
+
+    #[account(
+        init,
+        payer = authority,
+        token::mint = mint,
+        token::authority = staking_pool_state,
+    )]
+    pub staking_pool_token_account: Account<'info, TokenAccount>,
+
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeVesting<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(mut)]
+    pub founder: Signer<'info>,
+
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + Vesting::LEN,
+        seeds = [b"founder-vesting", founder.key().as_ref()],
+        bump
+    )]
+    pub vesting: Account<'info, Vesting>,
+
+    #[account(
+        init,
+        payer = authority,
+        token::mint = mint,
+        token::authority = vesting,
+    )]
+    pub vesting_vault: Account<'info, TokenAccount>,
+
+    pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub associated_token_program: Program<'info, AssociatedToken>,
+    pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct MintEnergy<'info> {
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    #[account(mut, has_one = authority)]
+    pub producer: Account<'info, Producer>,
+
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [b"vault", mint.key().as_ref()],
+        bump
+    )]
+    pub vault: Account<'info, Vault>,
+
+    #[account(mut)]
+    pub destination: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub buyback_account: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub staking_pool: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"staking-pool", mint.key().as_ref()],
+        bump
+    )]
+    pub staking_pool_authority: Account<'info, StakingPoolState>,
+
+    #[account(mut)]
+    pub dao_reserve: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub emergency_fund: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct BuybackBurn<'info> {
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [b"vault", mint.key().as_ref()],
+        bump
+    )]
+    pub vault: Account<'info, Vault>,
+
+    #[account(mut)]
+    pub buyback_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimRewards<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [b"staking-pool", mint.key().as_ref()],
+        bump
+    )]
+    pub staking_pool_authority: Account<'info, StakingPoolState>,
+
+    #[account(mut)]
+    pub staking_pool: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub user_token_account: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub stake_info: Account<'info, StakeInfo>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimVested<'info> {
+    #[account(mut)]
+    pub founder: Signer<'info>,
+
+    #[account(mut)]
+    pub mint: Account<'info, Mint>,
+
+    #[account(
+        mut,
+        seeds = [b"founder-vesting", founder.key().as_ref()],
+        bump
+    )]
+    pub vesting: Account<'info, Vesting>,
+
+    #[account(mut)]
+    pub vesting_vault: Account<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub founder_token_account: Account<'info, TokenAccount>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+/* ===================== State ===================== */
+
+#[account]
+pub struct Vault {
+    pub mint: Pubkey,
+    pub authority: Pubkey,
+}
+impl Vault {
+    pub const LEN: usize = 32 + 32;
+}
+
+#[account]
+pub struct Producer {
+    pub authority: Pubkey,
+    pub device_id: Pubkey,
+    pub nonce: u64,
+    pub energy_wh: u64,
+    pub timestamp: i64,
+    pub signature: [u8; 64],
+    pub is_initialized: bool,
+    pub max_power_w: u64,
+}
+impl Producer {
+    pub const LEN: usize = 32 + 32 + 8 + 8 + 8 + 64 + 1 + 8;
+}
+
+#[account]
+pub struct StakingPoolState {
+    pub mint: Pubkey,
+    pub authority: Pubkey,
+    pub total_staked: u64,
+}
+impl StakingPoolState {
+    pub const LEN: usize = 32 + 32 + 8;
+}
+
+#[account]
+pub struct StakeInfo {
+    pub owner: Pubkey,
+    pub staked_amount: u64,
+}
+
+#[account]
+pub struct Vesting {
+    pub total_amount: u64,
+    pub withdrawn: u64,
+    pub start_time: i64,
+    pub founder: Pubkey,
+    pub mint: Pubkey,
+}
+impl Vesting {
+    pub const LEN: usize = 8 + 8 + 8 + 32 + 32;
+}
+
+#[derive(AnchorSerialize, AnchorDeserialize, Clone)]
+pub struct Proof {
+    pub nonce: u64,
+    pub timestamp: i64,
+    pub energy_wh: u64,
+    pub signature: [u8; 64],
+}
+
+/* ===================== Errors ===================== */
+
+#[error_code]
+pub enum ErrorCode {
+    #[msg("Unauthorized")]
+    Unauthorized,
+
+    #[msg("Producer not initialized")]
+    ProducerNotInitialized,
+
+    #[msg("Proof timestamp is stale")]
+    StaleProof,
+
+    #[msg("Invalid nonce")]
+    InvalidNonce,
+
+    #[msg("Invalid signature")]
+    InvalidSignature,
+
+    #[msg("Excessive energy")]
+    ExcessiveEnergy,
+
+    #[msg("No stake")]
+    NoStake,
+
+    #[msg("Cliff not reached")]
+    CliffNotReached,
+
+    #[msg("Nothing to claim")]
+    NothingToClaim,
+
+    #[msg("Invalid mint")]
+    InvalidMint,
+
+    #[msg("Invalid destination owner")]
+    InvalidDestinationOwner,
+
+    #[msg("Invalid buyback owner")]
+    InvalidBuybackOwner,
+
+    #[msg("Invalid staking pool owner")]
+    InvalidStakingPoolOwner,
+
+    #[msg("Invalid DAO reserve owner")]
+    InvalidDaoReserveOwner,
+
+    #[msg("Invalid emergency fund owner")]
+    InvalidEmergencyFundOwner,
+
+    #[msg("Math overflow")]
+    MathOverflow,
+}
