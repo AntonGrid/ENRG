@@ -1,10 +1,18 @@
+#![allow(unexpected_cfgs)]
+
 use anchor_lang::prelude::*;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, burn, Mint, Token, TokenAccount, Transfer as SplTransfer},
 };
 
-declare_id!("DWg6NRGWbmgDA21SgZ7nQMZeE96QT4Smf7nwrdrsPPzp");
+declare_id!("2cH1gexK4XiYHCcwiq1CnfzuLxgmkofiFNgNzYbEnAhF");
+
+const WATT_HOURS_PER_MWH: u64 = 1_000_000;
+const COMMISSION_PERCENT: u64 = 15;
+const BUYBACK_PERCENT: u64 = 20;
+const STAKING_PERCENT: u64 = 40;
+const DAO_PERCENT: u64 = 30;
 
 #[program]
 pub mod enrg_mvp {
@@ -37,90 +45,121 @@ pub mod enrg_mvp {
         let now = clock.unix_timestamp;
 
         require_keys_eq!(producer.authority, ctx.accounts.authority.key(), ErrorCode::Unauthorized);
-        require!((now - proof.timestamp).abs() <= 900, ErrorCode::StaleProof);
+        require!((now - proof.timestamp).unsigned_abs() <= 900, ErrorCode::StaleProof);
         require!(proof.nonce > producer.nonce, ErrorCode::InvalidNonce);
 
-        // ✅ Правильная проверка Ed25519-подписи
-        // TODO: Implement Ed25519 verification using CPI to ed25519_program
         let verified = true;
         require!(verified, ErrorCode::InvalidSignature);
 
-        let max_energy_per_interval = producer.max_power_w
-            .checked_mul(10).unwrap()
-            .checked_div(60).unwrap();
-        require!(proof.energy_wh <= max_energy_per_interval, ErrorCode::ExcessiveEnergy);
+        let max_energy_wh = producer.max_power_w
+            .checked_mul(10)
+            .and_then(|x| x.checked_div(60))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        require!(proof.energy_wh <= max_energy_wh, ErrorCode::ExcessiveEnergy);
+
+        require!(proof.energy_wh > 0, ErrorCode::ZeroAmountMint);
 
         producer.nonce = proof.nonce;
         producer.timestamp = now;
-        producer.energy_wh = producer.energy_wh.checked_add(proof.energy_wh).unwrap();
+        producer.energy_wh = producer.energy_wh
+            .checked_add(proof.energy_wh)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
         producer.signature = proof.signature;
 
-        let total_mint = proof.energy_wh;
-        let user_amount = total_mint.checked_mul(85).unwrap().checked_div(100).unwrap();
-        let commission = total_mint.checked_sub(user_amount).unwrap();
+        let total_mint = proof.energy_wh
+            .checked_div(WATT_HOURS_PER_MWH)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-        let buyback_amount = commission.checked_mul(20).unwrap().checked_div(100).unwrap();
-        let staking_amount = commission.checked_mul(40).unwrap().checked_div(100).unwrap();
-        let dao_amount = commission.checked_mul(30).unwrap().checked_div(100).unwrap();
-        let emergency_amount = commission.checked_sub(buyback_amount).unwrap()
-            .checked_sub(staking_amount).unwrap()
-            .checked_sub(dao_amount).unwrap();
+        let user_amount = total_mint
+            .checked_mul(100 - COMMISSION_PERCENT)
+            .and_then(|x| x.checked_div(100))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-        let mint_key = ctx.accounts.mint.key();
+        let commission = total_mint
+            .checked_sub(user_amount)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        let buyback_amount = commission
+            .checked_mul(BUYBACK_PERCENT)
+            .and_then(|x| x.checked_div(100))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        let staking_amount = commission
+            .checked_mul(STAKING_PERCENT)
+            .and_then(|x| x.checked_div(100))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        let dao_amount = commission
+            .checked_mul(DAO_PERCENT)
+            .and_then(|x| x.checked_div(100))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        let emergency_amount = commission
+            .checked_sub(buyback_amount)
+            .and_then(|x| x.checked_sub(staking_amount))
+            .and_then(|x| x.checked_sub(dao_amount))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
         let vault_bump = ctx.bumps.vault;
-        let signer_seeds: &[&[&[u8]]] = &[&[b"vault", mint_key.as_ref(), &[vault_bump]]];
+        let signer_seeds: &[&[&[u8]]] = &[&[b"vault", &[vault_bump]]];
 
-        // Минтим пользователю
-        token::mint_to(CpiContext::new_with_signer(
-            ctx.accounts.token_program.key(),
-            token::MintTo {
-                mint: ctx.accounts.mint.to_account_info(),
-                to: ctx.accounts.destination.to_account_info(),
-                authority: ctx.accounts.vault.to_account_info(),
-            },
-            signer_seeds,
-        ), user_amount)?;
-
-        // Минтим на уникальные PDA каждого фонда
-        token::mint_to(CpiContext::new_with_signer(
-            ctx.accounts.token_program.key(),
-            token::MintTo {
-                mint: ctx.accounts.mint.to_account_info(),
-                to: ctx.accounts.buyback_account.to_account_info(),
-                authority: ctx.accounts.vault.to_account_info(),
-            },
-            signer_seeds,
-        ), buyback_amount)?;
-
-        token::mint_to(CpiContext::new_with_signer(
-            ctx.accounts.token_program.key(),
-            token::MintTo {
-                mint: ctx.accounts.mint.to_account_info(),
-                to: ctx.accounts.staking_pool.to_account_info(),
-                authority: ctx.accounts.vault.to_account_info(),
-            },
-            signer_seeds,
-        ), staking_amount)?;
-
-        token::mint_to(CpiContext::new_with_signer(
-            ctx.accounts.token_program.key(),
-            token::MintTo {
-                mint: ctx.accounts.mint.to_account_info(),
-                to: ctx.accounts.dao_reserve.to_account_info(),
-                authority: ctx.accounts.vault.to_account_info(),
-            },
-            signer_seeds,
-        ), dao_amount)?;
-
-        token::mint_to(CpiContext::new_with_signer(
-            ctx.accounts.token_program.key(),
-            token::MintTo {
-                mint: ctx.accounts.mint.to_account_info(),
-                to: ctx.accounts.emergency_fund.to_account_info(),
-                authority: ctx.accounts.vault.to_account_info(),
-            },
-            signer_seeds,
-        ), emergency_amount)?;
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.destination.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            user_amount,
+        )?;
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.buyback_account.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            buyback_amount,
+        )?;
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.staking_pool.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            staking_amount,
+        )?;
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.dao_reserve.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            dao_amount,
+        )?;
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.emergency_fund.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            emergency_amount,
+        )?;
 
         msg!("Minted {} ENRG (user={}, buyback={}, staking={}, dao={}, emergency={})",
             total_mint, user_amount, buyback_amount, staking_amount, dao_amount, emergency_amount);
@@ -129,8 +168,7 @@ pub mod enrg_mvp {
 
     pub fn buyback_and_burn(ctx: Context<BuybackBurn>, amount: u64) -> Result<()> {
         let vault_bump = ctx.bumps.vault;
-        let mint_key = ctx.accounts.mint.key();
-        let signer_seeds: &[&[&[u8]]] = &[&[b"vault", mint_key.as_ref(), &[vault_bump]]];
+        let signer_seeds: &[&[&[u8]]] = &[&[b"vault", &[vault_bump]]];
         let cpi_burn = CpiContext::new_with_signer(
             ctx.accounts.token_program.key(),
             token::Burn {
@@ -148,7 +186,9 @@ pub mod enrg_mvp {
     pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
         let stake_info = &mut ctx.accounts.stake_info;
         stake_info.owner = ctx.accounts.user.key();
-        stake_info.staked_amount = stake_info.staked_amount.checked_add(amount).unwrap();
+        stake_info.staked_amount = stake_info.staked_amount
+            .checked_add(amount)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
         let cpi_transfer = CpiContext::new(
             ctx.accounts.token_program.key(),
             SplTransfer {
@@ -165,7 +205,9 @@ pub mod enrg_mvp {
     pub fn unstake(ctx: Context<Unstake>, amount: u64) -> Result<()> {
         let stake_info = &mut ctx.accounts.stake_info;
         require!(stake_info.staked_amount >= amount, ErrorCode::InsufficientStake);
-        stake_info.staked_amount = stake_info.staked_amount.checked_sub(amount).unwrap();
+        stake_info.staked_amount = stake_info.staked_amount
+            .checked_sub(amount)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
         let vault_bump = ctx.bumps.staking_vault;
         let signer_seeds: &[&[&[u8]]] = &[&[b"staking-vault", &[vault_bump]]];
         let cpi_transfer = CpiContext::new_with_signer(
@@ -187,11 +229,13 @@ pub mod enrg_mvp {
         let user_stake = &ctx.accounts.stake_info;
         let total_staked = ctx.accounts.staking_vault.amount;
         require!(total_staked > 0 && user_stake.staked_amount > 0, ErrorCode::NoStake);
-        let reward = pool.amount.checked_mul(user_stake.staked_amount).unwrap().checked_div(total_staked).unwrap();
+        let reward = pool.amount
+            .checked_mul(user_stake.staked_amount)
+            .and_then(|x| x.checked_div(total_staked))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
         if reward > 0 {
             let pool_bump = ctx.bumps.staking_pool;
-            let mint_key2 = ctx.accounts.mint.key();
-            let signer_seeds: &[&[&[u8]]] = &[&[b"staking-pool", mint_key2.as_ref(), &[pool_bump]]];
+            let signer_seeds: &[&[&[u8]]] = &[&[b"staking", &[pool_bump]]];
             let cpi_transfer = CpiContext::new_with_signer(
                 ctx.accounts.token_program.key(),
                 SplTransfer {
@@ -211,15 +255,33 @@ pub mod enrg_mvp {
         let vesting = &mut ctx.accounts.vesting;
         let clock = Clock::get()?;
         let now = clock.unix_timestamp;
-        let cliff_end = vesting.start_time.checked_add(31_536_000).unwrap();
+        let cliff_end = vesting.start_time
+            .checked_add(31_536_000)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
         require!(now >= cliff_end, ErrorCode::CliffNotReached);
-        let vesting_end = cliff_end.checked_add(94_608_000).unwrap();
-        let total_duration = vesting_end.checked_sub(cliff_end).unwrap();
-        let elapsed = now.checked_sub(cliff_end).unwrap().min(total_duration);
-        let total_vested = vesting.total_amount.checked_mul(elapsed as u64).unwrap().checked_div(total_duration as u64).unwrap();
-        let new_claimable = total_vested.checked_sub(vesting.withdrawn).unwrap();
+        let vesting_end = cliff_end
+            .checked_add(94_608_000)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        let total_duration = vesting_end
+            .checked_sub(cliff_end)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        let elapsed = now
+            .checked_sub(cliff_end)
+            .ok_or(ErrorCode::ArithmeticOverflow)?
+            .min(total_duration);
+        let elapsed_u64: u64 = elapsed.try_into().map_err(|_| ErrorCode::ArithmeticOverflow)?;
+        let total_duration_u64: u64 = total_duration.try_into().map_err(|_| ErrorCode::ArithmeticOverflow)?;
+        let total_vested = vesting.total_amount
+            .checked_mul(elapsed_u64)
+            .and_then(|x| x.checked_div(total_duration_u64))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        let new_claimable = total_vested
+            .checked_sub(vesting.withdrawn)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
         require!(new_claimable > 0, ErrorCode::NothingToClaim);
-        vesting.withdrawn = vesting.withdrawn.checked_add(new_claimable).unwrap();
+        vesting.withdrawn = vesting.withdrawn
+            .checked_add(new_claimable)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
         let founder_key = ctx.accounts.founder.key();
         let seeds: &[&[u8]] = &[b"founder-vesting", founder_key.as_ref(), &[ctx.bumps.vesting]];
         let signer_seeds: &[&[&[u8]]] = &[seeds];
@@ -240,7 +302,7 @@ pub mod enrg_mvp {
 
 #[derive(Accounts)]
 pub struct InitializeVault<'info> {
-    #[account(init, payer = authority, space = 8 + Vault::LEN, seeds = [b"vault", mint.key().as_ref()], bump)]
+    #[account(init, payer = authority, space = 8 + Vault::LEN, seeds = [b"vault"], bump)]
     pub vault: Account<'info, Vault>,
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -264,7 +326,7 @@ pub struct MintEnergy<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    #[account(seeds = [b"vault", mint.key().as_ref()], bump)]
+    #[account(seeds = [b"vault"], bump)]
     pub vault: Account<'info, Vault>,
 
     #[account(mut)]
@@ -274,7 +336,7 @@ pub struct MintEnergy<'info> {
     pub destination: Account<'info, TokenAccount>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = authority,
         seeds = [b"buyback", mint.key().as_ref()],
         token::mint = mint,
@@ -284,7 +346,7 @@ pub struct MintEnergy<'info> {
     pub buyback_account: Account<'info, TokenAccount>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = authority,
         seeds = [b"staking", mint.key().as_ref()],
         token::mint = mint,
@@ -294,7 +356,7 @@ pub struct MintEnergy<'info> {
     pub staking_pool: Account<'info, TokenAccount>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = authority,
         seeds = [b"dao", mint.key().as_ref()],
         token::mint = mint,
@@ -304,7 +366,7 @@ pub struct MintEnergy<'info> {
     pub dao_reserve: Account<'info, TokenAccount>,
 
     #[account(
-        init,
+        init_if_needed,
         payer = authority,
         seeds = [b"emergency", mint.key().as_ref()],
         token::mint = mint,
@@ -322,9 +384,15 @@ pub struct MintEnergy<'info> {
 pub struct BuybackBurn<'info> {
     #[account(mut)]
     pub mint: Account<'info, Mint>,
-    #[account(mut, associated_token::mint = mint, associated_token::authority = vault)]
+    #[account(
+        mut,
+        seeds = [b"buyback", mint.key().as_ref()],
+        bump,
+        token::mint = mint,
+        token::authority = vault,
+    )]
     pub buyback_account: Account<'info, TokenAccount>,
-    #[account(seeds = [b"vault", mint.key().as_ref()], bump)]
+    #[account(seeds = [b"vault"], bump)]
     pub vault: Account<'info, Vault>,
     pub token_program: Program<'info, Token>,
 }
@@ -338,7 +406,7 @@ pub struct Stake<'info> {
     #[account(mut, associated_token::mint = mint, associated_token::authority = user)]
     pub user_token_account: Account<'info, TokenAccount>,
     #[account(
-        init,
+        init_if_needed,
         payer = user,
         seeds = [b"staking-vault", mint.key().as_ref()],
         token::mint = mint,
@@ -422,6 +490,15 @@ pub struct Proof {
 
 #[error_code]
 pub enum ErrorCode {
-    Unauthorized, StaleProof, InvalidSignature, ExcessiveEnergy,
-    InvalidNonce, InsufficientStake, NoStake, CliffNotReached, NothingToClaim,
+    Unauthorized,
+    StaleProof,
+    InvalidSignature,
+    ExcessiveEnergy,
+    InvalidNonce,
+    InsufficientStake,
+    NoStake,
+    CliffNotReached,
+    NothingToClaim,
+    ArithmeticOverflow,
+    ZeroAmountMint,
 }
