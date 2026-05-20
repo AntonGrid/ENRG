@@ -1,42 +1,57 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>ENRG – Technical Documentation</title>
-    <style>
-        body { background:#0B0F19; color:#E0E6ED; font-family:Inter,sans-serif; padding:2rem; }
-        .container { max-width:900px; margin:auto; background:rgba(10,15,25,0.8); border-radius:24px; padding:3rem; }
-        h1 { color:#00E5FF; } h2 { color:#00E5FF; border-left:5px solid #FF6B00; padding-left:1rem; }
-        h3 { color:#FF6B00; } p,li { color:#C8D0D8; }
-        table { width:100%; border-collapse:collapse; background:#132035; margin:1rem 0; }
-        th { background:#00E5FF22; color:#00E5FF; padding:0.5rem; }
-        td { padding:0.5rem; border-bottom:1px solid #FFFFFF10; }
-    </style>
+<meta charset="UTF-8">
+<title>ENRG Technical Documentation v2.0</title>
+<style>
+body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; padding: 2em; background: #f9f9f9; color: #1a1a1a; }
+h1, h2, h3 { color: #0b3b3b; }
+code { background: #eee; padding: 2px 6px; border-radius: 4px; }
+</style>
 </head>
 <body>
-<div class="container">
-<h1>ENRG Technical Overview</h1>
-<p>Version 1.1 · April 2026</p>
+<h1>ENRG Protocol – Technical Documentation v2.0</h1>
+<p>DePIN / Cyber‑Physical Infrastructure</p>
+
 <h2>1. Architecture</h2>
 <p>IoT Devices → Oracles → Smart Contracts (Solana) → Energy Vault ↔ Users / Markets</p>
-<h2>2. Proof-of-Production</h2>
-<p>Every 10 min, IoT controller sends signed proof {device_id, timestamp, energy_kwh, signature}. Contract verifies signature, timestamp window, physical limit, then mints ENRG.</p>
-<h2>3. Smart Contracts (Solana / Rust)</h2>
-<ul>
-<li><strong>registry</strong> – device registration and staking</li>
-<li><strong>mint_enrg</strong> – proof verification and minting</li>
-<li><strong>vault</strong> – revenue management</li>
-<li><strong>buyback_burn</strong> – automated market buy and burn</li>
-<li><strong>staking</strong> – holder yield distribution</li>
-</ul>
-<h2>4. API Endpoints</h2>
-<p><code>POST /api/v1/proof/submit</code> – submit energy proof</p>
-<p><code>GET /api/v1/device/{id}/status</code> – device info</p>
+
+<h2>2. Proof-of-Production (PoP)</h2>
+<p>Every 10 min, controller sends signed proof {device_id, timestamp, energy_wh, signature}. Contract verifies signature, timestamp, power limit, nonce, then mints ENRG with 15% protocol fee distribution.</p>
+
+<h2>3. Smart Contracts (Solana / Anchor)</h2>
+<p>registry, mint_enrg, vault, buyback_burn, staking, founder_vesting.</p>
+
+<h2>4. API</h2>
+<p>POST /api/v1/proof/submit<br>GET /api/v1/device/{id}/status</p>
+
 <h2>5. Energy Vault Economy</h2>
-<p>60% buyback & burn · 20% staking pool · 20% reserve</p>
+<p>20% Buyback & Burn · 40% Staking Pool · 30% DAO Reserve · 10% Emergency Fund</p>
+
 <h2>6. Roadmap</h2>
-<p>Genesis Q2–Q3 2026 · Mainnet Q4–Q1 2027 · Vault Q2–Q3 2027 · Expansion 2028+</p>
-<p>Contact: enrg.project@gmail.com</p>
-</div>
+<p>Genesis, Mainnet, Vault Growth, Expansion.</p>
+
+<h2>7. Tokenomics (May 2026)</h2>
+<p>Max supply 1,000,000,000 ENRG, 1 ENRG = 1 MWh, 6 decimals, 15% fee split.</p>
+
+<h2>8. Emission Curve & Scarcity Forecast</h2>
+<p>Conservative (5%), Moderate (15%), Aggressive (10x) scenarios.</p>
+
+<h2>9. IoT Hardware Prototype</h2>
+<p>ESP32 + PZEM-004T, Ed25519 signing, Wi-Fi, OLED, ATECC608.</p>
+
+<h2>10. Oracle Architecture</h2>
+<p>Switchboard primary, MVP oracle-publisher.js, CPI on mainnet.</p>
+
+<h2>11. Investment Opportunity</h2>
+<p>Pre-Seed $150k – $250k, projected vault revenue.</p>
+
+<h2>12. Competitive Advantages</h2>
+<p>Any energy source, real MWh, Buyback & Burn, Solana, open-source.</p>
+
+<h2>13. Security Model</h2>
+<p>IoT device security, data integrity, replay protection, communication security, smart contract audit.</p>
+
+<p>Full specifications available at <a href="https://enrg.network">enrg.network</a></p>
 </body>
 </html>
