@@ -251,14 +251,35 @@ pub mod enrg_mvp {
         Ok(())
     }
 
+    // =====================================================
+    // FOUNDER VESTING
+    // =====================================================
+    pub fn initialize_founder_vesting(
+        ctx: Context<InitializeFounderVesting>,
+        total_amount: u64,
+    ) -> Result<()> {
+        let vesting = &mut ctx.accounts.vesting;
+        let clock = Clock::get()?;
+
+        vesting.founder = ctx.accounts.founder.key();
+        vesting.total_amount = total_amount;
+        vesting.start_time = clock.unix_timestamp;
+        vesting.withdrawn = 0;
+
+        // Vesting vault ATA automatically created here (init_if_needed)
+        Ok(())
+    }
+
     pub fn claim_vested(ctx: Context<ClaimVested>) -> Result<()> {
         let vesting = &mut ctx.accounts.vesting;
         let clock = Clock::get()?;
         let now = clock.unix_timestamp;
+
         let cliff_end = vesting.start_time
             .checked_add(31_536_000)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
         require!(now >= cliff_end, ErrorCode::CliffNotReached);
+
         let vesting_end = cliff_end
             .checked_add(94_608_000)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -269,37 +290,52 @@ pub mod enrg_mvp {
             .checked_sub(cliff_end)
             .ok_or(ErrorCode::ArithmeticOverflow)?
             .min(total_duration);
+
         let elapsed_u64: u64 = elapsed.try_into().map_err(|_| ErrorCode::ArithmeticOverflow)?;
         let total_duration_u64: u64 = total_duration.try_into().map_err(|_| ErrorCode::ArithmeticOverflow)?;
+
         let total_vested = vesting.total_amount
             .checked_mul(elapsed_u64)
             .and_then(|x| x.checked_div(total_duration_u64))
             .ok_or(ErrorCode::ArithmeticOverflow)?;
+
         let new_claimable = total_vested
             .checked_sub(vesting.withdrawn)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
         require!(new_claimable > 0, ErrorCode::NothingToClaim);
+
         vesting.withdrawn = vesting.withdrawn
             .checked_add(new_claimable)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        // Transfer tokens from vesting vault to founder
+        let vesting_bump = ctx.bumps.vesting;
         let founder_key = ctx.accounts.founder.key();
-        let seeds: &[&[u8]] = &[b"founder-vesting", founder_key.as_ref(), &[ctx.bumps.vesting]];
-        let signer_seeds: &[&[&[u8]]] = &[seeds];
-        let cpi_transfer = CpiContext::new_with_signer(
-            ctx.accounts.token_program.key(),
-            SplTransfer {
-                from: ctx.accounts.vesting_vault.to_account_info(),
-                to: ctx.accounts.founder_token_account.to_account_info(),
-                authority: ctx.accounts.vesting.to_account_info(),
-            },
-            signer_seeds,
-        );
-        token::transfer(cpi_transfer, new_claimable)?;
+        let signer_seeds: &[&[&[u8]]] = &[&[
+            b"founder-vesting",
+            founder_key.as_ref(),
+            &[vesting_bump],
+        ]];
+
+        token::transfer(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                SplTransfer {
+                    from: ctx.accounts.vesting_vault.to_account_info(),
+                    to: ctx.accounts.founder_token_account.to_account_info(),
+                    authority: ctx.accounts.vesting.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            new_claimable,
+        )?;
+
         msg!("Claimed {} ENRG vesting", new_claimable);
         Ok(())
     }
 }
 
+// Account structs
 #[derive(Accounts)]
 pub struct InitializeVault<'info> {
     #[account(init, payer = authority, space = 8 + Vault::LEN, seeds = [b"vault"], bump)]
@@ -450,12 +486,52 @@ pub struct ClaimRewards<'info> {
 }
 
 #[derive(Accounts)]
-pub struct ClaimVested<'info> {
-    #[account(mut, seeds = [b"founder-vesting", founder.key().as_ref()], bump)]
+pub struct InitializeFounderVesting<'info> {
+    #[account(
+        init,
+        payer = founder,
+        space = 8 + FounderVesting::LEN,
+        seeds = [b"founder-vesting", founder.key().as_ref()],
+        bump
+    )]
     pub vesting: Account<'info, FounderVesting>,
-    #[account(mut, seeds = [b"vesting-vault", mint.key().as_ref()], bump)]
+
+    #[account(
+        init_if_needed,
+        payer = founder,
+        seeds = [b"vesting-vault", mint.key().as_ref()],
+        token::mint = mint,
+        token::authority = vesting,
+        bump
+    )]
     pub vesting_vault: Account<'info, TokenAccount>,
-    #[account(mut, associated_token::mint = mint, associated_token::authority = founder)]
+
+    pub mint: Account<'info, Mint>,
+    #[account(mut)]
+    pub founder: Signer<'info>,
+    pub token_program: Program<'info, Token>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimVested<'info> {
+    #[account(
+        mut,
+        seeds = [b"founder-vesting", founder.key().as_ref()],
+        bump
+    )]
+    pub vesting: Account<'info, FounderVesting>,
+    #[account(
+        mut,
+        seeds = [b"vesting-vault", mint.key().as_ref()],
+        bump
+    )]
+    pub vesting_vault: Account<'info, TokenAccount>,
+    #[account(
+        mut,
+        associated_token::mint = mint,
+        associated_token::authority = founder
+    )]
     pub founder_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub founder: Signer<'info>,
@@ -480,8 +556,13 @@ pub struct StakeInfo { pub owner: Pubkey, pub staked_amount: u64, }
 impl StakeInfo { pub const LEN: usize = 32 + 8; }
 
 #[account]
-pub struct FounderVesting { pub total_amount: u64, pub start_time: i64, pub withdrawn: u64, pub founder: Pubkey, }
-impl FounderVesting { pub const LEN: usize = 8 + 8 + 8 + 32; }
+pub struct FounderVesting {
+    pub founder: Pubkey,
+    pub total_amount: u64,
+    pub start_time: i64,
+    pub withdrawn: u64,
+}
+impl FounderVesting { pub const LEN: usize = 32 + 8 + 8 + 8; }
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct Proof {

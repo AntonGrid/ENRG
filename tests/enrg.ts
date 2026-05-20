@@ -23,8 +23,12 @@ describe("ENRG Protocol", () => {
   let daoReserve: PublicKey;
   let emergencyFund: PublicKey;
   let userDestination: PublicKey;
+  let vestingPda: PublicKey;
+  let vestingVaultPda: PublicKey;
+  let founderTokenAccount: PublicKey;
 
   const authority = (provider.wallet as anchor.Wallet).payer;
+  const founder = authority;
 
   before(async () => {
     const airdropSig = await provider.connection.requestAirdrop(
@@ -74,7 +78,6 @@ describe("ENRG Protocol", () => {
       .signers([authority])
       .rpc();
 
-    // All fund accounts are PDAs, derived from mint
     [buybackAccount] = await PublicKey.findProgramAddress(
       [Buffer.from("buyback"), mint.toBuffer()],
       program.programId
@@ -93,6 +96,30 @@ describe("ENRG Protocol", () => {
     );
 
     userDestination = await getAssociatedTokenAddress(mint, authority.publicKey);
+    founderTokenAccount = await getAssociatedTokenAddress(mint, founder.publicKey);
+
+    // Initialize founder vesting (contract creates vesting_vault automatically)
+    [vestingPda] = await PublicKey.findProgramAddress(
+      [Buffer.from("founder-vesting"), founder.publicKey.toBuffer()],
+      program.programId
+    );
+    [vestingVaultPda] = await PublicKey.findProgramAddress(
+      [Buffer.from("vesting-vault"), mint.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .initializeFounderVesting(new anchor.BN(200_000_000))
+      .accounts({
+        vesting: vestingPda,
+        vestingVault: vestingVaultPda,
+        mint,
+        founder: founder.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([founder])
+      .rpc();
 
     const preMintProof = {
       nonce: new anchor.BN(1),
@@ -120,6 +147,7 @@ describe("ENRG Protocol", () => {
       .rpc();
   });
 
+  // ---- NEGATIVE SCENARIOS ----
   it("should reject zero energy mint", async () => {
     const proof = {
       nonce: new anchor.BN(100),
@@ -387,7 +415,38 @@ describe("ENRG Protocol", () => {
     }
   });
 
+  // ---- VESTING TESTS ----
+  it("should initialize founder vesting", async () => {
+    const vestingAccount = await program.account.founderVesting.fetch(vestingPda);
+    assert.equal(vestingAccount.totalAmount.toNumber(), 200_000_000);
+    assert.equal(vestingAccount.founder.toBase58(), founder.publicKey.toBase58());
+    assert.isAbove(vestingAccount.startTime.toNumber(), 0);
+
+    // vesting_vault should exist and have 0 balance
+    const vaultInfo = await getAccount(provider.connection, vestingVaultPda);
+    assert.equal(Number(vaultInfo.amount), 0);
+  });
+
   it("should not allow claim before cliff", async () => {
-    console.log("Skipping vesting test: no initialization instruction yet");
+    try {
+      await program.methods
+        .claimVested()
+        .accounts({
+          vesting: vestingPda,
+          vestingVault: vestingVaultPda,
+          founderTokenAccount,
+          founder: founder.publicKey,
+          mint,
+          tokenProgram: TOKEN_PROGRAM_ID,
+        })
+        .signers([founder])
+        .rpc();
+      assert.fail("Should have thrown CliffNotReached");
+    } catch (err: any) {
+      assert.ok(
+        err.toString().includes("CliffNotReached") ||
+        err.toString().includes("0x1778")
+      );
+    }
   });
 });
