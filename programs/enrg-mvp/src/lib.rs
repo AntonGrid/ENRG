@@ -251,9 +251,6 @@ pub mod enrg_mvp {
         Ok(())
     }
 
-    // =====================================================
-    // FOUNDER VESTING
-    // =====================================================
     pub fn initialize_founder_vesting(
         ctx: Context<InitializeFounderVesting>,
         total_amount: u64,
@@ -265,8 +262,6 @@ pub mod enrg_mvp {
         vesting.total_amount = total_amount;
         vesting.start_time = clock.unix_timestamp;
         vesting.withdrawn = 0;
-
-        // Vesting vault ATA automatically created here (init_if_needed)
         Ok(())
     }
 
@@ -308,7 +303,6 @@ pub mod enrg_mvp {
             .checked_add(new_claimable)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-        // Transfer tokens from vesting vault to founder
         let vesting_bump = ctx.bumps.vesting;
         let founder_key = ctx.accounts.founder.key();
         let signer_seeds: &[&[&[u8]]] = &[&[
@@ -335,7 +329,6 @@ pub mod enrg_mvp {
     }
 }
 
-// Account structs
 #[derive(Accounts)]
 pub struct InitializeVault<'info> {
     #[account(init, payer = authority, space = 8 + Vault::LEN, seeds = [b"vault"], bump)]

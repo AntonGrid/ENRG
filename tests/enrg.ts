@@ -98,7 +98,6 @@ describe("ENRG Protocol", () => {
     userDestination = await getAssociatedTokenAddress(mint, authority.publicKey);
     founderTokenAccount = await getAssociatedTokenAddress(mint, founder.publicKey);
 
-    // Initialize founder vesting (contract creates vesting_vault automatically)
     [vestingPda] = await PublicKey.findProgramAddress(
       [Buffer.from("founder-vesting"), founder.publicKey.toBuffer()],
       program.programId
@@ -147,7 +146,6 @@ describe("ENRG Protocol", () => {
       .rpc();
   });
 
-  // ---- NEGATIVE SCENARIOS ----
   it("should reject zero energy mint", async () => {
     const proof = {
       nonce: new anchor.BN(100),
@@ -415,14 +413,12 @@ describe("ENRG Protocol", () => {
     }
   });
 
-  // ---- VESTING TESTS ----
   it("should initialize founder vesting", async () => {
     const vestingAccount = await program.account.founderVesting.fetch(vestingPda);
     assert.equal(vestingAccount.totalAmount.toNumber(), 200_000_000);
     assert.equal(vestingAccount.founder.toBase58(), founder.publicKey.toBase58());
     assert.isAbove(vestingAccount.startTime.toNumber(), 0);
 
-    // vesting_vault should exist and have 0 balance
     const vaultInfo = await getAccount(provider.connection, vestingVaultPda);
     assert.equal(Number(vaultInfo.amount), 0);
   });
