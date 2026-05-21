@@ -47,7 +47,7 @@ describe("ENRG Protocol", () => {
       authority,
       vaultPda,
       null,
-      6
+      9   // 9 decimals
     );
 
     await program.methods
@@ -56,6 +56,40 @@ describe("ENRG Protocol", () => {
         vault: vaultPda,
         authority: authority.publicKey,
         mint,
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([authority])
+      .rpc();
+
+    // Инициализация фондовых PDA
+    [buybackAccount] = await PublicKey.findProgramAddress(
+      [Buffer.from("buyback"), mint.toBuffer()],
+      program.programId
+    );
+    [stakingPool] = await PublicKey.findProgramAddress(
+      [Buffer.from("staking"), mint.toBuffer()],
+      program.programId
+    );
+    [daoReserve] = await PublicKey.findProgramAddress(
+      [Buffer.from("dao"), mint.toBuffer()],
+      program.programId
+    );
+    [emergencyFund] = await PublicKey.findProgramAddress(
+      [Buffer.from("emergency"), mint.toBuffer()],
+      program.programId
+    );
+
+    await program.methods
+      .initializeFunds()
+      .accounts({
+        buybackAccount,
+        stakingPool,
+        daoReserve,
+        emergencyFund,
+        mint,
+        vault: vaultPda,
+        authority: authority.publicKey,
+        tokenProgram: TOKEN_PROGRAM_ID,
         systemProgram: SystemProgram.programId,
       })
       .signers([authority])
@@ -78,23 +112,6 @@ describe("ENRG Protocol", () => {
       .signers([authority])
       .rpc();
 
-    [buybackAccount] = await PublicKey.findProgramAddress(
-      [Buffer.from("buyback"), mint.toBuffer()],
-      program.programId
-    );
-    [stakingPool] = await PublicKey.findProgramAddress(
-      [Buffer.from("staking"), mint.toBuffer()],
-      program.programId
-    );
-    [daoReserve] = await PublicKey.findProgramAddress(
-      [Buffer.from("dao"), mint.toBuffer()],
-      program.programId
-    );
-    [emergencyFund] = await PublicKey.findProgramAddress(
-      [Buffer.from("emergency"), mint.toBuffer()],
-      program.programId
-    );
-
     userDestination = await getAssociatedTokenAddress(mint, authority.publicKey);
     founderTokenAccount = await getAssociatedTokenAddress(mint, founder.publicKey);
 
@@ -108,7 +125,7 @@ describe("ENRG Protocol", () => {
     );
 
     await program.methods
-      .initializeFounderVesting(new anchor.BN(200_000_000))
+      .initializeFounderVesting(new anchor.BN(200_000_000_000))
       .accounts({
         vesting: vestingPda,
         vestingVault: vestingVaultPda,
@@ -314,24 +331,16 @@ describe("ENRG Protocol", () => {
     const daoGot = afterDao - beforeDao;
     const emergencyGot = afterEmergency - beforeEmergency;
 
-    const totalMint = Math.floor(energyWh / 1_000_000);
-    const expectedUser = Math.floor(totalMint * 85 / 100);
-    const commission = totalMint - expectedUser;
-    const expectedBuyback = Math.floor(commission * 20 / 100);
-    const expectedStaking = Math.floor(commission * 40 / 100);
-    const expectedDao = Math.floor(commission * 30 / 100);
-    const expectedEmergency = commission - expectedBuyback - expectedStaking - expectedDao;
-
-    assert.equal(Number(userGot), expectedUser);
-    assert.equal(Number(buybackGot), expectedBuyback);
-    assert.equal(Number(stakingGot), expectedStaking);
-    assert.equal(Number(daoGot), expectedDao);
-    assert.equal(Number(emergencyGot), expectedEmergency);
+    assert.equal(Number(userGot), 8_500_000_000);
+    assert.equal(Number(buybackGot), 300_000_000);
+    assert.equal(Number(stakingGot), 600_000_000);
+    assert.equal(Number(daoGot), 450_000_000);
+    assert.equal(Number(emergencyGot), 150_000_000);
   });
 
   it("should burn tokens from buyback account", async () => {
     const buybackBefore = (await getAccount(provider.connection, buybackAccount)).amount;
-    const burnAmount = 2;
+    const burnAmount = 100_000_000;
     await program.methods
       .buybackAndBurn(new anchor.BN(burnAmount))
       .accounts({
@@ -348,7 +357,7 @@ describe("ENRG Protocol", () => {
   });
 
   it("should stake tokens", async () => {
-    const stakeAmount = 10;
+    const stakeAmount = 1_000_000_000;
     const userBefore = (await getAccount(provider.connection, userDestination)).amount;
     assert.isAtLeast(Number(userBefore), stakeAmount, "Not enough balance to stake");
 
@@ -393,7 +402,7 @@ describe("ENRG Protocol", () => {
 
     try {
       await program.methods
-        .unstake(new anchor.BN(100))
+        .unstake(new anchor.BN(10_000_000_000))
         .accounts({
           stakeInfo: stakeInfoPda,
           user: authority.publicKey,
@@ -415,7 +424,7 @@ describe("ENRG Protocol", () => {
 
   it("should initialize founder vesting", async () => {
     const vestingAccount = await program.account.founderVesting.fetch(vestingPda);
-    assert.equal(vestingAccount.totalAmount.toNumber(), 200_000_000);
+    assert.equal(vestingAccount.totalAmount.toNumber(), 200_000_000_000);
     assert.equal(vestingAccount.founder.toBase58(), founder.publicKey.toBase58());
     assert.isAbove(vestingAccount.startTime.toNumber(), 0);
 

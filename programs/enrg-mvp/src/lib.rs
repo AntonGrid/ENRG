@@ -1,6 +1,7 @@
 #![allow(unexpected_cfgs)]
 
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::program_option::COption;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, burn, Mint, Token, TokenAccount, Transfer as SplTransfer},
@@ -8,7 +9,8 @@ use anchor_spl::{
 
 declare_id!("2cH1gexK4XiYHCcwiq1CnfzuLxgmkofiFNgNzYbEnAhF");
 
-const WATT_HOURS_PER_MWH: u64 = 1_000_000;
+const ENRG_DECIMALS: u8 = 9;
+const ENRG_BASIS: u64 = 10u64.pow(ENRG_DECIMALS as u32 - 6); // 1000
 const COMMISSION_PERCENT: u64 = 15;
 const BUYBACK_PERCENT: u64 = 20;
 const STAKING_PERCENT: u64 = 40;
@@ -20,8 +22,22 @@ pub mod enrg_mvp {
 
     pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
+        if vault.deployer == Pubkey::default() {
+            vault.deployer = ctx.accounts.authority.key();
+        } else {
+            require_keys_eq!(
+                vault.deployer,
+                ctx.accounts.authority.key(),
+                ErrorCode::Unauthorized
+            );
+        }
         vault.mint = ctx.accounts.mint.key();
         vault.authority = ctx.accounts.authority.key();
+        Ok(())
+    }
+
+    pub fn initialize_funds(_ctx: Context<InitializeFunds>) -> Result<()> {
+        // Все фондовые PDA создаются один раз; Anchor сам инициализирует их через init
         Ok(())
     }
 
@@ -51,6 +67,15 @@ pub mod enrg_mvp {
         let verified = true;
         require!(verified, ErrorCode::InvalidSignature);
 
+        // Проверка, что mint authority = vault PDA
+        require!(
+            match ctx.accounts.mint.mint_authority {
+                COption::Some(auth) => auth == ctx.accounts.vault.key(),
+                _ => false,
+            },
+            ErrorCode::Unauthorized
+        );
+
         let max_energy_wh = producer.max_power_w
             .checked_mul(10)
             .and_then(|x| x.checked_div(60))
@@ -66,8 +91,9 @@ pub mod enrg_mvp {
             .ok_or(ErrorCode::ArithmeticOverflow)?;
         producer.signature = proof.signature;
 
+        // Конвертация Wh -> базовые единицы ENRG (1 MWh = 1 ENRG, 9 decimals)
         let total_mint = proof.energy_wh
-            .checked_div(WATT_HOURS_PER_MWH)
+            .checked_mul(ENRG_BASIS)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
 
         let user_amount = total_mint
@@ -161,7 +187,7 @@ pub mod enrg_mvp {
             emergency_amount,
         )?;
 
-        msg!("Minted {} ENRG (user={}, buyback={}, staking={}, dao={}, emergency={})",
+        msg!("Minted {} base units (user={}, buyback={}, staking={}, dao={}, emergency={})",
             total_mint, user_amount, buyback_amount, staking_amount, dao_amount, emergency_amount);
         Ok(())
     }
@@ -179,13 +205,17 @@ pub mod enrg_mvp {
             signer_seeds,
         );
         burn(cpi_burn, amount)?;
-        msg!("Buyback & Burn: burned {} ENRG", amount);
+        msg!("Buyback & Burn: burned {} base units", amount);
         Ok(())
     }
 
     pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
         let stake_info = &mut ctx.accounts.stake_info;
-        stake_info.owner = ctx.accounts.user.key();
+        if stake_info.owner == Pubkey::default() {
+            stake_info.owner = ctx.accounts.user.key();
+        } else {
+            require_keys_eq!(stake_info.owner, ctx.accounts.user.key(), ErrorCode::Unauthorized);
+        }
         stake_info.staked_amount = stake_info.staked_amount
             .checked_add(amount)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -198,7 +228,7 @@ pub mod enrg_mvp {
             },
         );
         token::transfer(cpi_transfer, amount)?;
-        msg!("Staked {} ENRG", amount);
+        msg!("Staked {} base units", amount);
         Ok(())
     }
 
@@ -220,7 +250,7 @@ pub mod enrg_mvp {
             signer_seeds,
         );
         token::transfer(cpi_transfer, amount)?;
-        msg!("Unstaked {} ENRG", amount);
+        msg!("Unstaked {} base units", amount);
         Ok(())
     }
 
@@ -233,6 +263,7 @@ pub mod enrg_mvp {
             .checked_mul(user_stake.staked_amount)
             .and_then(|x| x.checked_div(total_staked))
             .ok_or(ErrorCode::ArithmeticOverflow)?;
+        require!(reward <= pool.amount, ErrorCode::ArithmeticOverflow);
         if reward > 0 {
             let pool_bump = ctx.bumps.staking_pool;
             let signer_seeds: &[&[&[u8]]] = &[&[b"staking", &[pool_bump]]];
@@ -246,7 +277,7 @@ pub mod enrg_mvp {
                 signer_seeds,
             );
             token::transfer(cpi_transfer, reward)?;
-            msg!("Claimed {} ENRG reward", reward);
+            msg!("Claimed {} base units reward", reward);
         }
         Ok(())
     }
@@ -257,7 +288,6 @@ pub mod enrg_mvp {
     ) -> Result<()> {
         let vesting = &mut ctx.accounts.vesting;
         let clock = Clock::get()?;
-
         vesting.founder = ctx.accounts.founder.key();
         vesting.total_amount = total_amount;
         vesting.start_time = clock.unix_timestamp;
@@ -324,18 +354,70 @@ pub mod enrg_mvp {
             new_claimable,
         )?;
 
-        msg!("Claimed {} ENRG vesting", new_claimable);
+        msg!("Claimed {} base units vesting", new_claimable);
         Ok(())
     }
 }
 
+// Account structs
 #[derive(Accounts)]
 pub struct InitializeVault<'info> {
-    #[account(init, payer = authority, space = 8 + Vault::LEN, seeds = [b"vault"], bump)]
+    #[account(init_if_needed, payer = authority, space = 8 + Vault::LEN, seeds = [b"vault"], bump)]
     pub vault: Account<'info, Vault>,
     #[account(mut)]
     pub authority: Signer<'info>,
     pub mint: Account<'info, Mint>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct InitializeFunds<'info> {
+    #[account(
+        init,
+        payer = authority,
+        seeds = [b"buyback", mint.key().as_ref()],
+        token::mint = mint,
+        token::authority = vault,
+        bump
+    )]
+    pub buyback_account: Account<'info, TokenAccount>,
+
+    #[account(
+        init,
+        payer = authority,
+        seeds = [b"staking", mint.key().as_ref()],
+        token::mint = mint,
+        token::authority = vault,
+        bump
+    )]
+    pub staking_pool: Account<'info, TokenAccount>,
+
+    #[account(
+        init,
+        payer = authority,
+        seeds = [b"dao", mint.key().as_ref()],
+        token::mint = mint,
+        token::authority = vault,
+        bump
+    )]
+    pub dao_reserve: Account<'info, TokenAccount>,
+
+    #[account(
+        init,
+        payer = authority,
+        seeds = [b"emergency", mint.key().as_ref()],
+        token::mint = mint,
+        token::authority = vault,
+        bump
+    )]
+    pub emergency_fund: Account<'info, TokenAccount>,
+
+    pub mint: Account<'info, Mint>,
+    #[account(seeds = [b"vault"], bump)]
+    pub vault: Account<'info, Vault>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
 }
 
@@ -364,45 +446,18 @@ pub struct MintEnergy<'info> {
     #[account(init_if_needed, payer = authority, associated_token::mint = mint, associated_token::authority = authority)]
     pub destination: Account<'info, TokenAccount>,
 
-    #[account(
-        init_if_needed,
-        payer = authority,
-        seeds = [b"buyback", mint.key().as_ref()],
-        token::mint = mint,
-        token::authority = vault,
-        bump
-    )]
-    pub buyback_account: Account<'info, TokenAccount>,
+    // Фондовые аккаунты в куче (Box) для уменьшения стека
+    #[account(mut, seeds = [b"buyback", mint.key().as_ref()], bump)]
+    pub buyback_account: Box<Account<'info, TokenAccount>>,
 
-    #[account(
-        init_if_needed,
-        payer = authority,
-        seeds = [b"staking", mint.key().as_ref()],
-        token::mint = mint,
-        token::authority = vault,
-        bump
-    )]
-    pub staking_pool: Account<'info, TokenAccount>,
+    #[account(mut, seeds = [b"staking", mint.key().as_ref()], bump)]
+    pub staking_pool: Box<Account<'info, TokenAccount>>,
 
-    #[account(
-        init_if_needed,
-        payer = authority,
-        seeds = [b"dao", mint.key().as_ref()],
-        token::mint = mint,
-        token::authority = vault,
-        bump
-    )]
-    pub dao_reserve: Account<'info, TokenAccount>,
+    #[account(mut, seeds = [b"dao", mint.key().as_ref()], bump)]
+    pub dao_reserve: Box<Account<'info, TokenAccount>>,
 
-    #[account(
-        init_if_needed,
-        payer = authority,
-        seeds = [b"emergency", mint.key().as_ref()],
-        token::mint = mint,
-        token::authority = vault,
-        bump
-    )]
-    pub emergency_fund: Account<'info, TokenAccount>,
+    #[account(mut, seeds = [b"emergency", mint.key().as_ref()], bump)]
+    pub emergency_fund: Box<Account<'info, TokenAccount>>,
 
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
@@ -533,8 +588,12 @@ pub struct ClaimVested<'info> {
 }
 
 #[account]
-pub struct Vault { pub mint: Pubkey, pub authority: Pubkey, }
-impl Vault { pub const LEN: usize = 32 + 32; }
+pub struct Vault {
+    pub deployer: Pubkey,
+    pub mint: Pubkey,
+    pub authority: Pubkey,
+}
+impl Vault { pub const LEN: usize = 32 + 32 + 32; }
 
 #[account]
 pub struct EnergyProducer {
