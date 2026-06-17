@@ -84,7 +84,7 @@ if (!founderKeypair) {
 const app = express();
 app.use(express.json());
 
-const ENERGY_THRESHOLD = 20; // для теста
+const ENERGY_THRESHOLD = 1000000; // 1 МВт·ч
 
 // ---------- PDA ----------
 const mint = new PublicKey(MINT_ADDRESS);
