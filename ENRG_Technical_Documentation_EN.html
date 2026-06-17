@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ENRG Technical Documentation v2.0</title>
+<title>ENRG Technical Documentation v3.0</title>
 <style>
 body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; padding: 2em; background: #f9f9f9; color: #1a1a1a; }
 h1, h2, h3 { color: #0b3b3b; }
@@ -10,48 +10,61 @@ code { background: #eee; padding: 2px 6px; border-radius: 4px; }
 </style>
 </head>
 <body>
-<h1>ENRG Protocol – Technical Documentation v2.0</h1>
+<h1>ENRG Protocol – Technical Documentation v3.0</h1>
 <p>DePIN / Cyber‑Physical Infrastructure</p>
 
 <h2>1. Architecture</h2>
-<p>IoT Devices → Oracles → Smart Contracts (Solana) → Energy Vault ↔ Users / Markets</p>
+<p>IoT Devices (ESP32, industrial Modbus meters) → Oracles (Switchboard) → Smart Contracts (Solana) → Energy Vault ↔ Users / Markets</p>
 
 <h2>2. Proof-of-Production (PoP)</h2>
-<p>Every 10 min, controller sends signed proof {device_id, timestamp, energy_wh, signature}. Contract verifies signature, timestamp, power limit, nonce, then mints ENRG with 15% protocol fee distribution.</p>
+<p>Every 10 min, controller sends signed proof {device_id, timestamp, energy_wh, signature}. Contract verifies signature, timestamp window (≤15 min), power limit, nonce, then mints SRC with 15% protocol fee distribution.</p>
 
-<h2>3. Smart Contracts (Solana / Anchor)</h2>
-<p>registry, mint_enrg, vault, buyback_burn, staking, founder_vesting.</p>
+<h2>3. Industrial Integration</h2>
+<p>Support for Modbus RTU/RS485 meters (Schneider, Siemens, ABB, Меркурий, Энергомера). Gateway firmware translates Modbus readings into signed proofs.</p>
 
-<h2>4. API</h2>
+<h2>4. Anti-Fraud System</h2>
+<ul>
+  <li><strong>Hardware security:</strong> ATECC608 Secure Element (key storage, signing).</li>
+  <li><strong>Replay protection:</strong> Monotonic nonce per device.</li>
+  <li><strong>Physical limits:</strong> <code>max_power_w</code> per device, time-based limits (10 min).</li>
+  <li><strong>Multi-oracle verification:</strong> Switchboard aggregates data from multiple oracles.</li>
+  <li><strong>Anomaly detection:</strong> Monitoring sudden spikes, comparison with historical data.</li>
+  <li><strong>Tamper detection:</strong> Enclosure sensors → key revocation.</li>
+</ul>
+
+<h2>5. Smart Contracts (Solana / Anchor)</h2>
+<p>registry, mint_src, vault, buyback_burn, staking, founder_vesting.</p>
+
+<h2>6. API</h2>
 <p>POST /api/v1/proof/submit<br>GET /api/v1/device/{id}/status</p>
 
-<h2>5. Energy Vault Economy</h2>
+<h2>7. Energy Vault Economy</h2>
 <p>20% Buyback & Burn · 40% Staking Pool · 30% DAO Reserve · 10% Emergency Fund</p>
 
-<h2>6. Roadmap</h2>
-<p>Genesis, Mainnet, Vault Growth, Expansion.</p>
+<h2>8. Roadmap</h2>
+<p>Genesis (testnet) · Mainnet · Vault Growth · Expansion</p>
 
-<h2>7. Tokenomics (May 2026)</h2>
-<p>Max supply 1,000,000,000 ENRG, 1 ENRG = 1 MWh, 6 decimals, 15% fee split.</p>
+<h2>9. Tokenomics (June 2026)</h2>
+<p>Max supply 1,000,000,000 SRC, 1 SRC = 1 MWh, 6 decimals, 15% fee split.</p>
 
-<h2>8. Emission Curve & Scarcity Forecast</h2>
+<h2>10. Emission Curve & Scarcity Forecast</h2>
 <p>Conservative (5%), Moderate (15%), Aggressive (10x) scenarios.</p>
 
-<h2>9. IoT Hardware Prototype</h2>
-<p>ESP32 + PZEM-004T, Ed25519 signing, Wi-Fi, OLED, ATECC608.</p>
+<h2>11. IoT Hardware Prototype</h2>
+<p>ESP32 + PZEM-004T, Ed25519 signing, Wi-Fi, OLED, ATECC608. Industrial gateway for Modbus/RS485 in development.</p>
 
-<h2>10. Oracle Architecture</h2>
-<p>Switchboard primary, MVP oracle-publisher.js, CPI on mainnet.</p>
+<h2>12. Oracle Architecture</h2>
+<p>Switchboard primary, MVP oracle-publisher.js (Node.js), CPI on mainnet.</p>
 
-<h2>11. Investment Opportunity</h2>
+<h2>13. Deployment</h2>
+<p>Oracle can be deployed on Render, Railway, or any Node.js PaaS with environment variables.</p>
+
+<h2>14. Investment Opportunity</h2>
 <p>Pre-Seed $150k – $250k, projected vault revenue.</p>
 
-<h2>12. Competitive Advantages</h2>
-<p>Any energy source, real MWh, Buyback & Burn, Solana, open-source.</p>
+<h2>15. Competitive Advantages</h2>
+<p>Any energy source, real MWh, Buyback & Burn, Solana, open-source, anti‑fraud architecture.</p>
 
-<h2>13. Security Model</h2>
-<p>IoT device security, data integrity, replay protection, communication security, smart contract audit.</p>
-
-<p>Full specifications available at <a href="https://enrg.network">enrg.network</a></p>
+<p>Full specifications at <a href="https://enrg.network">enrg.network</a></p>
 </body>
 </html>
