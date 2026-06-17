@@ -2,14 +2,16 @@ const express = require('express');
 const fs = require('fs');
 const path = require('path');
 const nacl = require('tweetnacl');
-const { Connection, clusterApiUrl, Keypair, Transaction, TransactionInstruction, PublicKey, sendAndConfirmTransaction } = require('@solana/web3.js');
+const { Connection, clusterApiUrl, Keypair, Transaction, TransactionInstruction, PublicKey, sendAndConfirmTransaction, SystemProgram } = require('@solana/web3.js');
+const { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } = require('@solana/spl-token');
+const crypto = require('crypto');
 
 const PROGRAM_ID = new PublicKey('8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a');
 const MINT_ADDRESS = 'HzAWLdrMZiS2wEsnZc6hHmg4CdAZM4CaYMYv53BYqw6G';
 const FOUNDER_WALLET = '842fG4hkaVuNeaMLdrur4HZMjsgp8R8tMY6NDHrkYQod';
 
-const DEVICES_FILE = path.join(__dirname, 'devices.json');
-const ENERGY_STORE_FILE = path.join(__dirname, 'energy_store.json');
+const DEVICES_FILE = path.join(__dirname, 'oracle', 'devices.json');
+const ENERGY_STORE_FILE = path.join(__dirname, 'oracle', 'energy_store.json');
 
 let devices = {};
 let energyStore = {};
@@ -23,28 +25,147 @@ function saveJson(filePath, obj) {
 
 devices = loadJson(DEVICES_FILE);
 energyStore = loadJson(ENERGY_STORE_FILE);
+console.log('Loaded devices:', devices);
 
+// ---------- Загрузка ключа основателя (с поддержкой Render Secret File) ----------
 const os = require('os');
 const defaultFounderPath = path.join(os.homedir(), 'founder-keypair.json');
 const founderPath = process.env.FOUNDER_KEYPAIR_PATH || defaultFounderPath;
+
 let founderKeypair = null;
-if (fs.existsSync(founderPath)) {
+
+// 1. Попробуем загрузить из переменной окружения (Render Secret File)
+if (process.env.FOUNDER_KEYPAIR_PATH) {
   try {
-    const arr = JSON.parse(fs.readFileSync(founderPath));
+    const secretPath = process.env.FOUNDER_KEYPAIR_PATH;
+    if (fs.existsSync(secretPath)) {
+      const arr = JSON.parse(fs.readFileSync(secretPath, 'utf8'));
+      founderKeypair = Keypair.fromSecretKey(Uint8Array.from(arr));
+      console.log('✅ Loaded founder keypair from Secret File:', secretPath);
+    } else {
+      console.warn('Secret file not found at:', secretPath);
+    }
+  } catch (e) {
+    console.warn('Failed to load from Secret File:', e.message);
+  }
+}
+
+// 2. Если не загрузилось – пробуем из стандартного пути
+if (!founderKeypair && fs.existsSync(founderPath)) {
+  try {
+    const arr = JSON.parse(fs.readFileSync(founderPath, 'utf8'));
     founderKeypair = Keypair.fromSecretKey(Uint8Array.from(arr));
     console.log('Loaded founder keypair from', founderPath);
   } catch (e) {
     console.warn('Failed to load founder keypair:', e.message);
   }
-} else {
+}
+
+if (!founderKeypair) {
   console.warn('Founder keypair not found at', founderPath);
+  // Не выходим, чтобы сервер хотя бы запустился (но минт не сработает)
 }
 
 const app = express();
 app.use(express.json());
 
-const ENERGY_THRESHOLD = 1000000; // в Wh (1 МВт·ч)
+const ENERGY_THRESHOLD = 1000000; // 1 МВт·ч (можно изменить для теста)
 
+// ---------- PDA (как в твоём рабочем скрипте) ----------
+const mint = new PublicKey(MINT_ADDRESS);
+const [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from('vault')], PROGRAM_ID);
+const [producerPda] = PublicKey.findProgramAddressSync([Buffer.from('producer'), founderKeypair ? founderKeypair.publicKey.toBuffer() : Buffer.alloc(32)], PROGRAM_ID);
+const [buyback] = PublicKey.findProgramAddressSync([Buffer.from('buyback'), mint.toBuffer()], PROGRAM_ID);
+const [staking] = PublicKey.findProgramAddressSync([Buffer.from('staking'), mint.toBuffer()], PROGRAM_ID);
+const [dao] = PublicKey.findProgramAddressSync([Buffer.from('dao'), mint.toBuffer()], PROGRAM_ID);
+const [emergency] = PublicKey.findProgramAddressSync([Buffer.from('emergency'), mint.toBuffer()], PROGRAM_ID);
+const destination = founderKeypair ? getAssociatedTokenAddressSync(mint, founderKeypair.publicKey, false) : null;
+
+const getDisc = (name) => crypto.createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
+
+// ---------- Функция создания producer (если нужна) ----------
+async function createProducerIfNeeded() {
+  if (!founderKeypair) return false;
+  const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+  const accountInfo = await connection.getAccountInfo(producerPda);
+  if (accountInfo) {
+    console.log('Producer already exists:', producerPda.toBase58());
+    return true;
+  }
+
+  console.log('Creating producer...');
+  const deviceIdPubkey = new PublicKey('11111111111111111111111111111111');
+  const maxPowerW = 600_000_000n;
+
+  const data = Buffer.alloc(48);
+  getDisc('create_producer').copy(data, 0);
+  deviceIdPubkey.toBuffer().copy(data, 8);
+  data.writeBigUInt64LE(maxPowerW, 40);
+
+  const instruction = new TransactionInstruction({
+    keys: [
+      { pubkey: producerPda, isWritable: true, isSigner: false },
+      { pubkey: founderKeypair.publicKey, isWritable: true, isSigner: true },
+      { pubkey: SystemProgram.programId, isWritable: false, isSigner: false }
+    ],
+    programId: PROGRAM_ID,
+    data
+  });
+
+  const tx = new Transaction().add(instruction);
+  const sig = await sendAndConfirmTransaction(connection, tx, [founderKeypair]);
+  console.log('Producer created. TX:', sig);
+  return true;
+}
+
+// ---------- MINT ----------
+async function mintEnergy(device_id, amount) {
+  if (!founderKeypair) return { success: false, error: 'founder_key_missing' };
+  try {
+    const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+
+    const nonce = BigInt(Date.now());
+    const timestamp = BigInt(Math.floor(Date.now() / 1000));
+    const energyWh = BigInt(amount);
+    const signature = Buffer.alloc(64);
+
+    const proofBuffer = Buffer.alloc(88);
+    let offset = 0;
+    proofBuffer.writeBigUInt64LE(nonce, offset); offset += 8;
+    proofBuffer.writeBigInt64LE(timestamp, offset); offset += 8;
+    proofBuffer.writeBigUInt64LE(energyWh, offset); offset += 8;
+    signature.copy(proofBuffer, offset);
+
+    const disc = getDisc('mint_energy');
+    const data = Buffer.concat([disc, proofBuffer]);
+
+    const keys = [
+      { pubkey: producerPda, isWritable: true, isSigner: false },
+      { pubkey: founderKeypair.publicKey, isWritable: true, isSigner: true },
+      { pubkey: vaultPda, isWritable: false, isSigner: false },
+      { pubkey: mint, isWritable: true, isSigner: false },
+      { pubkey: destination, isWritable: true, isSigner: false },
+      { pubkey: buyback, isWritable: true, isSigner: false },
+      { pubkey: staking, isWritable: true, isSigner: false },
+      { pubkey: dao, isWritable: true, isSigner: false },
+      { pubkey: emergency, isWritable: true, isSigner: false },
+      { pubkey: TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
+      { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
+      { pubkey: SystemProgram.programId, isWritable: false, isSigner: false }
+    ];
+
+    const instruction = new TransactionInstruction({ keys, programId: PROGRAM_ID, data });
+    const tx = new Transaction().add(instruction);
+    const sig = await sendAndConfirmTransaction(connection, tx, [founderKeypair]);
+    console.log('🎉 Mint successful! TX:', sig);
+    return { success: true, tx: sig };
+  } catch (e) {
+    console.error('mintEnergy error:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+// ---------- ENDPOINT ----------
 app.post('/api/v1/proof/submit', async (req, res) => {
   try {
     const { device_id, timestamp, energyWh, nonce, signature } = req.body;
@@ -74,6 +195,7 @@ app.post('/api/v1/proof/submit', async (req, res) => {
 
     if (total >= ENERGY_THRESHOLD) {
       console.log(`Threshold reached for ${device_id}: minting ${total}`);
+      await createProducerIfNeeded();
       const mintRes = await mintEnergy(device_id, total);
       if (mintRes.success) {
         energyStore[device_id] = 0;
@@ -91,26 +213,5 @@ app.post('/api/v1/proof/submit', async (req, res) => {
   }
 });
 
-async function mintEnergy(device_id, amount) {
-  if (!founderKeypair) return { success: false, error: 'founder_key_missing' };
-  try {
-    const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
-    const payload = JSON.stringify({ method: 'mint_energy', device_id, amount });
-    const ix = new TransactionInstruction({
-      keys: [{ pubkey: founderKeypair.publicKey, isSigner: true, isWritable: true }],
-      programId: PROGRAM_ID,
-      data: Buffer.from(payload, 'utf8'),
-    });
-    const tx = new Transaction().add(ix);
-    const sig = await sendAndConfirmTransaction(connection, tx, [founderKeypair]);
-    console.log('Mint tx signature', sig);
-    return { success: true, tx: sig };
-  } catch (e) {
-    console.error('mintEnergy error', e);
-    return { success: false, error: e.message };
-  }
-}
-
 const PORT = process.env.PORT || 3000;
-// ВАЖНО: слушаем на всех интерфейсах (0.0.0.0), чтобы ESP32 мог подключиться
 app.listen(PORT, '0.0.0.0', () => console.log(`Oracle server listening on port ${PORT}`));
