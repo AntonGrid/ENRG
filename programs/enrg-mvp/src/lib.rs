@@ -7,7 +7,7 @@ use anchor_spl::{
     token::{self, burn, Mint, Token, TokenAccount, Transfer as SplTransfer},
 };
 
-declare_id!("2cH1gexK4XiYHCcwiq1CnfzuLxgmkofiFNgNzYbEnAhF");
+declare_id!("8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a");
 
 const ENRG_DECIMALS: u8 = 9;
 const ENRG_BASIS: u64 = 10u64.pow(ENRG_DECIMALS as u32 - 6); // 1000
