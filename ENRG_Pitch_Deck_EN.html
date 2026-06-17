@@ -1,9 +1,8 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>ENRG – Pitch Deck</title>
+    <title>ENRG – Pitch Deck v2.0</title>
     <style>
         * { margin:0; padding:0; box-sizing:border-box; }
         body { background:#000; overflow:hidden; height:100vh; font-family:Inter,sans-serif; }
@@ -17,24 +16,37 @@
         h1 { font-size:3rem; color:#00E5FF; }
         .controls { position:fixed; bottom:2rem; left:50%; transform:translateX(-50%); display:flex; gap:1.5rem; z-index:10; }
         .controls button { background:rgba(0,0,0,0.5); border:2px solid #00E5FF44; color:#00E5FF; font-size:1.8rem; border-radius:50%; width:3.5rem; height:3.5rem; cursor:pointer; }
+        .highlight { color:#FF6B00; font-weight:bold; }
     </style>
 </head>
 <body>
 <canvas id="bg"></canvas>
 <div class="slides">
     <div class="slide cover active"><div class="logo">E<span>NRG</span></div><h1>Energy Rights</h1><p>Decentralized Energy Corporation</p><p><em>&ldquo;Bitcoin fixed money. ENRG fixes energy.&rdquo;</em></p><p style="color:#FF6B00; margin-top:2rem;">Anton Grid, Founder & CEO</p></div>
-    <div class="slide"><h2>1. THE PROBLEM</h2><p>Centralized $8T energy market. You have zero control.</p></div>
-    <div class="slide"><h2>2. OUR SOLUTION</h2><p>Mine real kilowatt-hours, not waste electricity.</p><p>Any source: solar, wind, hydro, biogas, gas.</p></div>
-    <div class="slide"><h2>Proof-of-Production</h2><p>Connect → IoT proof → Verification → Mint ENRG</p></div>
-    <div class="slide"><h2>ENERGY VAULT</h2><p>Revenue from assets → Buyback & Burn → Scarcity</p></div>
-    <div class="slide"><h2>TOKENOMICS</h2><p>1B ENRG · Solana · $0.01 · 60% community mining</p></div>
-    <div class="slide"><h2>WHY WE WIN</h2><p>Arkreen = solar. Starpower = storage. <span style="color:#FF6B00;">ENRG = any source.</span></p><p>We build an asset, not loyalty points.</p></div>
-    <div class="slide"><h2>ROADMAP</h2><p>Genesis Q2–Q3 2026 · Mainnet Q4 · Vault 2027 · Expansion 2028+</p></div>
+    
+    <div class="slide"><h2>1. THE PROBLEM</h2><p>Centralized $8T energy market. You have zero control.</p><p>Small producers cannot monetize surplus. Consumers face opaque pricing. Renewables lack transparent verification.</p></div>
+    
+    <div class="slide"><h2>2. OUR SOLUTION</h2><p>Mine real kilowatt-hours, not waste electricity.</p><p>Any source: solar, wind, hydro, biogas, gas.</p><p><span class="highlight">Industrial support:</span> Modbus/RS485 meters (Schneider, Siemens, ABB, Меркурий, Энергомера).</p></div>
+    
+    <div class="slide"><h2>Proof-of-Production</h2><p>Connect → IoT proof → Verification → Mint SRC</p><p><span class="highlight">Anti-fraud:</span> Secure Element, nonce, multi-oracle, anomaly detection.</p></div>
+    
+    <div class="slide"><h2>ENERGY VAULT</h2><p>Revenue from assets → Buyback & Burn → Scarcity</p><p>20% Buyback · 40% Staking · 30% DAO · 10% Emergency</p></div>
+    
+    <div class="slide"><h2>TOKENOMICS</h2><p>1B SRC · Solana · 60% community mining</p><p>1 SRC = 1 MWh · 6 decimals · 15% protocol fee</p></div>
+    
+    <div class="slide"><h2>WHY WE WIN</h2><p>Arkreen = solar. Starpower = storage. <span class="highlight">ENRG = any source.</span></p><p>Real asset backed by MWh, not loyalty points.</p><p><span class="highlight">Hardware-grade security</span> – ATECC608, multi-oracle, tamper detection.</p></div>
+    
+    <div class="slide"><h2>ROADMAP</h2><p>Genesis Q2–Q3 2026 · Mainnet Q4 · Vault 2027 · Expansion 2028+</p><p>🔹 Testnet mint achieved (devnet) – <a href="https://solana.fm/tx/3GsWfQvFhvAHBRHy5QV76gNov3knSsndKYrGg2CbUnppgbJW8ipFcvpeaxhM7NKQRZW3tHyFR5TyvN2c4t7yZ2V9?cluster=devnet-solana" style="color:#00E5FF;">live transaction</a></p></div>
+    
     <div class="slide"><h2>PRE-SEED: $150k–$250k</h2><p>Audit · MVP · Legal · Marketing · Liquidity</p></div>
+    
     <div class="slide"><h2>VAULT FORECAST</h2><p><span style="font-size:3rem;color:#FF6B00;">$500K</span> 2027 · <span style="font-size:3rem;color:#FF6B00;">$2M</span> 2028 · <span style="font-size:3rem;color:#FF6B00;">$10M</span> 2029</p></div>
+    
     <div class="slide"><h2>LEGAL</h2><p>Utility token · UAE/Switzerland · SAFT + KYC</p></div>
-    <div class="slide"><h2>TEAM</h2><p style="font-size:1.8rem;color:#FF6B00;">Anton Grid</p><p>Founder & CEO</p></div>
-    <div class="slide cover"><div class="logo">E<span>NRG</span></div><p style="font-size:2rem;color:#FF6B00;">Nobody owns your energy.</p><p>enrg.project@gmail.com</p></div>
+    
+    <div class="slide"><h2>TEAM</h2><p style="font-size:1.8rem;color:#FF6B00;">Anton Grid</p><p>Founder & CEO</p><p style="font-size:0.8rem;color:#aaa;">Built solo – ESP32, oracle, contract, testnet mint.</p></div>
+    
+    <div class="slide cover"><div class="logo">E<span>NRG</span></div><p style="font-size:2rem;color:#FF6B00;">Nobody owns your energy.</p><p>enrg.project@gmail.com</p><p><a href="https://github.com/AntonGrid/ENRG" style="color:#00E5FF;">github.com/AntonGrid/ENRG</a></p></div>
 </div>
 <div class="controls"><button onclick="prev()">◀</button><button onclick="next()">▶</button></div>
 <script>
