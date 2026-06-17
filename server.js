@@ -26,6 +26,14 @@ function loadJson(filePath) {
   }
 }
 
+function saveJson(filePath, obj) {
+  try {
+    fs.writeFileSync(filePath, JSON.stringify(obj, null, 2));
+  } catch (e) {
+    console.error('❌ Failed to save', filePath, ':', e.message);
+  }
+}
+
 devices = loadJson(DEVICES_FILE);
 energyStore = loadJson(ENERGY_STORE_FILE);
 console.log('✅ Loaded devices:', devices);
@@ -33,7 +41,6 @@ console.log('✅ Loaded devices:', devices);
 // ---------- Загрузка ключа основателя ----------
 let founderKeypair = null;
 
-// 1. Пробуем загрузить из переменной FOUNDER_KEY (прямая передача)
 if (process.env.FOUNDER_KEY) {
   try {
     const arr = JSON.parse(process.env.FOUNDER_KEY);
@@ -44,7 +51,6 @@ if (process.env.FOUNDER_KEY) {
   }
 }
 
-// 2. Если не загрузилось — пробуем из FOUNDER_KEYPAIR_PATH (файл)
 if (!founderKeypair && process.env.FOUNDER_KEYPAIR_PATH) {
   try {
     const secretPath = process.env.FOUNDER_KEYPAIR_PATH;
@@ -58,7 +64,6 @@ if (!founderKeypair && process.env.FOUNDER_KEYPAIR_PATH) {
   }
 }
 
-// 3. Если не загрузилось — пробуем стандартный путь (локально)
 if (!founderKeypair) {
   const defaultPath = path.join('/opt/render', 'founder-keypair.json');
   try {
