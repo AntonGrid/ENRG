@@ -16,6 +16,11 @@ const BUYBACK_PERCENT: u64 = 20;
 const STAKING_PERCENT: u64 = 40;
 const DAO_PERCENT: u64 = 30;
 
+// Асимптотическая модель эмиссии (раздел 23 спецификации)
+const MAX_SUPPLY: u64 = 1_000_000_000; // 1 млрд ENRG
+const EMISSION_DIFFICULTY_K: u64 = 10; // Коэффициент сложности
+const ENERGY_PER_TOKEN_BASE: u64 = 1_000_000; // 1 МВт·ч в Wh
+
 #[program]
 pub mod enrg_mvp {
     use super::*;
@@ -84,6 +89,34 @@ pub mod enrg_mvp {
 
         require!(proof.energy_wh > 0, ErrorCode::ZeroAmountMint);
 
+        // === АСИМПТОТИЧЕСКАЯ МОДЕЛЬ ЭМИССИИ ===
+        
+        // Текущее циркулирующее предложение из SPL Mint
+        let current_supply = ctx.accounts.mint.supply;
+        require!(current_supply < MAX_SUPPLY as u64, ErrorCode::MaxSupplyReached);
+
+        // Вычисляем требуемую энергию за 1 токен: E(S) = 1_000_000 Wh × k^S
+        let energy_per_token_u128 = calculate_energy_per_token(current_supply, EMISSION_DIFFICULTY_K)?;
+        
+        // Преобразуем в u64 для сравнения с proof.energy_wh
+        let energy_per_token = if energy_per_token_u128 > u64::MAX as u128 {
+            // Если энергия слишком велика, запрещаем минт
+            return Err(ErrorCode::ExcessiveEnergyRequired.into());
+        } else {
+            energy_per_token_u128 as u64
+        };
+
+        // Проверяем, достаточно ли энергии для чеканки хотя бы одного токена
+        require!(proof.energy_wh >= energy_per_token, ErrorCode::InsufficientEnergy);
+
+        // Вычисляем, сколько токенов можно чек��нить
+        let tokens_to_mint = proof.energy_wh
+            .checked_div(energy_per_token)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        require!(tokens_to_mint > 0, ErrorCode::ZeroAmountMint);
+
+        // === КОНЕЦ АСИМПТОТИЧЕСКОЙ МОДЕЛИ ===
+
         producer.nonce = proof.nonce;
         producer.timestamp = now;
         producer.energy_wh = producer.energy_wh
@@ -91,8 +124,8 @@ pub mod enrg_mvp {
             .ok_or(ErrorCode::ArithmeticOverflow)?;
         producer.signature = proof.signature;
 
-        // Конвертация Wh -> базовые единицы ENRG (1 MWh = 1 ENRG, 9 decimals)
-        let total_mint = proof.energy_wh
+        // Конвертация токенов в базовые единицы (с decimals = 9)
+        let total_mint = tokens_to_mint
             .checked_mul(ENRG_BASIS)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
 
@@ -122,6 +155,19 @@ pub mod enrg_mvp {
             .and_then(|x| x.checked_sub(staking_amount))
             .and_then(|x| x.checked_sub(dao_amount))
             .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        // Событие мониторинга сложности эмиссии
+        let supply_fraction = (current_supply as u128)
+            .checked_mul(10_u128.pow(18))
+            .unwrap_or(u128::MAX)
+            .checked_div(MAX_SUPPLY as u128)
+            .unwrap_or(0);
+
+        emit!(EmissionDifficultyChanged {
+            current_supply,
+            supply_fraction,
+            energy_per_token: energy_per_token_u128,
+        });
 
         let vault_bump = ctx.bumps.vault;
         let signer_seeds: &[&[&[u8]]] = &[&[b"vault", &[vault_bump]]];
@@ -187,8 +233,8 @@ pub mod enrg_mvp {
             emergency_amount,
         )?;
 
-        msg!("Minted {} base units (user={}, buyback={}, staking={}, dao={}, emergency={})",
-            total_mint, user_amount, buyback_amount, staking_amount, dao_amount, emergency_amount);
+        msg!("Minted {} tokens (energy_per_token={}Wh, supply={}/{})",
+            tokens_to_mint, energy_per_token, current_supply, MAX_SUPPLY);
         Ok(())
     }
 
@@ -357,6 +403,75 @@ pub mod enrg_mvp {
         msg!("Claimed {} base units vesting", new_claimable);
         Ok(())
     }
+}
+
+// === АСИМПТОТИЧЕСКАЯ МОДЕЛЬ ЭМИССИИ ===
+// Функции вычисления энергии на токен согласно формуле E(S) = 1_000_000 Wh × k^S
+
+/// Вычисляет энергию, требуемую для одного токена в Wh
+/// Формула: E(S) = ENERGY_PER_TOKEN_BASE × k^S
+/// S = current_supply / MAX_SUPPLY (доля от 0 до 1)
+fn calculate_energy_per_token(current_supply: u64, k: u64) -> Result<u128> {
+    let current_supply_u128 = current_supply as u128;
+    let max_supply_u128 = MAX_SUPPLY as u128;
+    
+    let s_scaled = current_supply_u128
+        .checked_mul(10_u128.pow(18))
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(max_supply_u128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    
+    // log(k^S) = S × log(k)
+    let log_k_scaled = match k {
+        10 => 2_302_585_092_994_045_684u128, // ln(10) × 10^18
+        3 => 1_098_612_288_668_109_691u128,  // ln(3) × 10^18
+        5 => 1_609_437_912_434_100_374u128,  // ln(5) × 10^18
+        _ => return Err(ErrorCode::InvalidParameter.into()),
+    };
+    
+    let exponent = s_scaled
+        .checked_mul(log_k_scaled)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(10_u128.pow(18))
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    
+    let power_k_s = exp_approx(exponent)?;
+    
+    (ENERGY_PER_TOKEN_BASE as u128)
+        .checked_mul(power_k_s)
+        .ok_or(ErrorCode::ArithmeticOverflow.into())
+}
+
+/// Приблизительное вычисление e^x для x до ~10
+fn exp_approx(x_scaled: u128) -> Result<u128> {
+    if x_scaled == 0 {
+        return Ok(10_u128.pow(18));
+    }
+    
+    if x_scaled > 10_u128.pow(19) {
+        return Err(ErrorCode::ExcessiveEnergyRequired.into());
+    }
+    
+    let mut result = 10_u128.pow(18);
+    let mut term = 10_u128.pow(18);
+    
+    for n in 1..=20 {
+        term = term
+            .checked_mul(x_scaled)
+            .ok_or(ErrorCode::ArithmeticOverflow)?
+            .checked_div(n as u128 * 10_u128.pow(18))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        
+        result = result
+            .checked_add(term)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        
+        if term < 10_u128.pow(12) {
+            break;
+        }
+    }
+    
+    Ok(result)
 }
 
 // Account structs
@@ -621,6 +736,14 @@ pub struct Proof {
     pub nonce: u64, pub timestamp: i64, pub energy_wh: u64, pub signature: [u8; 64],
 }
 
+// === СОБЫТИЯ ===
+#[event]
+pub struct EmissionDifficultyChanged {
+    pub current_supply: u64,
+    pub supply_fraction: u128,      // S × 10^18 (доля от 0 до 10^18)
+    pub energy_per_token: u128,     // В Wh × 10^18
+}
+
 #[error_code]
 pub enum ErrorCode {
     Unauthorized,
@@ -634,4 +757,9 @@ pub enum ErrorCode {
     NothingToClaim,
     ArithmeticOverflow,
     ZeroAmountMint,
+    // Новые ошибки для асимптотической модели
+    InvalidParameter,              // Неверный параметр k
+    ExcessiveEnergyRequired,       // k^S > u64::MAX
+    InsufficientEnergy,            // energy_wh < energy_per_token
+    MaxSupplyReached,              // Достигнут максимум 1 млрд ENRG
 }
