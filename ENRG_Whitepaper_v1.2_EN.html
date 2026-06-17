@@ -2,63 +2,106 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>ENRG Whitepaper v1.2</title>
+<title>ENRG Protocol – Whitepaper v2.0</title>
 <style>
-body { font-family: Arial, sans-serif; max-width: 800px; margin: auto; padding: 2em; background: #f9f9f9; color: #1a1a1a; }
+body { font-family: Arial, sans-serif; max-width: 900px; margin: auto; padding: 2em; background: #f9f9f9; color: #1a1a1a; line-height: 1.6; }
 h1, h2, h3 { color: #0b3b3b; }
 code { background: #eee; padding: 2px 6px; border-radius: 4px; }
+.highlight { background: #e0f0f0; padding: 1em; border-left: 4px solid #0b3b3b; }
 </style>
 </head>
 <body>
-<h1>ENRG Protocol – Whitepaper v1.2</h1>
+<h1>ENRG Protocol – Whitepaper v2.0</h1>
 <p><strong>Backed by Real MWh, Not Loyalty Points</strong></p>
 <p>ENRG – The Backbone for DePIN Energy. The Only DePIN Protocol with Buyback & Burn and Energy-Backed Tokenization.</p>
 <p><em>“Bitcoin solved the problem of money without central banks. ENRG will solve the problem of energy without monopolies.”</em></p>
-<p>Contact: Anton Grid, Founder & CEO<br>Email: anton@enrg.network<br>Website: <a href="https://enrg.network">https://enrg.network</a></p>
+<p><strong>Contact:</strong> Anton Grid, Founder & CEO<br>
+Email: anton@enrg.network<br>
+Website: <a href="https://enrg.network">https://enrg.network</a></p>
 
 <h2>1. Executive Summary</h2>
-<p>ENRG is a DePIN-native energy protocol that turns real-world energy production into a programmable, on-chain asset. Each ENRG token represents 1 MWh of verifiable energy, backed by cryptographic proofs from IoT devices and oracles.</p>
+<p>ENRG is a DePIN-native energy protocol that turns real-world energy production into a programmable, on-chain asset. Each SRC token represents 1 MWh of verifiable energy, backed by cryptographic proofs from IoT devices (ESP32, industrial Modbus/RS485 meters) and decentralized oracles.</p>
 
 <h2>2. The Problem – Centralized Energy Markets</h2>
-<p>Today’s energy markets are dominated by centralized utilities, opaque intermediaries, and fragmented data silos...</p>
+<p>Today’s energy markets are dominated by centralized utilities, opaque intermediaries, and fragmented data silos. Small producers cannot monetize surplus, consumers face opaque pricing, and renewable energy lacks transparent verification.</p>
 
-<h2>3. Our Solution – Proof-of-Production</h2>
-<p>ENRG introduces Proof-of-Production: a cryptographic pipeline that connects physical energy devices to on-chain tokens...</p>
+<h2>3. Our Solution – Proof-of-Production (PoP)</h2>
+<p>ENRG introduces Proof-of-Production: a cryptographic pipeline that connects physical energy devices to on-chain tokens.</p>
+<div class="highlight">
+  <strong>Industrial Integration:</strong> Supports Modbus RTU/RS485 meters (Schneider, Siemens, ABB, Меркурий, Энергомера) via gateway firmware that translates readings into signed proofs.
+</div>
+<p><strong>Anti-Fraud System:</strong></p>
+<ul>
+  <li><strong>Hardware security:</strong> ATECC608 Secure Element for key storage and signing.</li>
+  <li><strong>Replay protection:</strong> Monotonic nonce per device.</li>
+  <li><strong>Physical limits:</strong> <code>max_power_w</code> per device, time-based limits (10 min).</li>
+  <li><strong>Multi-oracle verification:</strong> Switchboard aggregates data from multiple oracles.</li>
+  <li><strong>Anomaly detection:</strong> Monitoring sudden spikes, comparison with historical data.</li>
+  <li><strong>Tamper detection:</strong> Enclosure sensors → key revocation.</li>
+</ul>
 
 <h2>4. Why ENRG Wins</h2>
-<p>The Only DePIN Protocol with Buyback & Burn and Real MWh Backing.</p>
+<p>The Only DePIN Protocol with Buyback & Burn and Real MWh Backing. Supports any source (solar, wind, hydro, biogas, fossil) with transparent multipliers. Fully open-source, built on Solana.</p>
 
-<h2>5. Tokenomics (May 2026)</h2>
-<p>Max supply: 1,000,000,000 ENRG (fixed cap). 1 ENRG = 1 MWh. Protocol fee 15% distributed as 20% Buyback & Burn, 40% Staking Rewards, 30% DAO Reserve, 10% Emergency Fund.</p>
+<h2>5. Tokenomics (June 2026)</h2>
+<p><strong>Ticker:</strong> SRC (Source)<br>
+<strong>Max Supply:</strong> 1,000,000,000 SRC (fixed cap)<br>
+<strong>Scale:</strong> 1 SRC = 1 MWh (1,000 kWh)<br>
+<strong>Decimals:</strong> 6</p>
+<p><strong>Protocol Fee:</strong> 15% of each mint, distributed as:</p>
+<ul>
+  <li>20% Buyback & Burn</li>
+  <li>40% Staking Rewards</li>
+  <li>30% DAO Reserve</li>
+  <li>10% Emergency Fund</li>
+</ul>
+<p><strong>Source Multipliers:</strong> Solar/Wind/Hydro 100%, Biogas 80%, Fossil 50%.</p>
 
 <h2>6. Emission Curve & Scarcity Forecast</h2>
-<p>Conservative, moderate, aggressive scenarios...</p>
+<p>Conservative (5% network growth/year), Moderate (15% growth), Aggressive (10x first year). In all scenarios, SRC becomes structurally deflationary as network adoption grows.</p>
 
 <h2>7. Energy Vault – The Economic Engine</h2>
-<p>Every MWh Minted Feeds the Vault. Every Fee Feeds Scarcity.</p>
+<p>Every MWh Minted Feeds the Vault. Every Fee Feeds Scarcity. The Vault accumulates protocol fees, executes buyback & burn, and distributes to stakers, DAO, and emergency fund.</p>
 
 <h2>8. Smart Contract Architecture</h2>
-<p>Modular Solana programs: Mint, Vault, Oracle Adapter, Staking, DAO.</p>
+<p>Modular Solana programs: Mint, Vault, Oracle Adapter, Staking, DAO. All programs auditable and upgradeable via DAO governance.</p>
 
 <h2>9. IoT Hardware Prototype</h2>
-<p>ESP32 + PZEM-004T, Ed25519 signing, Wi-Fi submission, OLED display, ATECC608 planned.</p>
+<ul>
+  <li><strong>Consumer:</strong> ESP32 + PZEM-004T, Ed25519 signing, Wi-Fi, OLED.</li>
+  <li><strong>Industrial:</strong> Modbus/RS485 gateway (ESP32 + RS485 shield) supporting Schneider, Siemens, ABB, Меркурий, Энергомера.</li>
+  <li><strong>Secure Element:</strong> ATECC608 planned for production.</li>
+</ul>
 
 <h2>10. Oracle Architecture</h2>
-<p>Switchboard for decentralized data delivery, MVP oracle-publisher.js.</p>
+<p>Switchboard for decentralized data delivery, MVP oracle-publisher.js (Node.js) deployable on Render, Railway, or any PaaS. Production: direct CPI to smart contract.</p>
 
 <h2>11. Roadmap</h2>
-<p>Genesis (testnet), Mainnet, Vault Growth, Expansion.</p>
+<ul>
+  <li><strong>Genesis (Q2–Q3 2026):</strong> Testnet, audit, IoT prototype, landing page.</li>
+  <li><strong>Mainnet (Q4 2026 – Q1 2027):</strong> Mainnet deployment, first IoT devices, DEX listing.</li>
+  <li><strong>Vault Growth (Q2–Q3 2027):</strong> Vault activation, buyback & burn, industrial producers.</li>
+  <li><strong>Expansion (2028+):</strong> Tier-1 CEX, cross-chain, full DAO governance.</li>
+</ul>
 
 <h2>12. Investment Opportunity</h2>
-<p>Pre-Seed: $150k – $250k for audits, MVP, legal, marketing, liquidity.</p>
+<p><strong>Pre-Seed:</strong> $150k – $250k for audits, MVP, legal, marketing, liquidity.</p>
+<p><strong>Projected Vault Revenue:</strong> 2027: $500k, 2028: $2M, 2029: $10M.</p>
 
 <h2>13. Competitive Advantages</h2>
-<p>Any energy source, real MWh backing, Buyback & Burn, source multipliers, Solana speed, fully decentralized.</p>
+<ul>
+  <li>Any energy source (solar, wind, hydro, biogas, fossil).</li>
+  <li>Real asset backed by MWh, not loyalty points.</li>
+  <li>Buyback & Burn mechanism creates structural scarcity.</li>
+  <li>Hardware-level anti-fraud (Secure Element, multi-oracle).</li>
+  <li>Built on Solana (fast, low fees).</li>
+  <li>Fully open-source and decentralized.</li>
+</ul>
 
 <h2>14. Team</h2>
-<p>Anton Grid – Founder & CEO.</p>
+<p><strong>Anton Grid</strong> – Founder & CEO. Building ENRG to make energy markets as open and programmable as the internet.</p>
 
 <h2>15. Legal Disclaimer</h2>
-<p>This document does not constitute financial, legal, or investment advice...</p>
+<p>This document does not constitute financial, legal, or investment advice. SRC tokens may be subject to regulatory oversight. All projections are inherently uncertain. Conduct your own research.</p>
 </body>
 </html>
