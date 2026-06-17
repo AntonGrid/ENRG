@@ -10,7 +10,6 @@ const PROGRAM_ID = new PublicKey('8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a')
 const MINT_ADDRESS = 'HzAWLdrMZiS2wEsnZc6hHmg4CdAZM4CaYMYv53BYqw6G';
 const FOUNDER_WALLET = '842fG4hkaVuNeaMLdrur4HZMjsgp8R8tMY6NDHrkYQod';
 
-// Пути к файлам — ищем в папке oracle (рядом с корнем)
 const DEVICES_FILE = path.join(__dirname, 'oracle', 'devices.json');
 const ENERGY_STORE_FILE = path.join(__dirname, 'oracle', 'energy_store.json');
 
@@ -22,7 +21,7 @@ function loadJson(filePath) {
     const data = fs.readFileSync(filePath, 'utf8');
     return JSON.parse(data);
   } catch (e) {
-    console.warn(`⚠️ Could not load ${filePath}:`, e.message);
+    console.warn('⚠️ Could not load', filePath, ':', e.message);
     return {};
   }
 }
@@ -31,26 +30,35 @@ devices = loadJson(DEVICES_FILE);
 energyStore = loadJson(ENERGY_STORE_FILE);
 console.log('✅ Loaded devices:', devices);
 
-// ---------- Загрузка ключа основателя (Render Secret File) ----------
+// ---------- Загрузка ключа основателя ----------
 let founderKeypair = null;
 
-// 1. Пробуем загрузить из Secret File (Render)
-if (process.env.FOUNDER_KEYPAIR_PATH) {
+// 1. Пробуем загрузить из переменной FOUNDER_KEY (прямая передача)
+if (process.env.FOUNDER_KEY) {
+  try {
+    const arr = JSON.parse(process.env.FOUNDER_KEY);
+    founderKeypair = Keypair.fromSecretKey(Uint8Array.from(arr));
+    console.log('✅ Loaded founder keypair from FOUNDER_KEY env var');
+  } catch (e) {
+    console.warn('⚠️ Failed to parse FOUNDER_KEY:', e.message);
+  }
+}
+
+// 2. Если не загрузилось — пробуем из FOUNDER_KEYPAIR_PATH (файл)
+if (!founderKeypair && process.env.FOUNDER_KEYPAIR_PATH) {
   try {
     const secretPath = process.env.FOUNDER_KEYPAIR_PATH;
     if (fs.existsSync(secretPath)) {
       const arr = JSON.parse(fs.readFileSync(secretPath, 'utf8'));
       founderKeypair = Keypair.fromSecretKey(Uint8Array.from(arr));
       console.log('✅ Loaded founder keypair from Secret File:', secretPath);
-    } else {
-      console.warn('⚠️ Secret file not found at:', secretPath);
     }
   } catch (e) {
     console.warn('⚠️ Failed to load from Secret File:', e.message);
   }
 }
 
-// 2. Если не загрузилось — пробуем из стандартного пути (локально)
+// 3. Если не загрузилось — пробуем стандартный путь (локально)
 if (!founderKeypair) {
   const defaultPath = path.join('/opt/render', 'founder-keypair.json');
   try {
@@ -73,7 +81,7 @@ app.use(express.json());
 
 const ENERGY_THRESHOLD = 1000000; // 1 МВт·ч
 
-// ---------- PDA (вычисляем только если есть ключ) ----------
+// ---------- PDA ----------
 const mint = new PublicKey(MINT_ADDRESS);
 let producerPda, vaultPda, buyback, staking, dao, emergency, destination;
 
@@ -89,7 +97,6 @@ if (founderKeypair) {
   [emergency] = PublicKey.findProgramAddressSync([Buffer.from('emergency'), mint.toBuffer()], PROGRAM_ID);
   destination = getAssociatedTokenAddressSync(mint, founderKeypair.publicKey, false);
 } else {
-  // Заглушки, чтобы сервер запустился
   producerPda = PublicKey.default;
   vaultPda = PublicKey.default;
   buyback = PublicKey.default;
@@ -101,7 +108,6 @@ if (founderKeypair) {
 
 const getDisc = (name) => crypto.createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
 
-// ---------- Создание producer ----------
 async function createProducerIfNeeded() {
   if (!founderKeypair) return false;
   const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
@@ -136,7 +142,6 @@ async function createProducerIfNeeded() {
   return true;
 }
 
-// ---------- MINT ----------
 async function mintEnergy(device_id, amount) {
   if (!founderKeypair) return { success: false, error: 'founder_key_missing' };
   try {
@@ -183,7 +188,6 @@ async function mintEnergy(device_id, amount) {
   }
 }
 
-// ---------- ENDPOINT ----------
 app.post('/api/v1/proof/submit', async (req, res) => {
   try {
     const { device_id, timestamp, energyWh, nonce, signature } = req.body;
