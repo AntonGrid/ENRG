@@ -1,0 +1,116 @@
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const nacl = require('tweetnacl');
+const { Connection, clusterApiUrl, Keypair, Transaction, TransactionInstruction, PublicKey, sendAndConfirmTransaction } = require('@solana/web3.js');
+
+const PROGRAM_ID = new PublicKey('8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a');
+const MINT_ADDRESS = 'HzAWLdrMZiS2wEsnZc6hHmg4CdAZM4CaYMYv53BYqw6G';
+const FOUNDER_WALLET = '842fG4hkaVuNeaMLdrur4HZMjsgp8R8tMY6NDHrkYQod';
+
+const DEVICES_FILE = path.join(__dirname, 'devices.json');
+const ENERGY_STORE_FILE = path.join(__dirname, 'energy_store.json');
+
+let devices = {};
+let energyStore = {};
+
+function loadJson(filePath) {
+  try { return JSON.parse(fs.readFileSync(filePath)); } catch (e) { return {}; }
+}
+function saveJson(filePath, obj) {
+  fs.writeFileSync(filePath, JSON.stringify(obj, null, 2));
+}
+
+devices = loadJson(DEVICES_FILE);
+energyStore = loadJson(ENERGY_STORE_FILE);
+
+const os = require('os');
+const defaultFounderPath = path.join(os.homedir(), 'founder-keypair.json');
+const founderPath = process.env.FOUNDER_KEYPAIR_PATH || defaultFounderPath;
+let founderKeypair = null;
+if (fs.existsSync(founderPath)) {
+  try {
+    const arr = JSON.parse(fs.readFileSync(founderPath));
+    founderKeypair = Keypair.fromSecretKey(Uint8Array.from(arr));
+    console.log('Loaded founder keypair from', founderPath);
+  } catch (e) {
+    console.warn('Failed to load founder keypair:', e.message);
+  }
+} else {
+  console.warn('Founder keypair not found at', founderPath);
+}
+
+const app = express();
+app.use(express.json());
+
+const ENERGY_THRESHOLD = 1000000; // в Wh (1 МВт·ч)
+
+app.post('/api/v1/proof/submit', async (req, res) => {
+  try {
+    const { device_id, timestamp, energyWh, nonce, signature } = req.body;
+    if (!device_id || !timestamp || energyWh === undefined || !nonce || !signature) {
+      return res.status(400).json({ error: 'missing fields' });
+    }
+
+    const publicKeyB64 = devices[device_id];
+    if (!publicKeyB64) return res.status(400).json({ error: 'unknown device' });
+
+    const msg = `${device_id}|${timestamp}|${energyWh}|${nonce}`;
+    const msgBytes = Buffer.from(msg, 'utf8');
+    const sigBytes = Buffer.from(signature, 'base64');
+    const pubBytes = Buffer.from(publicKeyB64, 'base64');
+
+    const verified = nacl.sign.detached.verify(
+      new Uint8Array(msgBytes), new Uint8Array(sigBytes), new Uint8Array(pubBytes)
+    );
+    if (!verified) return res.status(400).json({ error: 'invalid signature' });
+
+    const prev = energyStore[device_id] || 0;
+    const total = prev + Number(energyWh);
+    energyStore[device_id] = total;
+    saveJson(ENERGY_STORE_FILE, energyStore);
+
+    console.log(`Device ${device_id} submitted ${energyWh}Wh (nonce=${nonce}). Accumulated: ${total}Wh`);
+
+    if (total >= ENERGY_THRESHOLD) {
+      console.log(`Threshold reached for ${device_id}: minting ${total}`);
+      const mintRes = await mintEnergy(device_id, total);
+      if (mintRes.success) {
+        energyStore[device_id] = 0;
+        saveJson(ENERGY_STORE_FILE, energyStore);
+        return res.json({ ok: true, minted: total, tx: mintRes.tx });
+      } else {
+        return res.status(500).json({ error: 'mint_failed', reason: mintRes.error });
+      }
+    }
+
+    return res.json({ ok: true, accumulated: total });
+  } catch (e) {
+    console.error('Error handling proof:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+async function mintEnergy(device_id, amount) {
+  if (!founderKeypair) return { success: false, error: 'founder_key_missing' };
+  try {
+    const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+    const payload = JSON.stringify({ method: 'mint_energy', device_id, amount });
+    const ix = new TransactionInstruction({
+      keys: [{ pubkey: founderKeypair.publicKey, isSigner: true, isWritable: true }],
+      programId: PROGRAM_ID,
+      data: Buffer.from(payload, 'utf8'),
+    });
+    const tx = new Transaction().add(ix);
+    const sig = await sendAndConfirmTransaction(connection, tx, [founderKeypair]);
+    console.log('Mint tx signature', sig);
+    return { success: true, tx: sig };
+  } catch (e) {
+    console.error('mintEnergy error', e);
+    return { success: false, error: e.message };
+  }
+}
+
+const PORT = process.env.PORT || 3000;
+// ВАЖНО: слушаем на всех интерфейсах (0.0.0.0), чтобы ESP32 мог подключиться
+app.listen(PORT, '0.0.0.0', () => console.log(`Oracle server listening on port ${PORT}`));
