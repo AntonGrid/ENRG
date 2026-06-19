@@ -63,7 +63,7 @@ app.use(express.json());
 
 const ENERGY_THRESHOLD = 1000000; // 1 МВт·ч
 
-// ---------- PDA (как в твоём рабочем скрипте) ----------
+// ---------- PDA ----------
 const mint = new PublicKey(MINT_ADDRESS);
 let producerPda, vaultPda, buyback, staking, dao, emergency, destination;
 
@@ -172,7 +172,7 @@ async function mintEnergy(device_id, amount) {
   }
 }
 
-// ---------- Эндпоинт для создания пула (временный, для теста) ----------
+// ---------- Эндпоинт для создания пула ----------
 app.post('/api/v1/pool/create', (req, res) => {
   const { pool_id, threshold } = req.body;
   if (!pool_id || !threshold) {
@@ -182,10 +182,10 @@ app.post('/api/v1/pool/create', (req, res) => {
     return res.status(400).json({ error: 'pool already exists' });
   }
   pools[pool_id] = {
-    device_energy: {},
     threshold,
     devices: [],
     total_energy: 0,
+    device_energy: {},
     created_at: Date.now()
   };
   saveJson(POOLS_FILE, pools);
@@ -219,9 +219,66 @@ app.post('/api/v1/proof/submit', async (req, res) => {
       if (!pool.devices.includes(device_id)) {
         pool.devices.push(device_id);
       }
-        if (!pool.device_energy) pool.device_energy = {};
-        pool.device_energy[device_id] = (pool.device_energy[device_id] || 0) + Number(energyWh);
+      if (!pool.device_energy) pool.device_energy = {};
+      pool.device_energy[device_id] = (pool.device_energy[device_id] || 0) + Number(energyWh);
       pool.total_energy += Number(energyWh);
       saveJson(POOLS_FILE, pools);
       console.log(`📊 Pool ${pool_id}: +${energyWh}Wh, total: ${pool.total_energy}Wh`);
 
+      if (pool.total_energy >= pool.threshold) {
+        console.log(`🎯 Pool ${pool_id} threshold reached! Distributing tokens...`);
+        // Распределяем токены между устройствами пропорционально их накопленной энергии
+        const totalEnergy = pool.total_energy;
+        const deviceShares = pool.devices.map((devId) => ({
+          device_id: devId,
+          share: pool.device_energy[devId] || 0,
+        }));
+        const totalShare = deviceShares.reduce((sum, d) => sum + d.share, 0);
+        if (totalShare > 0) {
+          for (const entry of deviceShares) {
+            const amount = Math.floor((entry.share / totalShare) * totalEnergy);
+            if (amount > 0) {
+              console.log(`📤 Minting ${amount}Wh for device ${entry.device_id}`);
+              await mintEnergy(entry.device_id, amount);
+            }
+          }
+        } else {
+          console.warn(`⚠️ No device shares in pool ${pool_id}`);
+        }
+        // Сбрасываем пул
+        pool.total_energy = 0;
+        pool.device_energy = {};
+        saveJson(POOLS_FILE, pools);
+        return res.json({ ok: true, message: 'Pool threshold reached, tokens distributed' });
+      }
+      return res.json({ ok: true, pool_total: pool.total_energy });
+    }
+
+    // Если пул не указан — работаем по старой логике (одиночное устройство)
+    const prev = energyStore[device_id] || 0;
+    const total = prev + Number(energyWh);
+    energyStore[device_id] = total;
+    saveJson(ENERGY_STORE_FILE, energyStore);
+    console.log(`📊 Device ${device_id} submitted ${energyWh}Wh (nonce=${nonce}). Accumulated: ${total}Wh`);
+
+    if (total >= ENERGY_THRESHOLD) {
+      console.log(`🎯 Threshold reached for ${device_id}: minting ${total}`);
+      await createProducerIfNeeded();
+      const mintRes = await mintEnergy(device_id, total);
+      if (mintRes.success) {
+        energyStore[device_id] = 0;
+        saveJson(ENERGY_STORE_FILE, energyStore);
+        return res.json({ ok: true, minted: total, tx: mintRes.tx });
+      } else {
+        return res.status(500).json({ error: 'mint_failed', reason: mintRes.error });
+      }
+    }
+    return res.json({ ok: true, accumulated: total });
+  } catch (e) {
+    console.error('❌ Error handling proof:', e);
+    return res.status(500).json({ error: e.message });
+  }
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Oracle server listening on port ${PORT}`));
