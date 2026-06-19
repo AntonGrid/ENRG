@@ -208,6 +208,13 @@ app.post('/api/v1/proof/submit', async (req, res) => {
     const sigBytes = Buffer.from(signature, 'base64');
     const pubBytes = Buffer.from(publicKeyB64, 'base64');
 
+    // Проверка размера публичного ключа
+    if (pubBytes.length !== 32) {
+      console.log(`Bad public key size: ${pubBytes.length}`);
+      return res.status(400).json({ error: 'bad public key size' });
+    }
+
+    // Проверка подписи
     const verified = nacl.sign.detached.verify(
       new Uint8Array(msgBytes), new Uint8Array(sigBytes), new Uint8Array(pubBytes)
     );
@@ -227,7 +234,6 @@ app.post('/api/v1/proof/submit', async (req, res) => {
 
       if (pool.total_energy >= pool.threshold) {
         console.log(`🎯 Pool ${pool_id} threshold reached! Distributing tokens...`);
-        // Распределяем токены между устройствами пропорционально их накопленной энергии
         const totalEnergy = pool.total_energy;
         const deviceShares = pool.devices.map((devId) => ({
           device_id: devId,
@@ -245,7 +251,6 @@ app.post('/api/v1/proof/submit', async (req, res) => {
         } else {
           console.warn(`⚠️ No device shares in pool ${pool_id}`);
         }
-        // Сбрасываем пул
         pool.total_energy = 0;
         pool.device_energy = {};
         saveJson(POOLS_FILE, pools);
