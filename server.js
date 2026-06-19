@@ -12,9 +12,12 @@ const FOUNDER_WALLET = '842fG4hkaVuNeaMLdrur4HZMjsgp8R8tMY6NDHrkYQod';
 
 const DEVICES_FILE = path.join(__dirname, 'oracle', 'devices.json');
 const ENERGY_STORE_FILE = path.join(__dirname, 'oracle', 'energy_store.json');
+const POOLS_FILE = path.join(__dirname, 'oracle', 'pools.json');
 
+// Загружаем данные
 let devices = {};
 let energyStore = {};
+let pools = {};
 
 function loadJson(filePath) {
   try {
@@ -36,11 +39,12 @@ function saveJson(filePath, obj) {
 
 devices = loadJson(DEVICES_FILE);
 energyStore = loadJson(ENERGY_STORE_FILE);
+pools = loadJson(POOLS_FILE);
 console.log('✅ Loaded devices:', devices);
+console.log('✅ Loaded pools:', pools);
 
 // ---------- Загрузка ключа основателя ----------
 let founderKeypair = null;
-
 if (process.env.FOUNDER_KEY) {
   try {
     const arr = JSON.parse(process.env.FOUNDER_KEY);
@@ -50,33 +54,6 @@ if (process.env.FOUNDER_KEY) {
     console.warn('⚠️ Failed to parse FOUNDER_KEY:', e.message);
   }
 }
-
-if (!founderKeypair && process.env.FOUNDER_KEYPAIR_PATH) {
-  try {
-    const secretPath = process.env.FOUNDER_KEYPAIR_PATH;
-    if (fs.existsSync(secretPath)) {
-      const arr = JSON.parse(fs.readFileSync(secretPath, 'utf8'));
-      founderKeypair = Keypair.fromSecretKey(Uint8Array.from(arr));
-      console.log('✅ Loaded founder keypair from Secret File:', secretPath);
-    }
-  } catch (e) {
-    console.warn('⚠️ Failed to load from Secret File:', e.message);
-  }
-}
-
-if (!founderKeypair) {
-  const defaultPath = path.join('/opt/render', 'founder-keypair.json');
-  try {
-    if (fs.existsSync(defaultPath)) {
-      const arr = JSON.parse(fs.readFileSync(defaultPath, 'utf8'));
-      founderKeypair = Keypair.fromSecretKey(Uint8Array.from(arr));
-      console.log('✅ Loaded founder keypair from:', defaultPath);
-    }
-  } catch (e) {
-    console.warn('⚠️ Failed to load from default path:', e.message);
-  }
-}
-
 if (!founderKeypair) {
   console.warn('⚠️ Founder keypair not found. Minting will not work.');
 }
@@ -86,7 +63,7 @@ app.use(express.json());
 
 const ENERGY_THRESHOLD = 1000000; // 1 МВт·ч
 
-// ---------- PDA ----------
+// ---------- PDA (как в твоём рабочем скрипте) ----------
 const mint = new PublicKey(MINT_ADDRESS);
 let producerPda, vaultPda, buyback, staking, dao, emergency, destination;
 
@@ -113,6 +90,7 @@ if (founderKeypair) {
 
 const getDisc = (name) => crypto.createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
 
+// ---------- Создание producer ----------
 async function createProducerIfNeeded() {
   if (!founderKeypair) return false;
   const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
@@ -147,6 +125,7 @@ async function createProducerIfNeeded() {
   return true;
 }
 
+// ---------- Минт ----------
 async function mintEnergy(device_id, amount) {
   if (!founderKeypair) return { success: false, error: 'founder_key_missing' };
   try {
@@ -193,9 +172,29 @@ async function mintEnergy(device_id, amount) {
   }
 }
 
+// ---------- Эндпоинт для создания пула (временный, для теста) ----------
+app.post('/api/v1/pool/create', (req, res) => {
+  const { pool_id, threshold } = req.body;
+  if (!pool_id || !threshold) {
+    return res.status(400).json({ error: 'missing pool_id or threshold' });
+  }
+  if (pools[pool_id]) {
+    return res.status(400).json({ error: 'pool already exists' });
+  }
+  pools[pool_id] = {
+    threshold,
+    devices: [],
+    total_energy: 0,
+    created_at: Date.now()
+  };
+  saveJson(POOLS_FILE, pools);
+  res.json({ ok: true, pool: pools[pool_id] });
+});
+
+// ---------- Основной эндпоинт ----------
 app.post('/api/v1/proof/submit', async (req, res) => {
   try {
-    const { device_id, timestamp, energyWh, nonce, signature } = req.body;
+    const { device_id, timestamp, energyWh, nonce, signature, pool_id } = req.body;
     if (!device_id || !timestamp || energyWh === undefined || !nonce || !signature) {
       return res.status(400).json({ error: 'missing fields' });
     }
@@ -213,11 +212,32 @@ app.post('/api/v1/proof/submit', async (req, res) => {
     );
     if (!verified) return res.status(400).json({ error: 'invalid signature' });
 
+    // Если указан pool_id — агрегируем в пул
+    if (pool_id && pools[pool_id]) {
+      const pool = pools[pool_id];
+      if (!pool.devices.includes(device_id)) {
+        pool.devices.push(device_id);
+      }
+      pool.total_energy += Number(energyWh);
+      saveJson(POOLS_FILE, pools);
+      console.log(`📊 Pool ${pool_id}: +${energyWh}Wh, total: ${pool.total_energy}Wh`);
+
+      if (pool.total_energy >= pool.threshold) {
+        console.log(`🎯 Pool ${pool_id} threshold reached! Minting for all devices...`);
+        // Здесь будет логика распределения токенов между участниками пула
+        // Пока просто сбрасываем накопление
+        pool.total_energy = 0;
+        saveJson(POOLS_FILE, pools);
+        return res.json({ ok: true, message: 'Pool threshold reached, minting initiated' });
+      }
+      return res.json({ ok: true, pool_total: pool.total_energy });
+    }
+
+    // Если пул не указан — работаем по старой логике (одиночное устройство)
     const prev = energyStore[device_id] || 0;
     const total = prev + Number(energyWh);
     energyStore[device_id] = total;
     saveJson(ENERGY_STORE_FILE, energyStore);
-
     console.log(`📊 Device ${device_id} submitted ${energyWh}Wh (nonce=${nonce}). Accumulated: ${total}Wh`);
 
     if (total >= ENERGY_THRESHOLD) {
@@ -232,7 +252,6 @@ app.post('/api/v1/proof/submit', async (req, res) => {
         return res.status(500).json({ error: 'mint_failed', reason: mintRes.error });
       }
     }
-
     return res.json({ ok: true, accumulated: total });
   } catch (e) {
     console.error('❌ Error handling proof:', e);
