@@ -182,6 +182,7 @@ app.post('/api/v1/pool/create', (req, res) => {
     return res.status(400).json({ error: 'pool already exists' });
   }
   pools[pool_id] = {
+    device_energy: {},
     threshold,
     devices: [],
     total_energy: 0,
@@ -218,46 +219,9 @@ app.post('/api/v1/proof/submit', async (req, res) => {
       if (!pool.devices.includes(device_id)) {
         pool.devices.push(device_id);
       }
+        if (!pool.device_energy) pool.device_energy = {};
+        pool.device_energy[device_id] = (pool.device_energy[device_id] || 0) + Number(energyWh);
       pool.total_energy += Number(energyWh);
       saveJson(POOLS_FILE, pools);
       console.log(`📊 Pool ${pool_id}: +${energyWh}Wh, total: ${pool.total_energy}Wh`);
 
-      if (pool.total_energy >= pool.threshold) {
-        console.log(`🎯 Pool ${pool_id} threshold reached! Minting for all devices...`);
-        // Здесь будет логика распределения токенов между участниками пула
-        // Пока просто сбрасываем накопление
-        pool.total_energy = 0;
-        saveJson(POOLS_FILE, pools);
-        return res.json({ ok: true, message: 'Pool threshold reached, minting initiated' });
-      }
-      return res.json({ ok: true, pool_total: pool.total_energy });
-    }
-
-    // Если пул не указан — работаем по старой логике (одиночное устройство)
-    const prev = energyStore[device_id] || 0;
-    const total = prev + Number(energyWh);
-    energyStore[device_id] = total;
-    saveJson(ENERGY_STORE_FILE, energyStore);
-    console.log(`📊 Device ${device_id} submitted ${energyWh}Wh (nonce=${nonce}). Accumulated: ${total}Wh`);
-
-    if (total >= ENERGY_THRESHOLD) {
-      console.log(`🎯 Threshold reached for ${device_id}: minting ${total}`);
-      await createProducerIfNeeded();
-      const mintRes = await mintEnergy(device_id, total);
-      if (mintRes.success) {
-        energyStore[device_id] = 0;
-        saveJson(ENERGY_STORE_FILE, energyStore);
-        return res.json({ ok: true, minted: total, tx: mintRes.tx });
-      } else {
-        return res.status(500).json({ error: 'mint_failed', reason: mintRes.error });
-      }
-    }
-    return res.json({ ok: true, accumulated: total });
-  } catch (e) {
-    console.error('❌ Error handling proof:', e);
-    return res.status(500).json({ error: e.message });
-  }
-});
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => console.log(`🚀 Oracle server listening on port ${PORT}`));
