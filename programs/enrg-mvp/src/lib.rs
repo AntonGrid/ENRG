@@ -36,6 +36,16 @@ pub mod enrg_mvp {
         Ok(())
     }
 
+
+    pub fn join_pool(ctx: Context<JoinPool>) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        let producer = &ctx.accounts.producer;
+        if pool.producers.contains(&producer.key()) {
+            return Err(ErrorCode::AlreadyInPool.into());
+        }
+        pool.producers.push(producer.key());
+        Ok(())
+    }
     use super::*;
 
     pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
@@ -775,6 +785,8 @@ pub enum ErrorCode {
     ExcessiveEnergyRequired,       // k^S > u64::MAX
     InsufficientEnergy,            // energy_wh < energy_per_token
     MaxSupplyReached,              // Достигнут максимум 1 млрд ENRG
+    #[msg("Producer is already in the pool")]
+    AlreadyInPool,
 }
 
 #[derive(Accounts)]
@@ -787,6 +799,25 @@ pub struct CreatePool<'info> {
         bump
     )]
     pub pool: Account<'info, Pool>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct JoinPool<'info> {
+    #[account(
+        mut,
+        seeds = [b"pool", pool.authority.as_ref(), &[0]],
+        bump
+    )]
+    pub pool: Account<'info, Pool>,
+    #[account(
+        mut,
+        seeds = [b"producer", authority.key().as_ref()],
+        bump
+    )]
+    pub producer: Account<'info, EnergyProducer>,
     #[account(mut)]
     pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,
