@@ -10,6 +10,8 @@ use anchor_spl::{
 declare_id!("8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a");
 
 const ENRG_DECIMALS: u8 = 9;
+pub mod pool;
+use crate::pool::Pool;
 const ENRG_BASIS: u64 = 10u64.pow(ENRG_DECIMALS as u32 - 6); // 1000
 const COMMISSION_PERCENT: u64 = 15;
 const BUYBACK_PERCENT: u64 = 20;
@@ -23,6 +25,17 @@ const ENERGY_PER_TOKEN_BASE: u64 = 1_000_000; // 1 МВт·ч в Wh
 
 #[program]
 pub mod enrg_mvp {
+    pub fn create_pool(ctx: Context<CreatePool>, threshold: u64) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        pool.authority = ctx.accounts.authority.key();
+        pool.total_energy = 0;
+        pool.threshold = threshold as u128;
+        pool.producers = Vec::new();
+        pool.is_active = true;
+        pool.created_at = Clock::get()?.unix_timestamp;
+        Ok(())
+    }
+
     use super::*;
 
     pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
@@ -762,4 +775,19 @@ pub enum ErrorCode {
     ExcessiveEnergyRequired,       // k^S > u64::MAX
     InsufficientEnergy,            // energy_wh < energy_per_token
     MaxSupplyReached,              // Достигнут максимум 1 млрд ENRG
+}
+
+#[derive(Accounts)]
+pub struct CreatePool<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = Pool::LEN,
+        seeds = [b"pool", authority.key().as_ref(), &[0]],
+        bump
+    )]
+    pub pool: Account<'info, Pool>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
 }
