@@ -5,6 +5,7 @@ const nacl = require('tweetnacl');
 const { Connection, clusterApiUrl, Keypair, Transaction, TransactionInstruction, PublicKey, sendAndConfirmTransaction, SystemProgram } = require('@solana/web3.js');
 const { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } = require('@solana/spl-token');
 const crypto = require('crypto');
+const cors = require('cors');
 
 const PROGRAM_ID = new PublicKey('8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a');
 const MINT_ADDRESS = 'HzAWLdrMZiS2wEsnZc6hHmg4CdAZM4CaYMYv53BYqw6G';
@@ -14,7 +15,6 @@ const DEVICES_FILE = path.join(__dirname, 'oracle', 'devices.json');
 const ENERGY_STORE_FILE = path.join(__dirname, 'oracle', 'energy_store.json');
 const POOLS_FILE = path.join(__dirname, 'oracle', 'pools.json');
 
-// Загружаем данные
 let devices = {};
 let energyStore = {};
 let pools = {};
@@ -43,7 +43,6 @@ pools = loadJson(POOLS_FILE);
 console.log('✅ Loaded devices:', devices);
 console.log('✅ Loaded pools:', pools);
 
-// ---------- Загрузка ключа основателя ----------
 let founderKeypair = null;
 if (process.env.FOUNDER_KEY) {
   try {
@@ -60,13 +59,15 @@ if (!founderKeypair) {
 
 const app = express();
 app.use(express.json());
-
-// ---------- Отдача статики (веб-интерфейс) ----------
+app.use(cors({
+  origin: ['https://enrg.network', 'https://www.enrg.network', 'http://localhost:3000', 'http://127.0.0.1:3000'],
+  methods: ['GET', 'POST'],
+  allowedHeaders: ['Content-Type']
+}));
 app.use(express.static(path.join(__dirname, 'web')));
 
-const ENERGY_THRESHOLD = 1000000; // 1 МВт·ч
+const ENERGY_THRESHOLD = 1000000;
 
-// ---------- PDA ----------
 const mint = new PublicKey(MINT_ADDRESS);
 let producerPda, vaultPda, buyback, staking, dao, emergency, destination;
 
@@ -93,7 +94,6 @@ if (founderKeypair) {
 
 const getDisc = (name) => crypto.createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
 
-// ---------- Создание producer ----------
 async function createProducerIfNeeded() {
   if (!founderKeypair) return false;
   const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
@@ -102,16 +102,13 @@ async function createProducerIfNeeded() {
     console.log('✅ Producer already exists:', producerPda.toBase58());
     return true;
   }
-
   console.log('🔄 Creating producer...');
   const deviceIdPubkey = new PublicKey('11111111111111111111111111111111');
   const maxPowerW = 600_000_000n;
-
   const data = Buffer.alloc(48);
   getDisc('create_producer').copy(data, 0);
   deviceIdPubkey.toBuffer().copy(data, 8);
   data.writeBigUInt64LE(maxPowerW, 40);
-
   const instruction = new TransactionInstruction({
     keys: [
       { pubkey: producerPda, isWritable: true, isSigner: false },
@@ -121,34 +118,28 @@ async function createProducerIfNeeded() {
     programId: PROGRAM_ID,
     data
   });
-
   const tx = new Transaction().add(instruction);
   const sig = await sendAndConfirmTransaction(connection, tx, [founderKeypair]);
   console.log('✅ Producer created. TX:', sig);
   return true;
 }
 
-// ---------- Минт ----------
 async function mintEnergy(device_id, amount) {
   if (!founderKeypair) return { success: false, error: 'founder_key_missing' };
   try {
     const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
-
     const nonce = BigInt(Date.now());
     const timestamp = BigInt(Math.floor(Date.now() / 1000));
     const energyWh = BigInt(amount);
     const signature = Buffer.alloc(64);
-
     const proofBuffer = Buffer.alloc(88);
     let offset = 0;
     proofBuffer.writeBigUInt64LE(nonce, offset); offset += 8;
     proofBuffer.writeBigInt64LE(timestamp, offset); offset += 8;
     proofBuffer.writeBigUInt64LE(energyWh, offset); offset += 8;
     signature.copy(proofBuffer, offset);
-
     const disc = getDisc('mint_energy');
     const data = Buffer.concat([disc, proofBuffer]);
-
     const keys = [
       { pubkey: producerPda, isWritable: true, isSigner: false },
       { pubkey: founderKeypair.publicKey, isWritable: true, isSigner: true },
@@ -163,7 +154,6 @@ async function mintEnergy(device_id, amount) {
       { pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isWritable: false, isSigner: false },
       { pubkey: SystemProgram.programId, isWritable: false, isSigner: false }
     ];
-
     const instruction = new TransactionInstruction({ keys, programId: PROGRAM_ID, data });
     const tx = new Transaction().add(instruction);
     const sig = await sendAndConfirmTransaction(connection, tx, [founderKeypair]);
@@ -175,9 +165,8 @@ async function mintEnergy(device_id, amount) {
   }
 }
 
-// ---------- Эндпоинт для регистрации устройства ----------
 app.post('/api/v1/device/register', (req, res) => {
-console.log('📥 Registration request body:', req.body);
+  console.log('📥 Registration request body:', req.body);
   const { device_id, public_key } = req.body;
   if (!device_id || !public_key) {
     return res.status(400).json({ error: 'missing device_id or public_key' });
@@ -199,7 +188,6 @@ console.log('📥 Registration request body:', req.body);
   res.json({ ok: true, message: 'Device registered successfully' });
 });
 
-// ---------- Эндпоинт для получения статуса устройства ----------
 app.get('/api/v1/device/:id/status', (req, res) => {
   const deviceId = req.params.id;
   if (!devices[deviceId]) {
@@ -213,18 +201,16 @@ app.get('/api/v1/device/:id/status', (req, res) => {
   });
 });
 
-// ---------- Эндпоинт для получения баланса SRC (заглушка) ----------
 app.get('/api/v1/device/:id/balance', async (req, res) => {
   const deviceId = req.params.id;
   if (!devices[deviceId]) {
     return res.status(404).json({ error: 'device not found' });
   }
-  // Здесь нужно запросить реальный баланс с Solana
-  // Пока возвращаем заглушку (0) или можно посмотреть на кошелёк основателя
+  // Здесь можно добавить запрос к Solana для получения реального баланса
+  // Пока возвращаем 0
   res.json({ balance: 0, device_id: deviceId });
 });
 
-// ---------- Эндпоинт для создания пула ----------
 app.post('/api/v1/pool/create', (req, res) => {
   const { pool_id, threshold } = req.body;
   if (!pool_id || !threshold) {
@@ -244,33 +230,26 @@ app.post('/api/v1/pool/create', (req, res) => {
   res.json({ ok: true, pool: pools[pool_id] });
 });
 
-// ---------- Основной эндпоинт ----------
 app.post('/api/v1/proof/submit', async (req, res) => {
   try {
     const { device_id, timestamp, energyWh, nonce, signature, pool_id } = req.body;
     if (!device_id || !timestamp || energyWh === undefined || !nonce || !signature) {
       return res.status(400).json({ error: 'missing fields' });
     }
-
     const publicKeyB64 = devices[device_id];
     if (!publicKeyB64) return res.status(400).json({ error: 'unknown device' });
-
     const msg = `${device_id}|${timestamp}|${energyWh}|${nonce}`;
     const msgBytes = Buffer.from(msg, 'utf8');
     const sigBytes = Buffer.from(signature, 'base64');
     const pubBytes = Buffer.from(publicKeyB64, 'base64');
-
     if (pubBytes.length !== 32) {
       console.log(`Bad public key size: ${pubBytes.length}`);
       return res.status(400).json({ error: 'bad public key size' });
     }
-
     const verified = nacl.sign.detached.verify(
       new Uint8Array(msgBytes), new Uint8Array(sigBytes), new Uint8Array(pubBytes)
     );
     if (!verified) return res.status(400).json({ error: 'invalid signature' });
-
-    // Если указан pool_id — агрегируем в пул
     if (pool_id && pools[pool_id]) {
       const pool = pools[pool_id];
       if (!pool.devices.includes(device_id)) {
@@ -281,7 +260,6 @@ app.post('/api/v1/proof/submit', async (req, res) => {
       pool.total_energy += Number(energyWh);
       saveJson(POOLS_FILE, pools);
       console.log(`📊 Pool ${pool_id}: +${energyWh}Wh, total: ${pool.total_energy}Wh`);
-
       if (pool.total_energy >= pool.threshold) {
         console.log(`🎯 Pool ${pool_id} threshold reached! Distributing tokens...`);
         const totalEnergy = pool.total_energy;
@@ -308,14 +286,11 @@ app.post('/api/v1/proof/submit', async (req, res) => {
       }
       return res.json({ ok: true, pool_total: pool.total_energy });
     }
-
-    // Если пул не указан — работаем по старой логике (одиночное устройство)
     const prev = energyStore[device_id] || 0;
     const total = prev + Number(energyWh);
     energyStore[device_id] = total;
     saveJson(ENERGY_STORE_FILE, energyStore);
     console.log(`📊 Device ${device_id} submitted ${energyWh}Wh (nonce=${nonce}). Accumulated: ${total}Wh`);
-
     if (total >= ENERGY_THRESHOLD) {
       console.log(`🎯 Threshold reached for ${device_id}: minting ${total}`);
       await createProducerIfNeeded();
