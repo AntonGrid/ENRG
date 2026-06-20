@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ENRG Protocol — Dashboard</title>
+    <style>
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 40px auto; padding: 20px; background: #f9f9f9; }
+        h1 { color: #2c3e50; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        label { display: block; margin-top: 10px; }
+        input, button { width: 100%; padding: 10px; margin-top: 5px; border: 1px solid #ddd; border-radius: 4px; }
+        button { background: #2c3e50; color: white; cursor: pointer; border: none; }
+        button:hover { background: #1a252f; }
+        .status { margin-top: 10px; }
+        .balance { font-size: 1.5em; font-weight: bold; color: #27ae60; }
+        .error { color: red; }
+        .success { color: green; }
+        #dashboard { display: none; }
+    </style>
+</head>
+<body>
+    <h1>⚡ ENRG Protocol</h1>
+    <div id="registration" class="card">
+        <h2>Регистрация устройства</h2>
+        <label>Device ID:</label>
+        <input type="text" id="deviceId" placeholder="например, device-001" value="device-001">
+        <label>Публичный ключ (Base64):</label>
+        <input type="text" id="publicKey" placeholder="вставьте публичный ключ устройства" value="pXZTI7zgANLzstGbXkX2hDxUtVBrT71Cb1ByGlCkcbs=">
+        <button id="registerBtn">Зарегистрировать устройство</button>
+        <div id="registerResult"></div>
+    </div>
+
+    <div id="dashboard" class="card">
+        <h2>📊 Ваш дашборд</h2>
+        <p><strong>Устройство:</strong> <span id="dashDeviceId"></span></p>
+        <p><strong>Баланс SRC:</strong> <span class="balance" id="dashBalance">0</span> SRC</p>
+        <p><strong>Накопленная энергия:</strong> <span id="dashEnergy">0</span> Wh</p>
+        <p><strong>Статус:</strong> <span id="dashStatus">Неизвестно</span></p>
+        <button id="refreshBtn">Обновить</button>
+    </div>
+
+    <script>
+        const apiBase = '/api/v1';
+        let currentDevice = null;
+
+        function showDashboard(deviceId) {
+            document.getElementById('registration').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            document.getElementById('dashDeviceId').textContent = deviceId;
+            currentDevice = deviceId;
+            refreshDashboard(deviceId);
+        }
+
+        async function refreshDashboard(deviceId) {
+            try {
+                const res = await fetch(`${apiBase}/device/${deviceId}/status`);
+                if (!res.ok) throw new Error('Устройство не найдено');
+                const data = await res.json();
+                document.getElementById('dashEnergy').textContent = data.energy_wh || 0;
+                document.getElementById('dashStatus').textContent = data.is_initialized ? 'Активно' : 'Не инициализировано';
+                const balanceRes = await fetch(`${apiBase}/device/${deviceId}/balance`);
+                if (balanceRes.ok) {
+                    const balanceData = await balanceRes.json();
+                    document.getElementById('dashBalance').textContent = balanceData.balance || 0;
+                }
+            } catch (e) {
+                document.getElementById('dashStatus').textContent = 'Ошибка загрузки';
+                console.error(e);
+            }
+        }
+
+        document.getElementById('registerBtn').addEventListener('click', async () => {
+            const deviceId = document.getElementById('deviceId').value.trim();
+            const publicKey = document.getElementById('publicKey').value.trim();
+            const resultDiv = document.getElementById('registerResult');
+            resultDiv.innerHTML = '⏳ Регистрация...';
+
+            try {
+                const res = await fetch(`${apiBase}/device/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ device_id: deviceId, public_key: publicKey })
+                });
+                const data = await res.json();
+                if (res.ok) {
+                    resultDiv.innerHTML = '<span class="success">✅ Устройство зарегистрировано!</span>';
+                    showDashboard(deviceId);
+                } else {
+                    resultDiv.innerHTML = `<span class="error">❌ ${data.error || 'Ошибка'}</span>`;
+                }
+            } catch (e) {
+                resultDiv.innerHTML = `<span class="error">❌ ${e.message}</span>`;
+            }
+        });
+
+        document.getElementById('refreshBtn').addEventListener('click', () => {
+            if (currentDevice) refreshDashboard(currentDevice);
+        });
+    </script>
+</body>
+</html>

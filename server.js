@@ -61,6 +61,9 @@ if (!founderKeypair) {
 const app = express();
 app.use(express.json());
 
+// ---------- Отдача статики (веб-интерфейс) ----------
+app.use(express.static(path.join(__dirname, 'web')));
+
 const ENERGY_THRESHOLD = 1000000; // 1 МВт·ч
 
 // ---------- PDA ----------
@@ -172,6 +175,55 @@ async function mintEnergy(device_id, amount) {
   }
 }
 
+// ---------- Эндпоинт для регистрации устройства ----------
+app.post('/api/v1/device/register', (req, res) => {
+console.log('📥 Registration request body:', req.body);
+  const { device_id, public_key } = req.body;
+  if (!device_id || !public_key) {
+    return res.status(400).json({ error: 'missing device_id or public_key' });
+  }
+  if (devices[device_id]) {
+    return res.status(400).json({ error: 'device already registered' });
+  }
+  try {
+    const pubBytes = Buffer.from(public_key, 'base64');
+    if (pubBytes.length !== 32) {
+      return res.status(400).json({ error: 'invalid public key (must be 32 bytes base64)' });
+    }
+  } catch (e) {
+    return res.status(400).json({ error: 'invalid public key format' });
+  }
+  devices[device_id] = public_key;
+  saveJson(DEVICES_FILE, devices);
+  console.log(`✅ Device registered: ${device_id}`);
+  res.json({ ok: true, message: 'Device registered successfully' });
+});
+
+// ---------- Эндпоинт для получения статуса устройства ----------
+app.get('/api/v1/device/:id/status', (req, res) => {
+  const deviceId = req.params.id;
+  if (!devices[deviceId]) {
+    return res.status(404).json({ error: 'device not found' });
+  }
+  const energy = energyStore[deviceId] || 0;
+  res.json({
+    device_id: deviceId,
+    is_initialized: true,
+    energy_wh: energy,
+  });
+});
+
+// ---------- Эндпоинт для получения баланса SRC (заглушка) ----------
+app.get('/api/v1/device/:id/balance', async (req, res) => {
+  const deviceId = req.params.id;
+  if (!devices[deviceId]) {
+    return res.status(404).json({ error: 'device not found' });
+  }
+  // Здесь нужно запросить реальный баланс с Solana
+  // Пока возвращаем заглушку (0) или можно посмотреть на кошелёк основателя
+  res.json({ balance: 0, device_id: deviceId });
+});
+
 // ---------- Эндпоинт для создания пула ----------
 app.post('/api/v1/pool/create', (req, res) => {
   const { pool_id, threshold } = req.body;
@@ -208,13 +260,11 @@ app.post('/api/v1/proof/submit', async (req, res) => {
     const sigBytes = Buffer.from(signature, 'base64');
     const pubBytes = Buffer.from(publicKeyB64, 'base64');
 
-    // Проверка размера публичного ключа
     if (pubBytes.length !== 32) {
       console.log(`Bad public key size: ${pubBytes.length}`);
       return res.status(400).json({ error: 'bad public key size' });
     }
 
-    // Проверка подписи
     const verified = nacl.sign.detached.verify(
       new Uint8Array(msgBytes), new Uint8Array(sigBytes), new Uint8Array(pubBytes)
     );
