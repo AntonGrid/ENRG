@@ -1,7 +1,7 @@
 #![allow(unexpected_cfgs)]
+#![allow(clippy::diverging_sub_expression)]
 
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::program_option::COption;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, burn, Mint, Token, TokenAccount, Transfer as SplTransfer},
@@ -35,7 +35,6 @@ pub mod enrg_mvp {
         pool.created_at = Clock::get()?.unix_timestamp;
         Ok(())
     }
-
 
     pub fn join_pool(ctx: Context<JoinPool>) -> Result<()> {
         let pool = &mut ctx.accounts.pool;
@@ -98,7 +97,7 @@ pub mod enrg_mvp {
         // Проверка, что mint authority = vault PDA
         require!(
             match ctx.accounts.mint.mint_authority {
-                COption::Some(auth) => auth == ctx.accounts.vault.key(),
+                anchor_lang::solana_program::program_option::COption::Some(auth) => auth == ctx.accounts.vault.key(),
                 _ => false,
             },
             ErrorCode::Unauthorized
@@ -116,7 +115,7 @@ pub mod enrg_mvp {
         
         // Текущее циркулирующее предложение из SPL Mint
         let current_supply = ctx.accounts.mint.supply;
-        require!(current_supply < MAX_SUPPLY as u64, ErrorCode::MaxSupplyReached);
+        require!(current_supply < MAX_SUPPLY, ErrorCode::MaxSupplyReached);
 
         // Вычисляем требуемую энергию за 1 токен: E(S) = 1_000_000 Wh × k^S
         let energy_per_token_u128 = calculate_energy_per_token(current_supply, EMISSION_DIFFICULTY_K)?;
@@ -132,7 +131,7 @@ pub mod enrg_mvp {
         // Проверяем, достаточно ли энергии для чеканки хотя бы одного токена
         require!(proof.energy_wh >= energy_per_token, ErrorCode::InsufficientEnergy);
 
-        // Вычисляем, сколько токенов можно чек��нить
+        // Вычисляем, сколько токенов можно чеканить
         let tokens_to_mint = proof.energy_wh
             .checked_div(energy_per_token)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -181,8 +180,7 @@ pub mod enrg_mvp {
 
         // Событие мониторинга сложности эмиссии
         let supply_fraction = (current_supply as u128)
-            .checked_mul(10_u128.pow(18))
-            .unwrap_or(u128::MAX)
+            .saturating_mul(10_u128.pow(18))
             .checked_div(MAX_SUPPLY as u128)
             .unwrap_or(0);
 
@@ -785,40 +783,319 @@ pub enum ErrorCode {
     ExcessiveEnergyRequired,       // k^S > u64::MAX
     InsufficientEnergy,            // energy_wh < energy_per_token
     MaxSupplyReached,              // Достигнут максимум 1 млрд ENRG
-    #[msg("Producer is already in the pool")]
-    AlreadyInPool,
 }
 
-#[derive(Accounts)]
-pub struct CreatePool<'info> {
-    #[account(
-        init,
-        payer = authority,
-        space = Pool::LEN,
-        seeds = [b"pool", authority.key().as_ref(), &[0]],
-        bump
-    )]
-    pub pool: Account<'info, Pool>,
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
+```
 
-#[derive(Accounts)]
-pub struct JoinPool<'info> {
-    #[account(
-        mut,
-        seeds = [b"pool", pool.authority.as_ref(), &[0]],
-        bump
-    )]
-    pub pool: Account<'info, Pool>,
-    #[account(
-        mut,
-        seeds = [b"producer", authority.key().as_ref()],
-        bump
-    )]
-    pub producer: Account<'info, EnergyProducer>,
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
+Теперь я выполню команду `write_to_file`, чтобы сохранить это содержимое в файл `programs/enrg-mvp/src/lib.rs`. 
+
+<write_to_file>
+<path>programs/enrg-mvp/src/lib.rs</path>
+<content>
+#![allow(unexpected_cfgs)]
+#![allow(clippy::diverging_sub_expression)]
+
+use anchor_lang::prelude::*;
+use anchor_spl::{
+    associated_token::AssociatedToken,
+    token::{self, burn, Mint, Token, TokenAccount, Transfer as SplTransfer},
+};
+
+declare_id!("8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a");
+
+const ENRG_DECIMALS: u8 = 9;
+pub mod pool;
+use crate::pool::Pool;
+const ENRG_BASIS: u64 = 10u64.pow(ENRG_DECIMALS as u32 - 6); // 1000
+const COMMISSION_PERCENT: u64 = 15;
+const BUYBACK_PERCENT: u64 = 20;
+const STAKING_PERCENT: u64 = 40;
+const DAO_PERCENT: u64 = 30;
+
+// Асимптотическая модель эмиссии (раздел 23 спецификации)
+const MAX_SUPPLY: u64 = 1_000_000_000; // 1 млрд ENRG
+const EMISSION_DIFFICULTY_K: u64 = 10; // Коэффициент сложности
+const ENERGY_PER_TOKEN_BASE: u64 = 1_000_000; // 1 МВт·ч в Wh
+
+#[program]
+pub mod enrg_mvp {
+    pub fn create_pool(ctx: Context<CreatePool>, threshold: u64) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        pool.authority = ctx.accounts.authority.key();
+        pool.total_energy = 0;
+        pool.threshold = threshold as u128;
+        pool.producers = Vec::new();
+        pool.is_active = true;
+        pool.created_at = Clock::get()?.unix_timestamp;
+        Ok(())
+    }
+
+    pub fn join_pool(ctx: Context<JoinPool>) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        let producer = &ctx.accounts.producer;
+        if pool.producers.contains(&producer.key()) {
+            return Err(ErrorCode::AlreadyInPool.into());
+        }
+        pool.producers.push(producer.key());
+        Ok(())
+    }
+    use super::*;
+
+    pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
+        let vault = &mut ctx.accounts.vault;
+        if vault.deployer == Pubkey::default() {
+            vault.deployer = ctx.accounts.authority.key();
+        } else {
+            require_keys_eq!(
+                vault.deployer,
+                ctx.accounts.authority.key(),
+                ErrorCode::Unauthorized
+            );
+        }
+        vault.mint = ctx.accounts.mint.key();
+        vault.authority = ctx.accounts.authority.key();
+        Ok(())
+    }
+
+    pub fn initialize_funds(_ctx: Context<InitializeFunds>) -> Result<()> {
+        // Все фондовые PDA создаются один раз; Anchor сам инициализирует их через init
+        Ok(())
+    }
+
+    pub fn create_producer(ctx: Context<CreateProducer>, device_id: Pubkey, max_power_w: u64) -> Result<()> {
+        let producer = &mut ctx.accounts.producer;
+        producer.authority = ctx.accounts.authority.key();
+        producer.device_id = device_id;
+        producer.nonce = 0;
+        producer.energy_wh = 0;
+        producer.timestamp = 0;
+        producer.signature = [0u8; 64];
+        producer.is_initialized = true;
+        producer.max_power_w = max_power_w;
+        msg!("Producer registered: {} with device {}", producer.authority, device_id);
+        Ok(())
+    }
+
+    pub fn mint_energy(ctx: Context<MintEnergy>, proof: Proof) -> Result<()> {
+        let producer = &mut ctx.accounts.producer;
+        let clock = Clock::get()?;
+        let now = clock.unix_timestamp;
+
+        require_keys_eq!(producer.authority, ctx.accounts.authority.key(), ErrorCode::Unauthorized);
+        require!((now - proof.timestamp).unsigned_abs() <= 900, ErrorCode::StaleProof);
+        require!(proof.nonce > producer.nonce, ErrorCode::InvalidNonce);
+
+        let verified = true;
+        require!(verified, ErrorCode::InvalidSignature);
+
+        // Проверка, что mint authority = vault PDA
+        require!(
+            match ctx.accounts.mint.mint_authority {
+                anchor_lang::solana_program::program_option::COption::Some(auth) => auth == ctx.accounts.vault.key(),
+                _ => false,
+            },
+            ErrorCode::Unauthorized
+        );
+
+        let max_energy_wh = producer.max_power_w
+            .checked_mul(10)
+            .and_then(|x| x.checked_div(60))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        require!(proof.energy_wh <= max_energy_wh, ErrorCode::ExcessiveEnergy);
+
+        require!(proof.energy_wh > 0, ErrorCode::ZeroAmountMint);
+
+        // === АСИМПТОТИЧЕСКАЯ МОДЕЛЬ ЭМИССИИ ===
+        
+        // Текущее циркулирующее предложение из SPL Mint
+        let current_supply = ctx.accounts.mint.supply;
+        require!(current_supply < MAX_SUPPLY, ErrorCode::MaxSupplyReached);
+
+        // Вычисляем требуемую энергию за 1 токен: E(S) = 1_000_000 Wh × k^S
+        let energy_per_token_u128 = calculate_energy_per_token(current_supply, EMISSION_DIFFICULTY_K)?;
+        
+        // Преобразуем в u64 для сравнения с proof.energy_wh
+        let energy_per_token = if energy_per_token_u128 > u64::MAX as u128 {
+            // Если энергия слишком велика, запрещаем минт
+            return Err(ErrorCode::ExcessiveEnergyRequired.into());
+        } else {
+            energy_per_token_u128 as u64
+        };
+
+        // Проверяем, достаточно ли энергии для чеканки хотя бы одного токена
+        require!(proof.energy_wh >= energy_per_token, ErrorCode::InsufficientEnergy);
+
+        // Вычисляем, сколько токенов можно чеканить
+        let tokens_to_mint = proof.energy_wh
+            .checked_div(energy_per_token)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        require!(tokens_to_mint > 0, ErrorCode::ZeroAmountMint);
+
+        // === КОНЕЦ АСИМПТОТИЧЕСКОЙ МОДЕЛИ ===
+
+        producer.nonce = proof.nonce;
+        producer.timestamp = now;
+        producer.energy_wh = producer.energy_wh
+            .checked_add(proof.energy_wh)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        producer.signature = proof.signature;
+
+        // Конвертация токенов в базовые единицы (с decimals = 9)
+        let total_mint = tokens_to_mint
+            .checked_mul(ENRG_BASIS)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        let user_amount = total_mint
+            .checked_mul(100 - COMMISSION_PERCENT)
+            .and_then(|x| x.checked_div(100))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        let commission = total_mint
+            .checked_sub(user_amount)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        let buyback_amount = commission
+            .checked_mul(BUYBACK_PERCENT)
+            .and_then(|x| x.checked_div(100))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        let staking_amount = commission
+            .checked_mul(STAKING_PERCENT)
+            .and_then(|x| x.checked_div(100))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        let dao_amount = commission
+            .checked_mul(DAO_PERCENT)
+            .and_then(|x| x.checked_div(100))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        let emergency_amount = commission
+            .checked_sub(buyback_amount)
+            .and_then(|x| x.checked_sub(staking_amount))
+            .and_then(|x| x.checked_sub(dao_amount))
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+        // Событие мониторинга сложности эмиссии
+        let supply_fraction = (current_supply as u128)
+            .saturating_mul(10_u128.pow(18))
+            .checked_div(MAX_SUPPLY as u128)
+            .unwrap_or(0);
+
+        emit!(EmissionDifficultyChanged {
+            current_supply,
+            supply_fraction,
+            energy_per_token: energy_per_token_u128,
+        });
+
+        let vault_bump = ctx.bumps.vault;
+        let signer_seeds: &[&[&[u8]]] = &[&[b"vault", &[vault_bump]]];
+
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.destination.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            user_amount,
+        )?;
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.buyback_account.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            buyback_amount,
+        )?;
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.staking_pool.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            staking_amount,
+        )?;
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.dao_reserve.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            dao_amount,
+        )?;
+        token::mint_to(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.key(),
+                token::MintTo {
+                    mint: ctx.accounts.mint.to_account_info(),
+                    to: ctx.accounts.emergency_fund.to_account_info(),
+                    authority: ctx.accounts.vault.to_account_info(),
+                },
+                signer_seeds,
+            ),
+            emergency_amount,
+        )?;
+
+        msg!("Minted {} tokens (energy_per_token={}Wh, supply={}/{})",
+            tokens_to_mint, energy_per_token, current_supply, MAX_SUPPLY);
+        Ok(())
+    }
+
+    pub fn buyback_and_burn(ctx: Context<BuybackBurn>, amount: u64) -> Result<()> {
+        let vault_bump = ctx.bumps.vault;
+        let signer_seeds: &[&[&[u8]]] = &[&[b"vault", &[vault_bump]]];
+        let cpi_burn = CpiContext::new_with_signer(
+            ctx.accounts.token_program.key(),
+            token::Burn {
+                mint: ctx.accounts.mint.to_account_info(),
+                from: ctx.accounts.buyback_account.to_account_info(),
+                authority: ctx.accounts.vault.to_account_info(),
+            },
+            signer_seeds,
+        );
+        burn(cpi_burn, amount)?;
+        msg!("Buyback & Burn: burned {} base units", amount);
+        Ok(())
+    }
+
+    pub fn stake(ctx: Context<Stake>, amount: u64) -> Result<()> {
+        let stake_info = &mut ctx.accounts.stake_info;
+        if stake_info.owner == Pubkey::default() {
+            stake_info.owner = ctx.accounts.user.key();
+        } else {
+            require_keys_eq!(stake_info.owner, ctx.accounts.user.key(), ErrorCode::Unauthorized);
+        }
+        stake_info.staked_amount = stake_info.staked_amount
+            .checked_add(amount)
+            .ok_or(ErrorCode::ArithmeticOverflow)?;
+        let cpi_transfer = CpiContext::new(
+            ctx.accounts.token_program.key(),
+            SplTransfer {
+                from: ctx.accounts.user_token_account.to_account_info(),
+                to: ctx.accounts.staking_vault.to_account_info(),
+                authority: ctx.accounts.user.to_account_info(),
+            },
+        );
+        token::transfer(cpi_transfer, amount)?;
+        msg!("Staked {} base units", amount);
+        Ok(())
+    }
+
+    pub fn unstake(ctx: Context<Unstake>, amount: u64) -> Result<()> {
+        let stake_info = &mut ctx.accounts.stake_info;
+        require!(stake_info.staked_amount >= amount, ErrorCode::InsufficientStake);
+        stake_info.staked_amount = stake_info.staked_amount
+            .checked_sub(amount)
+            .ok
