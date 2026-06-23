@@ -14,3 +14,8 @@
 *.tmp
 *.bak
 .aider*
+*.log
+*.bak
+*.save
+enrg.db
+oracle/node_modules/
