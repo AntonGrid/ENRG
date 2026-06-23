@@ -19,3 +19,4 @@
 *.save
 enrg.db
 oracle/node_modules/
+!package.json
