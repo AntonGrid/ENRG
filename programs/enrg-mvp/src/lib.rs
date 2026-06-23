@@ -1,7 +1,6 @@
 #![allow(unexpected_cfgs)]
 
 use anchor_lang::prelude::*;
-use anchor_lang::solana_program::program_option::COption;
 use anchor_spl::{
     associated_token::AssociatedToken,
     token::{self, burn, Mint, Token, TokenAccount, Transfer as SplTransfer},
@@ -25,6 +24,29 @@ const ENERGY_PER_TOKEN_BASE: u64 = 1_000_000; // 1 МВт·ч в Wh
 pub mod enrg_mvp {
     use super::*;
 
+    // === ПУЛЫ ===
+    pub fn create_pool(ctx: Context<CreatePool>, threshold: u64) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        pool.authority = ctx.accounts.authority.key();
+        pool.total_energy = 0;
+        pool.threshold = threshold as u128;
+        pool.producers = Vec::new();
+        pool.is_active = true;
+        pool.created_at = Clock::get()?.unix_timestamp;
+        Ok(())
+    }
+
+    pub fn join_pool(ctx: Context<JoinPool>) -> Result<()> {
+        let pool = &mut ctx.accounts.pool;
+        let producer = &ctx.accounts.producer;
+        if pool.producers.contains(&producer.key()) {
+            return Err(ErrorCode::AlreadyInPool.into());
+        }
+        pool.producers.push(producer.key());
+        Ok(())
+    }
+
+    // === ОСНОВНЫЕ ИНСТРУКЦИИ ===
     pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
         let vault = &mut ctx.accounts.vault;
         if vault.deployer == Pubkey::default() {
@@ -42,7 +64,6 @@ pub mod enrg_mvp {
     }
 
     pub fn initialize_funds(_ctx: Context<InitializeFunds>) -> Result<()> {
-        // Все фондовые PDA создаются один раз; Anchor сам инициализирует их через init
         Ok(())
     }
 
@@ -69,13 +90,14 @@ pub mod enrg_mvp {
         require!((now - proof.timestamp).unsigned_abs() <= 900, ErrorCode::StaleProof);
         require!(proof.nonce > producer.nonce, ErrorCode::InvalidNonce);
 
+        // Проверка подписи (пока заглушка, будет доработана)
         let verified = true;
         require!(verified, ErrorCode::InvalidSignature);
 
         // Проверка, что mint authority = vault PDA
         require!(
             match ctx.accounts.mint.mint_authority {
-                COption::Some(auth) => auth == ctx.accounts.vault.key(),
+                anchor_lang::solana_program::program_option::COption::Some(auth) => auth == ctx.accounts.vault.key(),
                 _ => false,
             },
             ErrorCode::Unauthorized
@@ -86,36 +108,22 @@ pub mod enrg_mvp {
             .and_then(|x| x.checked_div(60))
             .ok_or(ErrorCode::ArithmeticOverflow)?;
         require!(proof.energy_wh <= max_energy_wh, ErrorCode::ExcessiveEnergy);
-
         require!(proof.energy_wh > 0, ErrorCode::ZeroAmountMint);
 
-        // === АСИМПТОТИЧЕСКАЯ МОДЕЛЬ ЭМИССИИ ===
-        
-        // Текущее циркулирующее предложение из SPL Mint
+        // Асимптотическая эмиссия
         let current_supply = ctx.accounts.mint.supply;
-        require!(current_supply < MAX_SUPPLY as u64, ErrorCode::MaxSupplyReached);
-
-        // Вычисляем требуемую энергию за 1 токен: E(S) = 1_000_000 Wh × k^S
+        require!(current_supply < MAX_SUPPLY, ErrorCode::MaxSupplyReached);
         let energy_per_token_u128 = calculate_energy_per_token(current_supply, EMISSION_DIFFICULTY_K)?;
-        
-        // Преобразуем в u64 для сравнения с proof.energy_wh
         let energy_per_token = if energy_per_token_u128 > u64::MAX as u128 {
-            // Если энергия слишком велика, запрещаем минт
             return Err(ErrorCode::ExcessiveEnergyRequired.into());
         } else {
             energy_per_token_u128 as u64
         };
-
-        // Проверяем, достаточно ли энергии для чеканки хотя бы одного токена
         require!(proof.energy_wh >= energy_per_token, ErrorCode::InsufficientEnergy);
-
-        // Вычисляем, сколько токенов можно чек��нить
         let tokens_to_mint = proof.energy_wh
             .checked_div(energy_per_token)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
         require!(tokens_to_mint > 0, ErrorCode::ZeroAmountMint);
-
-        // === КОНЕЦ АСИМПТОТИЧЕСКОЙ МОДЕЛИ ===
 
         producer.nonce = proof.nonce;
         producer.timestamp = now;
@@ -124,7 +132,6 @@ pub mod enrg_mvp {
             .ok_or(ErrorCode::ArithmeticOverflow)?;
         producer.signature = proof.signature;
 
-        // Конвертация токенов в базовые единицы (с decimals = 9)
         let total_mint = tokens_to_mint
             .checked_mul(ENRG_BASIS)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -133,7 +140,6 @@ pub mod enrg_mvp {
             .checked_mul(100 - COMMISSION_PERCENT)
             .and_then(|x| x.checked_div(100))
             .ok_or(ErrorCode::ArithmeticOverflow)?;
-
         let commission = total_mint
             .checked_sub(user_amount)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
@@ -156,10 +162,8 @@ pub mod enrg_mvp {
             .and_then(|x| x.checked_sub(dao_amount))
             .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-        // Событие мониторинга сложности эмиссии
         let supply_fraction = (current_supply as u128)
-            .checked_mul(10_u128.pow(18))
-            .unwrap_or(u128::MAX)
+            .saturating_mul(10_u128.pow(18))
             .checked_div(MAX_SUPPLY as u128)
             .unwrap_or(0);
 
@@ -406,75 +410,57 @@ pub mod enrg_mvp {
 }
 
 // === АСИМПТОТИЧЕСКАЯ МОДЕЛЬ ЭМИССИИ ===
-// Функции вычисления энергии на токен согласно формуле E(S) = 1_000_000 Wh × k^S
-
-/// Вычисляет энергию, требуемую для одного токена в Wh
-/// Формула: E(S) = ENERGY_PER_TOKEN_BASE × k^S
-/// S = current_supply / MAX_SUPPLY (доля от 0 до 1)
 fn calculate_energy_per_token(current_supply: u64, k: u64) -> Result<u128> {
     let current_supply_u128 = current_supply as u128;
     let max_supply_u128 = MAX_SUPPLY as u128;
-    
     let s_scaled = current_supply_u128
         .checked_mul(10_u128.pow(18))
         .ok_or(ErrorCode::ArithmeticOverflow)?
         .checked_div(max_supply_u128)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
-    
-    // log(k^S) = S × log(k)
     let log_k_scaled = match k {
-        10 => 2_302_585_092_994_045_684u128, // ln(10) × 10^18
-        3 => 1_098_612_288_668_109_691u128,  // ln(3) × 10^18
-        5 => 1_609_437_912_434_100_374u128,  // ln(5) × 10^18
+        10 => 2_302_585_092_994_045_684u128,
+        3 => 1_098_612_288_668_109_691u128,
+        5 => 1_609_437_912_434_100_374u128,
         _ => return Err(ErrorCode::InvalidParameter.into()),
     };
-    
     let exponent = s_scaled
         .checked_mul(log_k_scaled)
         .ok_or(ErrorCode::ArithmeticOverflow)?
         .checked_div(10_u128.pow(18))
         .ok_or(ErrorCode::ArithmeticOverflow)?;
-    
     let power_k_s = exp_approx(exponent)?;
-    
     (ENERGY_PER_TOKEN_BASE as u128)
         .checked_mul(power_k_s)
         .ok_or(ErrorCode::ArithmeticOverflow.into())
 }
 
-/// Приблизительное вычисление e^x для x до ~10
 fn exp_approx(x_scaled: u128) -> Result<u128> {
     if x_scaled == 0 {
         return Ok(10_u128.pow(18));
     }
-    
     if x_scaled > 10_u128.pow(19) {
         return Err(ErrorCode::ExcessiveEnergyRequired.into());
     }
-    
     let mut result = 10_u128.pow(18);
     let mut term = 10_u128.pow(18);
-    
     for n in 1..=20 {
         term = term
             .checked_mul(x_scaled)
             .ok_or(ErrorCode::ArithmeticOverflow)?
             .checked_div(n as u128 * 10_u128.pow(18))
             .ok_or(ErrorCode::ArithmeticOverflow)?;
-        
         result = result
             .checked_add(term)
             .ok_or(ErrorCode::ArithmeticOverflow)?;
-        
         if term < 10_u128.pow(12) {
             break;
         }
     }
-    
     Ok(result)
 }
 
-// Account structs
+// === Account structs ===
 #[derive(Accounts)]
 pub struct InitializeVault<'info> {
     #[account(init_if_needed, payer = authority, space = 8 + Vault::LEN, seeds = [b"vault"], bump)]
@@ -487,46 +473,14 @@ pub struct InitializeVault<'info> {
 
 #[derive(Accounts)]
 pub struct InitializeFunds<'info> {
-    #[account(
-        init,
-        payer = authority,
-        seeds = [b"buyback", mint.key().as_ref()],
-        token::mint = mint,
-        token::authority = vault,
-        bump
-    )]
+    #[account(init, payer = authority, seeds = [b"buyback", mint.key().as_ref()], token::mint = mint, token::authority = vault, bump)]
     pub buyback_account: Account<'info, TokenAccount>,
-
-    #[account(
-        init,
-        payer = authority,
-        seeds = [b"staking", mint.key().as_ref()],
-        token::mint = mint,
-        token::authority = vault,
-        bump
-    )]
+    #[account(init, payer = authority, seeds = [b"staking", mint.key().as_ref()], token::mint = mint, token::authority = vault, bump)]
     pub staking_pool: Account<'info, TokenAccount>,
-
-    #[account(
-        init,
-        payer = authority,
-        seeds = [b"dao", mint.key().as_ref()],
-        token::mint = mint,
-        token::authority = vault,
-        bump
-    )]
+    #[account(init, payer = authority, seeds = [b"dao", mint.key().as_ref()], token::mint = mint, token::authority = vault, bump)]
     pub dao_reserve: Account<'info, TokenAccount>,
-
-    #[account(
-        init,
-        payer = authority,
-        seeds = [b"emergency", mint.key().as_ref()],
-        token::mint = mint,
-        token::authority = vault,
-        bump
-    )]
+    #[account(init, payer = authority, seeds = [b"emergency", mint.key().as_ref()], token::mint = mint, token::authority = vault, bump)]
     pub emergency_fund: Account<'info, TokenAccount>,
-
     pub mint: Account<'info, Mint>,
     #[account(seeds = [b"vault"], bump)]
     pub vault: Account<'info, Vault>,
@@ -551,29 +505,20 @@ pub struct MintEnergy<'info> {
     pub producer: Account<'info, EnergyProducer>,
     #[account(mut)]
     pub authority: Signer<'info>,
-
     #[account(seeds = [b"vault"], bump)]
     pub vault: Account<'info, Vault>,
-
     #[account(mut)]
     pub mint: Account<'info, Mint>,
-
     #[account(init_if_needed, payer = authority, associated_token::mint = mint, associated_token::authority = authority)]
     pub destination: Account<'info, TokenAccount>,
-
-    // Фондовые аккаунты в куче (Box) для уменьшения стека
     #[account(mut, seeds = [b"buyback", mint.key().as_ref()], bump)]
     pub buyback_account: Box<Account<'info, TokenAccount>>,
-
     #[account(mut, seeds = [b"staking", mint.key().as_ref()], bump)]
     pub staking_pool: Box<Account<'info, TokenAccount>>,
-
     #[account(mut, seeds = [b"dao", mint.key().as_ref()], bump)]
     pub dao_reserve: Box<Account<'info, TokenAccount>>,
-
     #[account(mut, seeds = [b"emergency", mint.key().as_ref()], bump)]
     pub emergency_fund: Box<Account<'info, TokenAccount>>,
-
     pub token_program: Program<'info, Token>,
     pub associated_token_program: Program<'info, AssociatedToken>,
     pub system_program: Program<'info, System>,
@@ -583,13 +528,7 @@ pub struct MintEnergy<'info> {
 pub struct BuybackBurn<'info> {
     #[account(mut)]
     pub mint: Account<'info, Mint>,
-    #[account(
-        mut,
-        seeds = [b"buyback", mint.key().as_ref()],
-        bump,
-        token::mint = mint,
-        token::authority = vault,
-    )]
+    #[account(mut, seeds = [b"buyback", mint.key().as_ref()], bump, token::mint = mint, token::authority = vault)]
     pub buyback_account: Account<'info, TokenAccount>,
     #[account(seeds = [b"vault"], bump)]
     pub vault: Account<'info, Vault>,
@@ -604,14 +543,7 @@ pub struct Stake<'info> {
     pub user: Signer<'info>,
     #[account(mut, associated_token::mint = mint, associated_token::authority = user)]
     pub user_token_account: Account<'info, TokenAccount>,
-    #[account(
-        init_if_needed,
-        payer = user,
-        seeds = [b"staking-vault", mint.key().as_ref()],
-        token::mint = mint,
-        token::authority = staking_vault,
-        bump
-    )]
+    #[account(init_if_needed, payer = user, seeds = [b"staking-vault", mint.key().as_ref()], token::mint = mint, token::authority = staking_vault, bump)]
     pub staking_vault: Account<'info, TokenAccount>,
     pub mint: Account<'info, Mint>,
     pub token_program: Program<'info, Token>,
@@ -650,25 +582,10 @@ pub struct ClaimRewards<'info> {
 
 #[derive(Accounts)]
 pub struct InitializeFounderVesting<'info> {
-    #[account(
-        init,
-        payer = founder,
-        space = 8 + FounderVesting::LEN,
-        seeds = [b"founder-vesting", founder.key().as_ref()],
-        bump
-    )]
+    #[account(init, payer = founder, space = 8 + FounderVesting::LEN, seeds = [b"founder-vesting", founder.key().as_ref()], bump)]
     pub vesting: Account<'info, FounderVesting>,
-
-    #[account(
-        init_if_needed,
-        payer = founder,
-        seeds = [b"vesting-vault", mint.key().as_ref()],
-        token::mint = mint,
-        token::authority = vesting,
-        bump
-    )]
+    #[account(init_if_needed, payer = founder, seeds = [b"vesting-vault", mint.key().as_ref()], token::mint = mint, token::authority = vesting, bump)]
     pub vesting_vault: Account<'info, TokenAccount>,
-
     pub mint: Account<'info, Mint>,
     #[account(mut)]
     pub founder: Signer<'info>,
@@ -678,23 +595,11 @@ pub struct InitializeFounderVesting<'info> {
 
 #[derive(Accounts)]
 pub struct ClaimVested<'info> {
-    #[account(
-        mut,
-        seeds = [b"founder-vesting", founder.key().as_ref()],
-        bump
-    )]
+    #[account(mut, seeds = [b"founder-vesting", founder.key().as_ref()], bump)]
     pub vesting: Account<'info, FounderVesting>,
-    #[account(
-        mut,
-        seeds = [b"vesting-vault", mint.key().as_ref()],
-        bump
-    )]
+    #[account(mut, seeds = [b"vesting-vault", mint.key().as_ref()], bump)]
     pub vesting_vault: Account<'info, TokenAccount>,
-    #[account(
-        mut,
-        associated_token::mint = mint,
-        associated_token::authority = founder
-    )]
+    #[account(mut, associated_token::mint = mint, associated_token::authority = founder)]
     pub founder_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
     pub founder: Signer<'info>,
@@ -702,6 +607,28 @@ pub struct ClaimVested<'info> {
     pub token_program: Program<'info, Token>,
 }
 
+// === ПУЛЫ (структуры аккаунтов) ===
+#[derive(Accounts)]
+pub struct CreatePool<'info> {
+    #[account(init, payer = authority, space = 8 + Pool::LEN, seeds = [b"pool", authority.key().as_ref(), &[0]], bump)]
+    pub pool: Account<'info, Pool>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct JoinPool<'info> {
+    #[account(mut, seeds = [b"pool", pool.authority.as_ref(), &[0]], bump)]
+    pub pool: Account<'info, Pool>,
+    #[account(mut, seeds = [b"producer", authority.key().as_ref()], bump)]
+    pub producer: Account<'info, EnergyProducer>,
+    #[account(mut)]
+    pub authority: Signer<'info>,
+    pub system_program: Program<'info, System>,
+}
+
+// === АККАУНТЫ ДЛЯ ХРАНЕНИЯ ===
 #[account]
 pub struct Vault {
     pub deployer: Pubkey,
@@ -712,14 +639,35 @@ impl Vault { pub const LEN: usize = 32 + 32 + 32; }
 
 #[account]
 pub struct EnergyProducer {
-    pub authority: Pubkey, pub device_id: Pubkey,
-    pub nonce: u64, pub energy_wh: u64, pub timestamp: i64,
-    pub signature: [u8; 64], pub is_initialized: bool, pub max_power_w: u64,
+    pub authority: Pubkey,
+    pub device_id: Pubkey,
+    pub nonce: u64,
+    pub energy_wh: u64,
+    pub timestamp: i64,
+    pub signature: [u8; 64],
+    pub is_initialized: bool,
+    pub max_power_w: u64,
 }
 impl EnergyProducer { pub const LEN: usize = 32 + 32 + 8 + 8 + 8 + 64 + 1 + 8; }
 
 #[account]
-pub struct StakeInfo { pub owner: Pubkey, pub staked_amount: u64, }
+pub struct Pool {
+    pub authority: Pubkey,
+    pub total_energy: u128,
+    pub threshold: u128,
+    pub producers: Vec<Pubkey>,
+    pub is_active: bool,
+    pub created_at: i64,
+}
+impl Pool {
+    pub const LEN: usize = 32 + 16 + 16 + 4 + 100 * 32 + 1 + 8;
+}
+
+#[account]
+pub struct StakeInfo {
+    pub owner: Pubkey,
+    pub staked_amount: u64,
+}
 impl StakeInfo { pub const LEN: usize = 32 + 8; }
 
 #[account]
@@ -731,35 +679,56 @@ pub struct FounderVesting {
 }
 impl FounderVesting { pub const LEN: usize = 32 + 8 + 8 + 8; }
 
+// === ВСПОМОГАТЕЛЬНЫЕ СТРУКТУРЫ ===
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct Proof {
-    pub nonce: u64, pub timestamp: i64, pub energy_wh: u64, pub signature: [u8; 64],
+    pub nonce: u64,
+    pub timestamp: i64,
+    pub energy_wh: u64,
+    pub signature: [u8; 64],
 }
 
 // === СОБЫТИЯ ===
 #[event]
 pub struct EmissionDifficultyChanged {
     pub current_supply: u64,
-    pub supply_fraction: u128,      // S × 10^18 (доля от 0 до 10^18)
-    pub energy_per_token: u128,     // В Wh × 10^18
+    pub supply_fraction: u128,
+    pub energy_per_token: u128,
 }
 
+// === ОШИБКИ ===
 #[error_code]
 pub enum ErrorCode {
+    #[msg("Unauthorized signer")]
     Unauthorized,
+    #[msg("Proof is too old")]
     StaleProof,
+    #[msg("Invalid Ed25519 signature")]
     InvalidSignature,
+    #[msg("Energy reading exceeds maximum allowed for device power rating")]
     ExcessiveEnergy,
+    #[msg("Nonce must be greater than previous nonce")]
     InvalidNonce,
+    #[msg("Insufficient stake to withdraw")]
     InsufficientStake,
+    #[msg("No staked amount or staking pool empty")]
     NoStake,
+    #[msg("1-year cliff period has not passed")]
     CliffNotReached,
+    #[msg("No vested tokens available to claim at this time")]
     NothingToClaim,
+    #[msg("Arithmetic overflow occurred")]
     ArithmeticOverflow,
+    #[msg("Mint amount must be greater than zero")]
     ZeroAmountMint,
-    // Новые ошибки для асимптотической модели
-    InvalidParameter,              // Неверный параметр k
-    ExcessiveEnergyRequired,       // k^S > u64::MAX
-    InsufficientEnergy,            // energy_wh < energy_per_token
-    MaxSupplyReached,              // Достигнут максимум 1 млрд ENRG
+    #[msg("Invalid parameter (k must be 3, 5, or 10)")]
+    InvalidParameter,
+    #[msg("Excessive energy required, minting impossible")]
+    ExcessiveEnergyRequired,
+    #[msg("Insufficient energy to mint at current difficulty")]
+    InsufficientEnergy,
+    #[msg("Maximum supply of 1 billion ENRG reached")]
+    MaxSupplyReached,
+    #[msg("Producer is already in the pool")]
+    AlreadyInPool,
 }
