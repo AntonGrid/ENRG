@@ -281,6 +281,16 @@ app.get('/api/v1/device/:id/balance', (req, res) => {
     res.json({ balance: 0, device_id: deviceId });
 });
 
+// === ИСТОРИЯ (заглушка) ===
+app.get('/api/v1/device/:id/history', (req, res) => {
+    const deviceId = req.params.id;
+    if (!devices[deviceId]) {
+        return res.status(404).json({ error: 'device not found' });
+    }
+    // Пока возвращаем пустой массив, позже можно добавить историю минтов
+    res.json({ history: [] });
+});
+
 // === СОЗДАНИЕ ПУЛА ===
 app.post('/api/v1/pool/create', (req, res) => {
     const { pool_id, threshold } = req.body;
