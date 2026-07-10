@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="style.css">
+    <title>ENRG Dashboard</title>
+</head>
+<body>
+    <header>
+        <h1>Подключи устройство и начни майнить ENRG</h1>
+    </header>
+    <main>
+        <section>
+            <h2>Три простых шага:</h2>
+            <ol>
+                <li>Зарегистрируй устройство</li>
+                <li>Подключи кошелёк</li>
+                <li>Начни майнить</li>
+            </ol>
+            <button id="start-button">Начать</button>
+        </section>
+        <section id="metrics">
+            <h2>Реальные метрики</h2>
+            <div>Total Energy: <span id="total-energy">0</span></div>
+            <div>Active Producers: <span id="active-producers">0</span></div>
+            <div>ENRG Staked: <span id="enrg-staked">0</span></div>
+        </section>
+        <section id="registration-form">
+            <h2>Форма регистрации устройства</h2>
+            <label for="device-id">Device ID:</label>
+            <input type="text" id="device-id" required>
+            <label for="public-key">Public Key:</label>
+            <input type="text" id="public-key" required>
+            <button id="generate-key">Сгенерировать ключ</button>
+            <label for="source-type">Тип источника:</label>
+            <select id="source-type">
+                <option value="Solar">Solar</option>
+                <option value="Wind">Wind</option>
+                <option value="Hydro">Hydro</option>
+            </select>
+            <button id="register-device">Зарегистрировать</button>
+            <div id="registration-message"></div>
+        </section>
+        <section id="user-dashboard">
+            <h2>Дашборд пользователя</h2>
+            <ul id="device-list"></ul>
+            <button id="refresh-button">Обновить</button>
+        </section>
+        <section id="wallet-connection">
+            <button id="connect-wallet">Connect Wallet</button>
+            <div id="wallet-info"></div>
+        </section>
+    </main>
+    <script src="script.js"></script>
+</body>
+</html>

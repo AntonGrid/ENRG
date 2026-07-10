@@ -1,0 +1,44 @@
+/* Основные стили для дашборда ENRG */
+body {
+    background-color: #121212; /* Темная тема */
+    color: #ffffff; /* Белый текст */
+    font-family: Arial, sans-serif;
+}
+
+header {
+    text-align: center;
+    margin: 20px 0;
+}
+
+h1, h2 {
+    color: #00ff00; /* Зеленый цвет для заголовков */
+}
+
+main {
+    padding: 20px;
+}
+
+button {
+    background-color: #00ff00; /* Зеленая кнопка */
+    color: #121212; /* Темный текст на кнопке */
+    border: none;
+    padding: 10px 20px;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+button:hover {
+    background-color: #00cc00; /* Темно-зеленый при наведении */
+}
+
+#metrics, #registration-form, #user-dashboard, #wallet-connection {
+    margin: 20px 0;
+    padding: 15px;
+    border: 1px solid #00ff00; /* Зеленая рамка */
+    border-radius: 5px;
+}
+
+#registration-message {
+    margin-top: 10px;
+    color: #ff0000; /* Красный цвет для сообщений об ошибках */
+}
