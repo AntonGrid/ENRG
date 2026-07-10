@@ -1,135 +1,111 @@
 # ENRG Protocol
 
-> **An Open Protocol for Trust Between the Physical and Digital Worlds**
-
-ENRG is an open protocol that enables physical devices to cryptographically prove real-world events and allows digital systems to verify those proofs without trusting a manufacturer, server, or centralized authority.
-
-The first reference implementation is built on **Solana**, but the protocol itself is blockchain-agnostic.
+> **An Open Protocol for Cryptographically Verifiable Physical Infrastructure**
 
 ---
 
-# Vision
+## Overview
 
-ENRG is not an application.
+ENRG is an open, implementation-independent protocol for establishing cryptographically verifiable trust between physical infrastructure and distributed digital systems.
 
-ENRG is not a company.
+The protocol enables interoperable implementations without requiring trust in a specific manufacturer, organization, blockchain, or software vendor.
 
-ENRG is not a blockchain.
-
-ENRG is not a token.
-
-**ENRG is an open protocol.**
-
-Its goal is to become a global standard for cryptographically verifiable real-world data.
+The first reference implementation is built on Solana, while the protocol itself remains blockchain-independent.
 
 ---
 
-# Architecture
+## Principles
+
+- Open Standard
+- Cryptographic Trust
+- Implementation Independence
+- Deterministic Verification
+- Protocol Governance
+- Long-Term Compatibility
+
+---
+
+## Repository Structure
 
 ```
-Device
-   │
-   ▼
-Proof-of-Production
-   │
-   ▼
-Oracle
-   │
-   ▼
-Policy Engine
-   │
-   ▼
-Device Registry
-   │
-   ▼
-Smart Contract
-   │
-   ▼
-Applications
+books/              ENRG Architecture Book
+docs/               Protocol Documentation
+firmware/           ESP32 Firmware
+oracle/             Oracle Implementation
+programs/           Smart Contract Implementation
+sdk/                Software Development Kits
+examples/           Reference Examples
+tools/              Development Tools
+tests/              Test Suite
 ```
 
 ---
 
-# Repository Structure
+## Documentation
 
-```
-books/          ENRG Architecture Book
-docs/           Technical documentation
-firmware/       ESP32 firmware
-oracle/         Oracle reference implementation
-programs/       Solana smart contracts
-web/            Web platform
-sdk/            Future SDKs
-examples/       Usage examples
-tests/          Test suite
-tools/          Developer tools
-```
+### Protocol
 
----
+- ENRG Protocol Specification
+- ENRG Terminology
+- ENRG Conformance
 
-# Documentation
+### Architecture
 
-| Document | Description |
-|----------|-------------|
-| Architecture Book | Engineering philosophy and architecture evolution |
-| Technical Documentation | Complete protocol specification |
-| ADR | Architecture Decision Records |
-| RFC | Future protocol proposals |
-| API | Oracle and Platform API |
+- Architecture Decision Records (ADR)
+
+### Registries
+
+- Event Registry
+- Error Registry
+- Capability Registry
+- Manifest Registry
+
+### RFC
+
+- Requests for Comments
 
 ---
 
-# Current Status
+## Reference Implementations
 
-- ✅ Smart Contract
-- ✅ Oracle
-- ✅ ESP32 Proof-of-Production
-- ✅ Device Registration
-- ✅ Proof Verification
-- ✅ Minting
-- ✅ Architecture
-- 🚧 Dashboard
-- 🚧 Device Registry
-- 🚧 Policy Engine
-- 🚧 Mainnet
-
----
-
-# Roadmap
-
-- Complete protocol specification v8.0
-- Device Registry
-- Provisioning Service
-- Policy Engine
-- Dashboard
-- Oracle Network
+- Smart Contract
+- Oracle Implementation
+- ESP32 Firmware
 - SDK
-- Mainnet
+- Client Applications
+
+Reference implementations demonstrate protocol compliance but do not define protocol behavior.
 
 ---
 
-# Contributing
+## Governance
 
-See **CONTRIBUTING.md**
+The ENRG Protocol evolves through an open governance process.
+
+Protocol evolution is based on:
+
+- Architecture Decision Records (ADR)
+- Requests for Comments (RFC)
+- Protocol Governance
 
 ---
 
-# Security
+## Protocol Status
 
-See **SECURITY.md**
+**Protocol Version:** 1.0
+
+**Specification Revision:** WD-1
+
+**Status:** Working Draft
 
 ---
 
-# License
+## License
 
 MIT License
 
 ---
 
-> **ENRG is designed as an open standard.**
+> **The protocol is governed.**
 >
-> Anyone can build compatible devices.
->
-> Anyone can implement an Oracle.
->
-> Anyone can develop applications on top of the protocol.
+> **The protocol is not owned.**
