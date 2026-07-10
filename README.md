@@ -1,40 +1,135 @@
-# ENRG Protocol — Decentralized Energy Tokenization on Solana
+# ENRG Protocol
 
-ENRG Protocol tokenizes real-world energy production. Each verified 1 MWh = 1 SRC token. IoT devices (ESP32 + PZEM-004T, as well as industrial meters via Modbus/RS485) sign data with Ed25519 and send to an oracle, which accumulates energy and automatically mints SRC tokens on Solana.
+> **An Open Protocol for Trust Between the Physical and Digital Worlds**
 
-## Repository Structure
-- `/oracle` — Node.js oracle server (supports both ESP32 and industrial Modbus gateways)
-- `/firmware/esp32_proof_sender` — ESP32 sketch for energy reading and signing
-- `/firmware/industrial_gateway` — Modbus/RS485 gateway firmware (planned)
-- `/docs` — Whitepaper, Technical Documentation, Pitch Deck
+ENRG is an open protocol that enables physical devices to cryptographically prove real-world events and allows digital systems to verify those proofs without trusting a manufacturer, server, or centralized authority.
 
-## Live Demo (Devnet)
-- First fully autonomous Proof-of-Production transaction:  
-  https://solana.fm/tx/3GsWfQvFhvAHBRHy5QV76gNov3knSsndKYrGg2CbUnppgbJW8ipFcvpeaxhM7NKQRZW3tHyFR5TyvN2c4t7yZ2V9?cluster=devnet-solana
+The first reference implementation is built on **Solana**, but the protocol itself is blockchain-agnostic.
 
-## Supported Hardware
-| Type | Examples | Protocol |
-|------|----------|----------|
-| Consumer | ESP32 + PZEM-004T | Wi-Fi |
-| Industrial | Schneider, Siemens, ABB, Меркурий, Энергомера | Modbus RTU / RS485 |
-| Future | Any meter with pulse output or digital interface | Custom |
+---
 
-## Getting Started
-See READMEs inside each subfolder.
+# Vision
 
-## Configuration
-- Oracle threshold is set to 1,000,000 Wh = 1 MWh
-- Founder keypair must be placed at `~/founder-keypair.json`
-- Device public keys registered in `oracle/devices.json`
-- For industrial meters: register Modbus slave ID and register mapping
+ENRG is not an application.
 
-## Security & Anti-Fraud
-- Ed25519 signing per measurement
-- Monotonic nonce (replay protection)
-- Physical power limit per device
-- Secure Element (ATECC608) for key storage (production)
-- Multi-oracle verification (Switchboard)
-- Anomaly detection (sudden spikes, historical deviation)
+ENRG is not a company.
 
-## License
-MIT
+ENRG is not a blockchain.
+
+ENRG is not a token.
+
+**ENRG is an open protocol.**
+
+Its goal is to become a global standard for cryptographically verifiable real-world data.
+
+---
+
+# Architecture
+
+```
+Device
+   │
+   ▼
+Proof-of-Production
+   │
+   ▼
+Oracle
+   │
+   ▼
+Policy Engine
+   │
+   ▼
+Device Registry
+   │
+   ▼
+Smart Contract
+   │
+   ▼
+Applications
+```
+
+---
+
+# Repository Structure
+
+```
+books/          ENRG Architecture Book
+docs/           Technical documentation
+firmware/       ESP32 firmware
+oracle/         Oracle reference implementation
+programs/       Solana smart contracts
+web/            Web platform
+sdk/            Future SDKs
+examples/       Usage examples
+tests/          Test suite
+tools/          Developer tools
+```
+
+---
+
+# Documentation
+
+| Document | Description |
+|----------|-------------|
+| Architecture Book | Engineering philosophy and architecture evolution |
+| Technical Documentation | Complete protocol specification |
+| ADR | Architecture Decision Records |
+| RFC | Future protocol proposals |
+| API | Oracle and Platform API |
+
+---
+
+# Current Status
+
+- ✅ Smart Contract
+- ✅ Oracle
+- ✅ ESP32 Proof-of-Production
+- ✅ Device Registration
+- ✅ Proof Verification
+- ✅ Minting
+- ✅ Architecture
+- 🚧 Dashboard
+- 🚧 Device Registry
+- 🚧 Policy Engine
+- 🚧 Mainnet
+
+---
+
+# Roadmap
+
+- Complete protocol specification v8.0
+- Device Registry
+- Provisioning Service
+- Policy Engine
+- Dashboard
+- Oracle Network
+- SDK
+- Mainnet
+
+---
+
+# Contributing
+
+See **CONTRIBUTING.md**
+
+---
+
+# Security
+
+See **SECURITY.md**
+
+---
+
+# License
+
+MIT License
+
+---
+
+> **ENRG is designed as an open standard.**
+>
+> Anyone can build compatible devices.
+>
+> Anyone can implement an Oracle.
+>
+> Anyone can develop applications on top of the protocol.
