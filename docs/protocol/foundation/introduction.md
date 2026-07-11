@@ -1,109 +1,96 @@
-# 1. Introduction
+# Introduction
 
-## 1.1 Purpose
+## Status
 
-This document defines the official ENRG Protocol Specification.
-
-Its purpose is to establish a complete, implementation-independent description of the ENRG Protocol.
-
-The specification defines the architecture, component responsibilities, communication model, security requirements, cryptographic principles, and interoperability rules required for compatible ENRG implementations.
-
-This document is the normative reference for the ENRG Protocol.
+Normative
 
 ---
 
-## 1.2 Scope
+## Purpose
+
+The ENRG Protocol defines an open, implementation-independent standard for establishing cryptographically verifiable trust between physical infrastructure and distributed digital systems.
+
+The specification defines the normative behavior required for interoperable ENRG implementations.
+
+---
+
+## Scope
 
 This specification defines:
 
-- Protocol architecture
-- Device lifecycle
-- Device identity
+- Protocol Architecture
+- Device Identity
+- Device Lifecycle
 - Provisioning
 - Device Registry
 - Device Manifest
 - Policy Engine
-- Oracle
+- Oracle Implementation
 - Proof-of-Production
-- Smart Contract interaction
-- Protocol economics
-- Cryptographic requirements
-- Security model
-- Governance
-- Mainnet requirements
+- Smart Contract
+- Protocol Economics
+- Cryptography
+- Protocol Interfaces
+- Protocol Events
+- Error Model
+- Client Applications
+- Software Development Kit (SDK)
+- Protocol Governance
+- Mainnet Readiness
+- Security Requirements
 
-This specification does not define:
-
-- User interface design
-- Programming languages
-- Database technologies
-- Operating systems
-- Cloud infrastructure
-- Hardware implementation details
+Implementation-specific details are outside the scope of this specification unless explicitly stated.
 
 ---
 
-## 1.3 Conformance
+## Design Goals
 
-An implementation is considered ENRG-compatible only if it satisfies all mandatory requirements defined by this specification.
+The ENRG Protocol is designed to provide:
 
-Mandatory requirements are identified using the requirement keywords defined in Section 1.4.
-
-Implementations MAY extend the protocol provided that such extensions do not violate this specification or break interoperability with compliant implementations.
-
----
-
-## 1.4 Requirements Language
-
-The key words **MUST**, **MUST NOT**, **SHALL**, **SHALL NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in this document are to be interpreted as described in RFC 2119.
+- Interoperability
+- Cryptographic Trust
+- Deterministic Verification
+- Implementation Independence
+- Extensibility
+- Long-Term Compatibility
 
 ---
 
-## 1.5 Versioning
+## Intended Audience
 
-The ENRG Protocol follows semantic versioning.
+This specification is intended for:
 
-- Major versions introduce protocol-level changes.
-- Minor versions introduce backward-compatible functionality.
-- Patch versions correct errors without changing protocol behavior.
-
-Backward compatibility SHOULD be preserved whenever technically possible.
-
----
-
-## 1.6 Specification Structure
-
-This specification is organized into the following major sections:
-
-- Foundation
-- Protocol Architecture
-- Device Layer
-- Protocol Services
-- Blockchain Layer
-- Communication
-- Clients
-- Security
-- Governance
-- Reference Information
-
-Each section defines normative requirements for one logical aspect of the ENRG Protocol.
+- Protocol Implementers
+- Device Manufacturers
+- Oracle Developers
+- Smart Contract Developers
+- SDK Developers
+- Client Application Developers
+- Auditors
+- Security Researchers
 
 ---
 
-## 1.7 Reference Implementation
+## Conformance
 
-The official ENRG repositories provide reference implementations of the protocol.
+Requirements defined by this specification are normative.
 
-Reference implementations demonstrate compliant behavior but do not define the protocol itself.
+Conformance requirements are further defined in the ENRG Conformance specification.
+
+---
+
+## Terminology
+
+Normative terminology is defined in the ENRG Terminology specification.
+
+Requirement keywords such as SHALL, MUST, SHOULD, MAY, and MUST NOT are interpreted according to RFC 2119 and RFC 8174.
+
+---
+
+## Specification Authority
+
+The ENRG Protocol Specification is the authoritative definition of protocol behavior.
+
+Reference implementations SHALL conform to this specification.
 
 If any implementation conflicts with this specification, this specification SHALL take precedence.
-
----
-
-## 1.8 Protocol Evolution
-
-The ENRG Protocol is designed for long-term evolution.
-
-New protocol capabilities SHOULD be introduced in a backward-compatible manner whenever possible.
-
-Breaking protocol changes MUST be documented through the ENRG RFC process and reflected in future protocol versions.
