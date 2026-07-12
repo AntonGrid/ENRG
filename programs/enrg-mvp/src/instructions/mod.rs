@@ -4,6 +4,7 @@ pub mod mint;
 pub mod staking;
 pub mod vesting;
 pub mod pool;
+pub mod token;
 
 pub use initialize::*;
 pub use producer::*;
@@ -11,3 +12,4 @@ pub use mint::*;
 pub use staking::*;
 pub use vesting::*;
 pub use pool::*;
+pub use token::*;
