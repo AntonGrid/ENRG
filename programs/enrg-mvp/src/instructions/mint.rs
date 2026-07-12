@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::error::ErrorCode;
+use crate::math;
 use crate::state::*;
 
 const MAX_PROOF_AGE: i64 = 300;
@@ -66,6 +67,16 @@ pub fn mint_energy(
         ErrorCode::ExcessiveEnergy
     );
 
+    let reward = math::calculate_reward(
+        proof.energy_wh,
+        vault.total_supply,
+    );
+
+    require!(
+        reward > 0,
+        ErrorCode::ZeroAmountMint
+    );
+
     producer.nonce = proof.nonce;
     producer.timestamp = proof.timestamp;
 
@@ -86,6 +97,11 @@ pub fn mint_energy(
         .checked_add(1)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
+    vault.total_supply = vault
+        .total_supply
+        .checked_add(reward)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
     msg!(
         "Accepted proof {} ({} Wh)",
         proof.nonce,
@@ -93,13 +109,13 @@ pub fn mint_energy(
     );
 
     msg!(
-        "Protocol total energy: {} Wh",
-        vault.total_energy_wh
+        "Calculated reward: {}",
+        reward
     );
 
     msg!(
-        "Protocol total proofs: {}",
-        vault.total_proofs
+        "Total supply: {}",
+        vault.total_supply
     );
 
     Ok(())
