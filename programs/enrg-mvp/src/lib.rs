@@ -6,6 +6,7 @@ pub mod constants;
 pub mod error;
 pub mod instructions;
 pub mod math;
+pub mod adapters;
 pub mod state;
 
 use instructions::*;
