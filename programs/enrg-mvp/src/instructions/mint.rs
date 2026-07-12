@@ -32,6 +32,7 @@ pub fn mint_energy(
 ) -> Result<()> {
 
     let producer = &mut ctx.accounts.producer;
+    let vault = &mut ctx.accounts.vault;
 
     require!(
         producer.authority == ctx.accounts.authority.key(),
@@ -75,10 +76,30 @@ pub fn mint_energy(
 
     producer.signature = proof.signature;
 
+    vault.total_energy_wh = vault
+        .total_energy_wh
+        .checked_add(proof.energy_wh as u128)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    vault.total_proofs = vault
+        .total_proofs
+        .checked_add(1)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
     msg!(
         "Accepted proof {} ({} Wh)",
         proof.nonce,
         proof.energy_wh
+    );
+
+    msg!(
+        "Protocol total energy: {} Wh",
+        vault.total_energy_wh
+    );
+
+    msg!(
+        "Protocol total proofs: {}",
+        vault.total_proofs
     );
 
     Ok(())
