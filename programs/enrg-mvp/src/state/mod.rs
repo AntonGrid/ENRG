@@ -4,6 +4,7 @@ pub mod pool;
 pub mod stake;
 pub mod vesting;
 pub mod proof;
+pub mod oracle;
 pub mod events;
 
 pub use vault::*;
@@ -12,4 +13,5 @@ pub use pool::*;
 pub use stake::*;
 pub use vesting::*;
 pub use proof::*;
+pub use oracle::*;
 pub use events::*;
