@@ -1,6 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::error::ErrorCode;
+use crate::instructions::token;
 use crate::math;
 use crate::state::*;
 
@@ -72,10 +73,8 @@ pub fn mint_energy(
         vault.total_supply,
     );
 
-    require!(
-        reward > 0,
-        ErrorCode::ZeroAmountMint
-    );
+    let emission =
+        token::calculate_distribution(reward)?;
 
     producer.nonce = proof.nonce;
     producer.timestamp = proof.timestamp;
@@ -99,7 +98,7 @@ pub fn mint_energy(
 
     vault.total_supply = vault
         .total_supply
-        .checked_add(reward)
+        .checked_add(emission.reward)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     msg!(
@@ -109,8 +108,33 @@ pub fn mint_energy(
     );
 
     msg!(
-        "Calculated reward: {}",
-        reward
+        "Reward: {}",
+        emission.reward
+    );
+
+    msg!(
+        "Producer: {}",
+        emission.producer
+    );
+
+    msg!(
+        "Buyback: {}",
+        emission.buyback
+    );
+
+    msg!(
+        "Staking: {}",
+        emission.staking
+    );
+
+    msg!(
+        "DAO: {}",
+        emission.dao
+    );
+
+    msg!(
+        "Emergency: {}",
+        emission.emergency
     );
 
     msg!(
