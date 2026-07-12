@@ -1,6 +1,9 @@
 use anchor_lang::prelude::*;
 
+use crate::error::ErrorCode;
 use crate::state::*;
+
+const MAX_PROOF_AGE: i64 = 300;
 
 #[derive(Accounts)]
 pub struct MintEnergy<'info> {
@@ -24,9 +27,60 @@ pub struct BuybackBurn<'info> {
 }
 
 pub fn mint_energy(
-    _ctx: Context<MintEnergy>,
-    _proof: Proof,
+    ctx: Context<MintEnergy>,
+    proof: Proof,
 ) -> Result<()> {
+
+    let producer = &mut ctx.accounts.producer;
+
+    require!(
+        producer.authority == ctx.accounts.authority.key(),
+        ErrorCode::Unauthorized
+    );
+
+    require!(
+        proof.nonce > producer.nonce,
+        ErrorCode::InvalidNonce
+    );
+
+    let now = Clock::get()?.unix_timestamp;
+
+    require!(
+        proof.timestamp <= now,
+        ErrorCode::StaleProof
+    );
+
+    require!(
+        now - proof.timestamp <= MAX_PROOF_AGE,
+        ErrorCode::StaleProof
+    );
+
+    let max_energy =
+        (producer.max_power_w as u128)
+        * (MAX_PROOF_AGE as u128)
+        / 3600;
+
+    require!(
+        (proof.energy_wh as u128) <= max_energy,
+        ErrorCode::ExcessiveEnergy
+    );
+
+    producer.nonce = proof.nonce;
+    producer.timestamp = proof.timestamp;
+
+    producer.energy_wh = producer
+        .energy_wh
+        .checked_add(proof.energy_wh)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    producer.signature = proof.signature;
+
+    msg!(
+        "Accepted proof {} ({} Wh)",
+        proof.nonce,
+        proof.energy_wh
+    );
+
     Ok(())
 }
 
