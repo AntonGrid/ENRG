@@ -1,10 +1,11 @@
 use anchor_lang::prelude::*;
 
 use crate::error::ErrorCode;
+use crate::constants::*;
 
-/// Distribution of newly minted SRC.
 #[derive(Debug, Clone)]
-pub struct RewardDistribution {
+pub struct EmissionResult {
+    pub reward: u64,
     pub producer: u64,
     pub buyback: u64,
     pub staking: u64,
@@ -12,14 +13,9 @@ pub struct RewardDistribution {
     pub emergency: u64,
 }
 
-/// Calculates protocol distribution.
-///
-/// No token transfers are performed here.
-/// This module is responsible only for
-/// calculating token allocation.
 pub fn calculate_distribution(
     reward: u64,
-) -> Result<RewardDistribution> {
+) -> Result<EmissionResult> {
 
     require!(
         reward > 0,
@@ -27,7 +23,7 @@ pub fn calculate_distribution(
     );
 
     let commission = reward
-        .checked_mul(15)
+        .checked_mul(COMMISSION_PERCENT)
         .ok_or(ErrorCode::ArithmeticOverflow)?
         / 100;
 
@@ -35,9 +31,9 @@ pub fn calculate_distribution(
         .checked_sub(commission)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    let buyback = commission * 20 / 100;
-    let staking = commission * 40 / 100;
-    let dao = commission * 30 / 100;
+    let buyback = commission * BUYBACK_PERCENT / 100;
+    let staking = commission * STAKING_PERCENT / 100;
+    let dao = commission * DAO_PERCENT / 100;
 
     let emergency = commission
         .checked_sub(
@@ -46,7 +42,8 @@ pub fn calculate_distribution(
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     Ok(
-        RewardDistribution {
+        EmissionResult {
+            reward,
             producer,
             buyback,
             staking,
