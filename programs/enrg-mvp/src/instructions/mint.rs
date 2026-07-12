@@ -3,9 +3,12 @@ use anchor_lang::prelude::*;
 use crate::error::ErrorCode;
 use crate::instructions::token;
 use crate::math;
+use crate::security::{
+    verify_energy,
+    verify_nonce,
+    verify_timestamp,
+};
 use crate::state::*;
-
-const MAX_PROOF_AGE: i64 = 300;
 
 #[derive(Accounts)]
 pub struct MintEnergy<'info> {
@@ -41,32 +44,19 @@ pub fn mint_energy(
         ErrorCode::Unauthorized
     );
 
-    require!(
-        proof.nonce > producer.nonce,
-        ErrorCode::InvalidNonce
-    );
+    verify_nonce(
+        producer,
+        proof.nonce,
+    )?;
 
-    let now = Clock::get()?.unix_timestamp;
+    verify_timestamp(
+        proof.timestamp,
+    )?;
 
-    require!(
-        proof.timestamp <= now,
-        ErrorCode::StaleProof
-    );
-
-    require!(
-        now - proof.timestamp <= MAX_PROOF_AGE,
-        ErrorCode::StaleProof
-    );
-
-    let max_energy =
-        (producer.max_power_w as u128)
-        * (MAX_PROOF_AGE as u128)
-        / 3600;
-
-    require!(
-        (proof.energy_wh as u128) <= max_energy,
-        ErrorCode::ExcessiveEnergy
-    );
+    verify_energy(
+        producer,
+        proof.energy_wh,
+    )?;
 
     let reward = math::calculate_reward(
         proof.energy_wh,
