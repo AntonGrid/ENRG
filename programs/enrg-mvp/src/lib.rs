@@ -7,6 +7,7 @@ pub mod error;
 pub mod instructions;
 pub mod math;
 pub mod adapters;
+pub mod security;
 pub mod state;
 
 use instructions::*;
