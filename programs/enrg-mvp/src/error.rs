@@ -67,4 +67,10 @@ pub enum ErrorCode {
 
     #[msg("Producer already belongs to pool")]
     AlreadyInPool,
+
+    #[msg("Object already exists")]
+    AlreadyExists,
+
+    #[msg("Object not found")]
+    NotFound,
 }

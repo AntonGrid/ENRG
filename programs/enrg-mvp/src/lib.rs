@@ -2,11 +2,11 @@
 
 use anchor_lang::prelude::*;
 
+pub mod adapters;
 pub mod constants;
 pub mod error;
 pub mod instructions;
 pub mod math;
-pub mod adapters;
 pub mod security;
 pub mod state;
 
@@ -18,11 +18,15 @@ declare_id!("8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a");
 pub mod enrg_mvp {
     use super::*;
 
-    pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
+    pub fn initialize_vault(
+        ctx: Context<InitializeVault>,
+    ) -> Result<()> {
         instructions::initialize::initialize_vault(ctx)
     }
 
-    pub fn initialize_funds(ctx: Context<InitializeFunds>) -> Result<()> {
+    pub fn initialize_funds(
+        ctx: Context<InitializeFunds>,
+    ) -> Result<()> {
         instructions::initialize::initialize_funds(ctx)
     }
 
@@ -99,5 +103,31 @@ pub mod enrg_mvp {
         ctx: Context<ClaimVested>,
     ) -> Result<()> {
         instructions::vesting::claim_vested(ctx)
+    }
+
+    pub fn initialize_oracle_registry(
+        ctx: Context<InitializeOracleRegistry>,
+    ) -> Result<()> {
+        instructions::oracle_registry::initialize_oracle_registry(ctx)
+    }
+
+    pub fn add_oracle(
+        ctx: Context<AddOracle>,
+        oracle: Pubkey,
+    ) -> Result<()> {
+        instructions::oracle_registry::add_oracle(
+            ctx,
+            oracle,
+        )
+    }
+
+    pub fn remove_oracle(
+        ctx: Context<RemoveOracle>,
+        oracle: Pubkey,
+    ) -> Result<()> {
+        instructions::oracle_registry::remove_oracle(
+            ctx,
+            oracle,
+        )
     }
 }
