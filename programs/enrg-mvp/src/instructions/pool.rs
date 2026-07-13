@@ -77,6 +77,11 @@ pub fn join_pool(
         ErrorCode::AlreadyInPool
     );
 
+    require!(
+        pool.producers.len() < Pool::MAX_PRODUCERS,
+        ErrorCode::InvalidParameter
+    );
+
     pool.producers.push(producer);
 
     Ok(())
