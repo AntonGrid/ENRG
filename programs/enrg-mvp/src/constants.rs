@@ -34,3 +34,7 @@ pub const INITIAL_ENERGY_PER_SRC: u64 =
 /// Default energy pool threshold (Wh).
 pub const DEFAULT_POOL_THRESHOLD: u128 =
     1_000_000;
+
+/// Founder vesting duration (4 years).
+pub const FOUNDER_VESTING_DURATION: i64 =
+    4 * 365 * 24 * 60 * 60;

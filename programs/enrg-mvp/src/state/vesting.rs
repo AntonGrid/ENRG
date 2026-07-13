@@ -11,14 +11,22 @@ pub struct FounderVesting {
     /// Vesting start timestamp.
     pub start_time: i64,
 
+    /// Vesting duration (seconds).
+    pub duration: i64,
+
     /// Amount already claimed.
     pub withdrawn: u64,
+
+    /// Last claim timestamp.
+    pub last_claim: i64,
 }
 
 impl FounderVesting {
     pub const LEN: usize =
         32 + // founder
-        8 +  // total_amount
-        8 +  // start_time
-        8;   // withdrawn
+        8  + // total_amount
+        8  + // start_time
+        8  + // duration
+        8  + // withdrawn
+        8;   // last_claim
 }
