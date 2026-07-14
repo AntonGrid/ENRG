@@ -4,8 +4,11 @@ use crate::constants::*;
 
 /// Global protocol state.
 ///
-/// Vault stores protocol configuration,
+/// Vault stores protocol economics,
 /// emission state and global statistics.
+///
+/// SPL mint configuration is maintained
+/// separately by the TokenMint PDA.
 #[account]
 pub struct Vault {
     /// Wallet that deployed the protocol.
@@ -13,9 +16,6 @@ pub struct Vault {
 
     /// Current protocol authority.
     pub authority: Pubkey,
-
-    /// SRC mint address.
-    pub mint: Pubkey,
 
     /// Protocol version.
     pub protocol_version: u16,
@@ -43,7 +43,6 @@ impl Vault {
     pub const LEN: usize =
         32 + // deployer
         32 + // authority
-        32 + // mint
         2  + // protocol_version
         8  + // total_supply
         8  + // max_supply
@@ -58,7 +57,6 @@ impl Default for Vault {
         Self {
             deployer: Pubkey::default(),
             authority: Pubkey::default(),
-            mint: Pubkey::default(),
 
             protocol_version: 1,
 

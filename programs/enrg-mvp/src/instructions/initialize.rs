@@ -97,7 +97,6 @@ pub fn initialize_vault(
     }
 
     vault.authority = ctx.accounts.authority.key();
-    vault.mint = ctx.accounts.mint.key();
 
     vault.protocol_version = 1;
 
