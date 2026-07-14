@@ -44,9 +44,9 @@ pub mod enrg_mvp {
 
     pub fn mint_energy(
         ctx: Context<MintEnergy>,
-        proof: state::Proof,
+        report: state::OracleReport,
     ) -> Result<()> {
-        instructions::mint::mint_energy(ctx, proof)
+        instructions::mint::mint_energy(ctx, report)
     }
 
     pub fn create_pool(

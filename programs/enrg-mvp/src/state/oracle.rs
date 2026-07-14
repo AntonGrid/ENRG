@@ -1,23 +1,29 @@
 use anchor_lang::prelude::*;
 
-/// Oracle submission metadata.
+/// Verified Oracle report.
 ///
-/// This structure represents verified data
-/// accepted by the ENRG Oracle before
-/// entering the Protocol Core.
+/// This is the only trusted object accepted
+/// by the ENRG Protocol Core.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct OracleReport {
-    /// Oracle identity.
+    /// Trusted Oracle identity.
     pub oracle: Pubkey,
 
-    /// Device identifier.
+    /// Producer device.
     pub device_id: Pubkey,
 
-    /// Verified proof.
-    pub proof: Proof,
+    /// Sequential proof number.
+    pub nonce: u64,
 
-    /// Verification timestamp.
+    /// Original device timestamp.
+    pub device_timestamp: i64,
+
+    /// Oracle verification timestamp.
     pub verified_at: i64,
-}
 
-use crate::state::Proof;
+    /// Verified energy.
+    pub energy_wh: u64,
+
+    /// Original device signature.
+    pub device_signature: [u8; 64],
+}

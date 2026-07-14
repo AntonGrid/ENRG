@@ -33,7 +33,7 @@ pub struct BuybackBurn<'info> {
 
 pub fn mint_energy(
     ctx: Context<MintEnergy>,
-    proof: Proof,
+    report: OracleReport,
 ) -> Result<()> {
 
     let producer = &mut ctx.accounts.producer;
@@ -46,39 +46,39 @@ pub fn mint_energy(
 
     verify_nonce(
         producer,
-        proof.nonce,
+        report.nonce,
     )?;
 
     verify_timestamp(
-        proof.timestamp,
+        report.device_timestamp,
     )?;
 
     verify_energy(
         producer,
-        proof.energy_wh,
+        report.energy_wh,
     )?;
 
     let reward = math::calculate_reward(
-        proof.energy_wh,
+        report.energy_wh,
         vault.total_supply,
     );
 
     let emission =
         token::calculate_distribution(reward)?;
 
-    producer.nonce = proof.nonce;
-    producer.timestamp = proof.timestamp;
+    producer.nonce = report.nonce;
+    producer.timestamp = report.device_timestamp;
 
     producer.energy_wh = producer
         .energy_wh
-        .checked_add(proof.energy_wh)
+        .checked_add(report.energy_wh)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    producer.signature = proof.signature;
+    producer.signature = report.device_signature;
 
     vault.total_energy_wh = vault
         .total_energy_wh
-        .checked_add(proof.energy_wh as u128)
+        .checked_add(report.energy_wh as u128)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     vault.total_proofs = vault
@@ -92,45 +92,28 @@ pub fn mint_energy(
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     msg!(
-        "Accepted proof {} ({} Wh)",
-        proof.nonce,
-        proof.energy_wh
+        "Accepted report {} ({} Wh)",
+        report.nonce,
+        report.energy_wh
     );
 
-    msg!(
-        "Reward: {}",
-        emission.reward
-    );
+    msg!("Oracle: {}", report.oracle);
 
-    msg!(
-        "Producer: {}",
-        emission.producer
-    );
+    msg!("Device: {}", report.device_id);
 
-    msg!(
-        "Buyback: {}",
-        emission.buyback
-    );
+    msg!("Reward: {}", emission.reward);
 
-    msg!(
-        "Staking: {}",
-        emission.staking
-    );
+    msg!("Producer: {}", emission.producer);
 
-    msg!(
-        "DAO: {}",
-        emission.dao
-    );
+    msg!("Buyback: {}", emission.buyback);
 
-    msg!(
-        "Emergency: {}",
-        emission.emergency
-    );
+    msg!("Staking: {}", emission.staking);
 
-    msg!(
-        "Total supply: {}",
-        vault.total_supply
-    );
+    msg!("DAO: {}", emission.dao);
+
+    msg!("Emergency: {}", emission.emergency);
+
+    msg!("Total supply: {}", vault.total_supply);
 
     Ok(())
 }
