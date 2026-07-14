@@ -18,6 +18,12 @@ pub struct MintEnergy<'info> {
     #[account(mut)]
     pub vault: Account<'info, Vault>,
 
+    #[account(
+        seeds = [b"oracle-registry"],
+        bump
+    )]
+    pub oracle_registry: Account<'info, OracleRegistry>,
+
     #[account(mut)]
     pub authority: Signer<'info>,
 }
@@ -38,6 +44,12 @@ pub fn mint_energy(
 
     let producer = &mut ctx.accounts.producer;
     let vault = &mut ctx.accounts.vault;
+    let registry = &ctx.accounts.oracle_registry;
+
+    require!(
+        registry.contains(&report.oracle),
+        ErrorCode::Unauthorized
+    );
 
     require!(
         producer.authority == ctx.accounts.authority.key(),
@@ -98,21 +110,13 @@ pub fn mint_energy(
     );
 
     msg!("Oracle: {}", report.oracle);
-
     msg!("Device: {}", report.device_id);
-
     msg!("Reward: {}", emission.reward);
-
     msg!("Producer: {}", emission.producer);
-
     msg!("Buyback: {}", emission.buyback);
-
     msg!("Staking: {}", emission.staking);
-
     msg!("DAO: {}", emission.dao);
-
     msg!("Emergency: {}", emission.emergency);
-
     msg!("Total supply: {}", vault.total_supply);
 
     Ok(())
