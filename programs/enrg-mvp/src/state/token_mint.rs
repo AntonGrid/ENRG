@@ -1,16 +1,28 @@
 use anchor_lang::prelude::*;
 
-/// SPL Token Mint configuration.
+/// SPL Token configuration.
 ///
-/// This account stores the protocol mint and
-/// mint authority configuration.
+/// Stores the protocol mint configuration and
+/// all protocol-owned token accounts.
 #[account]
 pub struct TokenMint {
-    /// SPL Mint account.
+    /// SRC Mint.
     pub mint: Pubkey,
 
-    /// PDA authorized to mint SRC tokens.
+    /// PDA allowed to mint SRC.
     pub mint_authority: Pubkey,
+
+    /// Buyback fund ATA.
+    pub buyback_account: Pubkey,
+
+    /// Staking rewards ATA.
+    pub staking_account: Pubkey,
+
+    /// DAO treasury ATA.
+    pub dao_account: Pubkey,
+
+    /// Emergency reserve ATA.
+    pub emergency_account: Pubkey,
 
     /// Token decimals.
     pub decimals: u8,
@@ -23,6 +35,10 @@ impl TokenMint {
     pub const LEN: usize =
         32 + // mint
         32 + // mint_authority
-        1 +  // decimals
+        32 + // buyback_account
+        32 + // staking_account
+        32 + // dao_account
+        32 + // emergency_account
+        1  + // decimals
         1;   // bump
 }
