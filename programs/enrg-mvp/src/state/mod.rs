@@ -5,6 +5,7 @@ pub mod stake;
 pub mod vesting;
 pub mod proof;
 pub mod oracle;
+pub mod token_mint;
 pub mod registry;
 pub mod events;
 
@@ -15,5 +16,6 @@ pub use stake::*;
 pub use vesting::*;
 pub use proof::*;
 pub use oracle::*;
+pub use token_mint::*;
 pub use registry::*;
 pub use events::*;
