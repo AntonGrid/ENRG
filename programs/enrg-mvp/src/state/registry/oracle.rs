@@ -21,4 +21,12 @@ impl OracleRegistry {
     pub const LEN: usize =
         32 +                              // authority
         4 + Self::MAX_ORACLES * 32;       // Vec<Pubkey>
+
+    /// Returns true if the Oracle is trusted.
+    pub fn contains(
+        &self,
+        oracle: &Pubkey,
+    ) -> bool {
+        self.oracles.contains(oracle)
+    }
 }
