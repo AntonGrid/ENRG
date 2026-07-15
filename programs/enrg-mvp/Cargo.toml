@@ -13,3 +13,4 @@ anchor-spl = "1.0.2"
 
 [features]
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
+test = []

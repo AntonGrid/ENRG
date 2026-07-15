@@ -5,15 +5,27 @@
     "start": "node oracle/server.js"
   },
   "dependencies": {
+    "@coral-xyz/anchor": "^0.32.1",
     "@solana/spl-token": "^0.4.14",
     "@solana/web3.js": "^1.98.4",
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
     "better-sqlite3": "^12.11.1",
     "bs58": "^5.0.0",
+    "chai": "^6.2.2",
     "cors": "^2.8.6",
     "express": "^4.22.2",
     "express-validator": "^7.3.2",
+    "mocha": "^11.7.6",
     "node-fetch": "^2.7.0",
+    "ts-mocha": "^11.1.0",
     "tweetnacl": "^1.0.3",
     "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.1",
+    "esm": "^3.2.25",
+    "ts-node": "^10.9.2",
+    "typescript": "^7.0.2"
   }
 }
