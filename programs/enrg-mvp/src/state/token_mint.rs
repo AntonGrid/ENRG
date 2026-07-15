@@ -27,7 +27,13 @@ pub struct TokenMint {
     /// Token decimals.
     pub decimals: u8,
 
-    /// PDA bump.
+    /// SRC Mint PDA bump.
+    pub mint_bump: u8,
+
+    /// Mint Authority PDA bump.
+    pub mint_authority_bump: u8,
+
+    /// TokenMint PDA bump.
     pub bump: u8,
 }
 
@@ -40,5 +46,7 @@ impl TokenMint {
         32 + // dao_account
         32 + // emergency_account
         1  + // decimals
+        1  + // mint_bump
+        1  + // mint_authority_bump
         1;   // bump
 }

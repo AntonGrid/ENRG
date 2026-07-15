@@ -18,55 +18,26 @@ pub struct InitializeVault<'info> {
     #[account(mut)]
     pub authority: Signer<'info>,
 
+    /// SRC Mint reference (for vault initialization).
+    /// Must match the mint stored in TokenMint PDA.
+    #[account(
+        constraint = mint.key() == token_mint.mint @ crate::error::ErrorCode::InvalidParameter
+    )]
     pub mint: Account<'info, Mint>,
+
+    /// TokenMint PDA — protocol token configuration.
+    #[account(
+        seeds = [b"token-mint"],
+        bump = token_mint.bump
+    )]
+    pub token_mint: Account<'info, TokenMint>,
 
     pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]
 pub struct InitializeFunds<'info> {
-    #[account(
-        init,
-        payer = authority,
-        seeds = [b"buyback", mint.key().as_ref()],
-        bump,
-        token::mint = mint,
-        token::authority = vault
-    )]
-    pub buyback_account: Account<'info, TokenAccount>,
-
-    #[account(
-        init,
-        payer = authority,
-        seeds = [b"staking", mint.key().as_ref()],
-        bump,
-        token::mint = mint,
-        token::authority = vault
-    )]
-    pub staking_pool: Account<'info, TokenAccount>,
-
-    #[account(
-        init,
-        payer = authority,
-        seeds = [b"dao", mint.key().as_ref()],
-        bump,
-        token::mint = mint,
-        token::authority = vault
-    )]
-    pub dao_reserve: Account<'info, TokenAccount>,
-
-    #[account(
-        init,
-        payer = authority,
-        seeds = [b"emergency", mint.key().as_ref()],
-        bump,
-        token::mint = mint,
-        token::authority = vault
-    )]
-    pub emergency_fund: Account<'info, TokenAccount>,
-
-    pub mint: Account<'info, Mint>,
-
+    /// Vault PDA — global protocol state and owner of all Token Accounts.
     #[account(
         mut,
         seeds = [b"vault"],
@@ -74,11 +45,69 @@ pub struct InitializeFunds<'info> {
     )]
     pub vault: Account<'info, Vault>,
 
+    /// TokenMint PDA — stores all token configuration addresses.
+    #[account(
+        mut,
+        seeds = [b"token-mint"],
+        bump = token_mint.bump
+    )]
+    pub token_mint: Account<'info, TokenMint>,
+
+    /// SRC Mint.
+    #[account(
+        seeds = [b"src-mint"],
+        bump = token_mint.mint_bump
+    )]
+    pub mint: Account<'info, Mint>,
+
+    /// Vault PDA as token authority for all protocol ATA.
+    /// CHECK: Vault PDA signs via seeds.
+    #[account(
+        seeds = [b"vault"],
+        bump
+    )]
+    pub vault_authority: UncheckedAccount<'info>,
+
+    /// Buyback reserve ATA — owned by Vault PDA.
+    #[account(
+        init,
+        payer = authority,
+        token::mint = mint,
+        token::authority = vault_authority,
+    )]
+    pub buyback_account: Account<'info, TokenAccount>,
+
+    /// Staking rewards ATA — owned by Vault PDA.
+    #[account(
+        init,
+        payer = authority,
+        token::mint = mint,
+        token::authority = vault_authority,
+    )]
+    pub staking_account: Account<'info, TokenAccount>,
+
+    /// DAO treasury ATA — owned by Vault PDA.
+    #[account(
+        init,
+        payer = authority,
+        token::mint = mint,
+        token::authority = vault_authority,
+    )]
+    pub dao_account: Account<'info, TokenAccount>,
+
+    /// Emergency reserve ATA — owned by Vault PDA.
+    #[account(
+        init,
+        payer = authority,
+        token::mint = mint,
+        token::authority = vault_authority,
+    )]
+    pub emergency_account: Account<'info, TokenAccount>,
+
     #[account(mut)]
     pub authority: Signer<'info>,
 
     pub token_program: Program<'info, Token>,
-
     pub system_program: Program<'info, System>,
 }
 
@@ -112,7 +141,15 @@ pub fn initialize_vault(
 }
 
 pub fn initialize_funds(
-    _ctx: Context<InitializeFunds>,
+    ctx: Context<InitializeFunds>,
 ) -> Result<()> {
+    let token_mint = &mut ctx.accounts.token_mint;
+
+    // Save all protocol Token Account addresses into TokenMint PDA
+    token_mint.buyback_account = ctx.accounts.buyback_account.key();
+    token_mint.staking_account = ctx.accounts.staking_account.key();
+    token_mint.dao_account = ctx.accounts.dao_account.key();
+    token_mint.emergency_account = ctx.accounts.emergency_account.key();
+
     Ok(())
 }

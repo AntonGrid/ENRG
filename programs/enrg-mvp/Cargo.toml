@@ -9,7 +9,7 @@ crate-type = ["cdylib", "lib"]
 
 [dependencies]
 anchor-lang = { version = "1.0.3", features = ["init-if-needed"] }
-anchor-spl = "1.0.2"
+anchor-spl = { version = "1.0.3", features = ["token"] }
 
 [features]
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
