@@ -3,8 +3,8 @@ use anchor_spl::token::{Mint, Token, TokenAccount};
 use crate::state::vault::Vault;
 use crate::state::producer::EnergyProducer;
 use crate::state::OracleReport;
-use crate::security::ed25519::verify_oracle_signature;
 use crate::error::ErrorCode;
+use crate::math::calculate_reward;
 
 /// Mint tokens based on verified Oracle report.
 pub fn mint_energy(
@@ -49,7 +49,26 @@ pub fn mint_energy(
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     // Calculate emission
-    let reward = report.energy_wh;
+    let reward = calculate_reward(
+    report.energy_wh,
+    ctx.accounts.vault.total_supply,
+);
+let vault = &mut ctx.accounts.vault;
+
+vault.total_supply = vault
+    .total_supply
+    .checked_add(reward)
+    .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+vault.total_energy_wh = vault
+    .total_energy_wh
+    .checked_add(report.energy_wh as u128)
+    .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+vault.total_proofs = vault
+    .total_proofs
+    .checked_add(1)
+    .ok_or(ErrorCode::ArithmeticOverflow)?;
     let user_amount = reward
         .checked_mul(85)
         .ok_or(ErrorCode::ArithmeticOverflow)?

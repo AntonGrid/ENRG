@@ -29,6 +29,11 @@ pub mod enrg_mvp {
     ) -> Result<()> {
         instructions::initialize::initialize_funds(ctx)
     }
+   pub fn initialize_token(
+    ctx: Context<InitializeToken>,
+    ) -> Result<()> {
+       instructions::initialize_token::initialize_token(ctx)
+    }
 
     pub fn create_producer(
         ctx: Context<CreateProducer>,

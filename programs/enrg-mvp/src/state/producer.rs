@@ -17,9 +17,6 @@ pub struct EnergyProducer {
     /// Timestamp of the last accepted proof.
     pub timestamp: i64,
 
-    /// Last device signature.
-    pub signature: [u8; 64],
-
     /// Initialization flag.
     pub is_initialized: bool,
 
@@ -31,10 +28,9 @@ impl EnergyProducer {
     pub const LEN: usize =
         32 + // authority
         32 + // device_id
-        8 +  // nonce
-        8 +  // energy_wh
-        8 +  // timestamp
-        64 + // signature
-        1 +  // is_initialized
+        8  + // nonce
+        8  + // energy_wh
+        8  + // timestamp
+        1  + // is_initialized
         8;   // max_power_w
 }

@@ -34,7 +34,6 @@ pub fn create_producer(
     producer.energy_wh = 0;
     producer.timestamp = 0;
 
-    producer.signature = [0u8; 64];
 
     producer.is_initialized = true;
     producer.max_power_w = max_power_w;
