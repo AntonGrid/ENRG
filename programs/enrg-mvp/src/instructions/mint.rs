@@ -4,19 +4,30 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount};
 use crate::constants::*;
 use crate::error::ErrorCode;
 use crate::math::calculate_reward;
+use crate::security::verify_ed25519_signature;
 use crate::state::*;
 
 /// Mint SRC tokens based on verified Oracle report.
 ///
-/// Package 2.3
+/// Package 2.4 — Ed25519 integration
 ///
-/// Uses Mint Authority PDA for token::mint_to().
+/// Verifies the device Ed25519 signature before minting.
+/// Uses Solana's native ed25519 program via CPI.
 pub fn mint_energy(
     ctx: Context<MintEnergy>,
     report: OracleReport,
 ) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
     let vault = &mut ctx.accounts.vault;
+
+    // ── Ed25519 signature verification ──
+    let message = report.message_to_sign()?;
+
+    verify_ed25519_signature(
+        &report.device_signature,
+        &report.device_id.to_bytes(),
+        &message,
+    )?;
 
     // ── Proof validation ──
     let clock = Clock::get()?;

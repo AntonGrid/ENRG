@@ -27,3 +27,20 @@ pub struct OracleReport {
     /// Original device signature.
     pub device_signature: [u8; 64],
 }
+
+impl OracleReport {
+    /// Serialize report fields excluding signature.
+    /// This produces the exact message that was signed by the device.
+    pub fn message_to_sign(&self) -> Result<Vec<u8>> {
+        let mut buf = Vec::with_capacity(8 + 8 + 8 + 8);
+
+        // Serialize only the fields the device signs:
+        // device_id + nonce + device_timestamp + energy_wh
+        buf.extend_from_slice(&self.device_id.to_bytes());
+        buf.extend_from_slice(&self.nonce.to_le_bytes());
+        buf.extend_from_slice(&self.device_timestamp.to_le_bytes());
+        buf.extend_from_slice(&self.energy_wh.to_le_bytes());
+
+        Ok(buf)
+    }
+}

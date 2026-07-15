@@ -33,4 +33,6 @@ pub enum ErrorCode {
     InvalidSignatureLength,
     #[msg("Invalid public key length")]
     InvalidPublicKeyLength,
+    #[msg("Ed25519 verification failed")]
+    Ed25519VerificationFailed,
 }
