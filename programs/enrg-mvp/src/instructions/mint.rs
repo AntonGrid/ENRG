@@ -206,6 +206,36 @@ pub fn mint_energy(
         .checked_add(1)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
+    // ── Emit events ──
+    emit!(ProofAccepted {
+        producer: producer.key(),
+        oracle: report.oracle,
+        device_id: report.device_id,
+        nonce: report.nonce,
+        energy_wh: report.energy_wh,
+    });
+
+    emit!(RewardDistributed {
+        producer: producer.key(),
+        reward,
+        buyback: buyback_amount,
+        staking: staking_amount,
+        dao: dao_amount,
+        emergency: emergency_amount,
+    });
+
+    let energy_per_token = crate::math::energy_per_src(vault.total_supply);
+    let supply_fraction = (vault.total_supply as u128)
+        .checked_mul(1_000_000_000_000_000_000u128)
+        .and_then(|v| v.checked_div(MAX_SUPPLY as u128))
+        .unwrap_or(0);
+
+    emit!(EmissionDifficultyChanged {
+        current_supply: vault.total_supply,
+        supply_fraction,
+        energy_per_token,
+    });
+
     msg!(
         "Minted {} SRC (user: {}, buyback: {}, staking: {}, dao: {}, emergency: {})",
         reward,

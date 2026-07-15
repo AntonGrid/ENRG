@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 
 use crate::error::ErrorCode;
-use crate::state::OracleRegistry;
+use crate::state::*;
 
 #[derive(Accounts)]
 pub struct InitializeOracleRegistry<'info> {
@@ -82,6 +82,8 @@ pub fn add_oracle(
 
     registry.oracles.push(oracle);
 
+    emit!(OracleAdded { oracle });
+
     Ok(())
 }
 
@@ -104,6 +106,8 @@ pub fn remove_oracle(
         .ok_or(ErrorCode::NotFound)?;
 
     registry.oracles.remove(index);
+
+    emit!(OracleRemoved { oracle });
 
     Ok(())
 }

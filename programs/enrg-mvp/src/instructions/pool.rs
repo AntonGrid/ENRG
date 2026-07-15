@@ -84,5 +84,10 @@ pub fn join_pool(
 
     pool.producers.push(producer);
 
+    emit!(PoolJoined {
+        pool: pool.key(),
+        producer,
+    });
+
     Ok(())
 }
