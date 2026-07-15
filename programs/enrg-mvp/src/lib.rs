@@ -82,13 +82,6 @@ pub mod enrg_mvp {
         instructions::staking::claim_rewards(ctx)
     }
 
-    pub fn buyback_and_burn(
-        ctx: Context<BuybackBurn>,
-        amount: u64,
-    ) -> Result<()> {
-        instructions::mint::buyback_and_burn(ctx, amount)
-    }
-
     pub fn initialize_founder_vesting(
         ctx: Context<InitializeFounderVesting>,
         total_amount: u64,

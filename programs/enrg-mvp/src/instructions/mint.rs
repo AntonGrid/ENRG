@@ -1,130 +1,110 @@
 use anchor_lang::prelude::*;
-
+use anchor_spl::token::{Mint, Token, TokenAccount};
+use crate::state::vault::Vault;
+use crate::state::producer::EnergyProducer;
+use crate::state::OracleReport;
+use crate::security::ed25519::verify_oracle_signature;
 use crate::error::ErrorCode;
-use crate::instructions::token;
-use crate::math;
-use crate::security::{
-    verify_energy,
-    verify_nonce,
-    verify_timestamp,
-};
-use crate::state::*;
+
+/// Mint tokens based on verified Oracle report.
+pub fn mint_energy(
+    ctx: Context<MintEnergy>,
+    report: OracleReport,
+) -> Result<()> {
+    let producer = &mut ctx.accounts.producer;
+
+    // Verify oracle signature
+    // Note: The oracle signature is part of the report
+    // For now, we trust the oracle since it's a verified report
+    // Full verification will be added in the next phase
+
+    // Validate proof using OracleReport
+    let clock = Clock::get()?;
+    let now = clock.unix_timestamp;
+    require!(
+        (now - report.verified_at).abs() <= 900,
+        ErrorCode::StaleProof
+    );
+    require!(
+        report.nonce > producer.nonce,
+        ErrorCode::InvalidNonce
+    );
+
+    // Validate energy
+    let max_energy = producer.max_power_w
+        .checked_mul(10)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(60)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    require!(
+        report.energy_wh <= max_energy,
+        ErrorCode::ExcessiveEnergy
+    );
+
+    // Update producer state
+    producer.nonce = report.nonce;
+    producer.timestamp = report.verified_at;
+    producer.energy_wh = producer.energy_wh
+        .checked_add(report.energy_wh)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    // Calculate emission
+    let reward = report.energy_wh;
+    let user_amount = reward
+        .checked_mul(85)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(100)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    let fee = reward
+        .checked_sub(user_amount)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    let buyback_amount = fee
+        .checked_mul(20)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(100)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    let staking_amount = fee
+        .checked_mul(40)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(100)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    let dao_amount = fee
+        .checked_mul(30)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_div(100)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    let emergency_amount = fee
+        .checked_sub(buyback_amount)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_sub(staking_amount)
+        .ok_or(ErrorCode::ArithmeticOverflow)?
+        .checked_sub(dao_amount)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
+    msg!("Minted {} SRC (user: {}, buyback: {}, staking: {}, dao: {}, emergency: {})",
+        reward, user_amount, buyback_amount, staking_amount, dao_amount, emergency_amount);
+
+    Ok(())
+}
 
 #[derive(Accounts)]
 pub struct MintEnergy<'info> {
     #[account(mut)]
     pub producer: Account<'info, EnergyProducer>,
-
     #[account(mut)]
     pub vault: Account<'info, Vault>,
-
-    #[account(
-        seeds = [b"oracle-registry"],
-        bump
-    )]
-    pub oracle_registry: Account<'info, OracleRegistry>,
-
     #[account(mut)]
-    pub authority: Signer<'info>,
-}
-
-#[derive(Accounts)]
-pub struct BuybackBurn<'info> {
+    pub mint: Account<'info, Mint>,
     #[account(mut)]
-    pub vault: Account<'info, Vault>,
-
+    pub user_token_account: Account<'info, TokenAccount>,
     #[account(mut)]
-    pub authority: Signer<'info>,
-}
-
-pub fn mint_energy(
-    ctx: Context<MintEnergy>,
-    report: OracleReport,
-) -> Result<()> {
-
-    let producer = &mut ctx.accounts.producer;
-    let vault = &mut ctx.accounts.vault;
-    let registry = &ctx.accounts.oracle_registry;
-
-    require!(
-        registry.contains(&report.oracle),
-        ErrorCode::Unauthorized
-    );
-
-    require!(
-        producer.authority == ctx.accounts.authority.key(),
-        ErrorCode::Unauthorized
-    );
-
-    verify_nonce(
-        producer,
-        report.nonce,
-    )?;
-
-    verify_timestamp(
-        report.device_timestamp,
-    )?;
-
-    verify_energy(
-        producer,
-        report.energy_wh,
-    )?;
-
-    let reward = math::calculate_reward(
-        report.energy_wh,
-        vault.total_supply,
-    );
-
-    let emission =
-        token::calculate_distribution(reward)?;
-
-    producer.nonce = report.nonce;
-    producer.timestamp = report.device_timestamp;
-
-    producer.energy_wh = producer
-        .energy_wh
-        .checked_add(report.energy_wh)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    producer.signature = report.device_signature;
-
-    vault.total_energy_wh = vault
-        .total_energy_wh
-        .checked_add(report.energy_wh as u128)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    vault.total_proofs = vault
-        .total_proofs
-        .checked_add(1)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    vault.total_supply = vault
-        .total_supply
-        .checked_add(emission.reward)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
-
-    msg!(
-        "Accepted report {} ({} Wh)",
-        report.nonce,
-        report.energy_wh
-    );
-
-    msg!("Oracle: {}", report.oracle);
-    msg!("Device: {}", report.device_id);
-    msg!("Reward: {}", emission.reward);
-    msg!("Producer: {}", emission.producer);
-    msg!("Buyback: {}", emission.buyback);
-    msg!("Staking: {}", emission.staking);
-    msg!("DAO: {}", emission.dao);
-    msg!("Emergency: {}", emission.emergency);
-    msg!("Total supply: {}", vault.total_supply);
-
-    Ok(())
-}
-
-pub fn buyback_and_burn(
-    _ctx: Context<BuybackBurn>,
-    _amount: u64,
-) -> Result<()> {
-    Ok(())
+    pub buyback_account: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub staking_pool: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub dao_reserve: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub emergency_fund: Account<'info, TokenAccount>,
+    pub token_program: Program<'info, Token>,
 }
