@@ -2,75 +2,35 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum ErrorCode {
-    #[msg("Unauthorized signer")]
+    // Protocol errors
+    #[msg("Unauthorized access")]
     Unauthorized,
-
-    #[msg("Proof is too old")]
-    StaleProof,
-
-    #[msg("Proof timestamp is in the future")]
-    FutureProof,
-
-    #[msg("Proof has already been processed")]
-    DuplicateProof,
-
-    #[msg("Invalid Ed25519 signature")]
-    InvalidSignature,
-
-    #[msg("Energy reading exceeds maximum allowed for device power rating")]
-    ExcessiveEnergy,
-
-    #[msg("Nonce must be greater than previous nonce")]
+    #[msg("Invalid nonce")]
     InvalidNonce,
-
-    #[msg("Device is not active")]
-    DeviceNotActive,
-
-    #[msg("Device is not provisioned")]
-    DeviceNotProvisioned,
-
-    #[msg("Policy rejected proof")]
-    PolicyRejected,
-
-    #[msg("Insufficient stake to withdraw")]
+    #[msg("Stale proof")]
+    StaleProof,
+    #[msg("Excessive energy")]
+    ExcessiveEnergy,
+    #[msg("Insufficient stake")]
     InsufficientStake,
-
-    #[msg("No staked amount or staking pool empty")]
-    NoStake,
-
-    #[msg("1-year cliff period has not passed")]
-    CliffNotReached,
-
-    #[msg("No vested tokens available to claim at this time")]
+    #[msg("Nothing to claim")]
     NothingToClaim,
-
-    #[msg("Arithmetic overflow occurred")]
-    ArithmeticOverflow,
-
-    #[msg("Mint amount must be greater than zero")]
-    ZeroAmountMint,
-
+    #[msg("Already in pool")]
+    AlreadyInPool,
     #[msg("Invalid parameter")]
     InvalidParameter,
-
-    #[msg("Excessive energy required")]
-    ExcessiveEnergyRequired,
-
-    #[msg("Insufficient energy")]
-    InsufficientEnergy,
-
-    #[msg("Maximum supply reached")]
-    MaxSupplyReached,
-
-    #[msg("Emission limit reached")]
-    EmissionLimitReached,
-
-    #[msg("Producer already belongs to pool")]
-    AlreadyInPool,
-
-    #[msg("Object already exists")]
-    AlreadyExists,
-
-    #[msg("Object not found")]
+    #[msg("Not found")]
     NotFound,
+    #[msg("Already exists")]
+    AlreadyExists,
+    #[msg("Zero amount mint")]
+    ZeroAmountMint,
+    #[msg("Arithmetic overflow")]
+    ArithmeticOverflow,
+
+    // Ed25519 verification errors
+    #[msg("Invalid signature length")]
+    InvalidSignatureLength,
+    #[msg("Invalid public key length")]
+    InvalidPublicKeyLength,
 }
