@@ -29,10 +29,11 @@ pub mod enrg_mvp {
     ) -> Result<()> {
         instructions::initialize::initialize_funds(ctx)
     }
-   pub fn initialize_token(
-    ctx: Context<InitializeToken>,
+
+    pub fn initialize_token(
+        ctx: Context<InitializeToken>,
     ) -> Result<()> {
-       instructions::initialize_token::initialize_token(ctx)
+        instructions::initialize_token::initialize_token(ctx)
     }
 
     pub fn create_producer(
@@ -40,11 +41,7 @@ pub mod enrg_mvp {
         device_id: Pubkey,
         max_power_w: u64,
     ) -> Result<()> {
-        instructions::producer::create_producer(
-            ctx,
-            device_id,
-            max_power_w,
-        )
+        instructions::producer::create_producer(ctx, device_id, max_power_w)
     }
 
     pub fn mint_energy(
@@ -91,10 +88,7 @@ pub mod enrg_mvp {
         ctx: Context<InitializeFounderVesting>,
         total_amount: u64,
     ) -> Result<()> {
-        instructions::vesting::initialize_founder_vesting(
-            ctx,
-            total_amount,
-        )
+        instructions::vesting::initialize_founder_vesting(ctx, total_amount)
     }
 
     pub fn claim_vested(
@@ -113,19 +107,20 @@ pub mod enrg_mvp {
         ctx: Context<AddOracle>,
         oracle: Pubkey,
     ) -> Result<()> {
-        instructions::oracle_registry::add_oracle(
-            ctx,
-            oracle,
-        )
+        instructions::oracle_registry::add_oracle(ctx, oracle)
     }
 
     pub fn remove_oracle(
         ctx: Context<RemoveOracle>,
         oracle: Pubkey,
     ) -> Result<()> {
-        instructions::oracle_registry::remove_oracle(
-            ctx,
-            oracle,
-        )
+        instructions::oracle_registry::remove_oracle(ctx, oracle)
+    }
+
+    pub fn buyback_and_burn(
+        ctx: Context<BuybackAndBurn>,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::buyback::buyback_and_burn(ctx, amount)
     }
 }

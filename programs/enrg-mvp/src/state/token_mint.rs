@@ -33,6 +33,9 @@ pub struct TokenMint {
     /// Mint Authority PDA bump.
     pub mint_authority_bump: u8,
 
+    /// Buyback Authority PDA bump.
+    pub buyback_authority_bump: u8,
+
     /// TokenMint PDA bump.
     pub bump: u8,
 }
@@ -48,5 +51,6 @@ impl TokenMint {
         1  + // decimals
         1  + // mint_bump
         1  + // mint_authority_bump
+        1  + // buyback_authority_bump
         1;   // bump
 }

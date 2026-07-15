@@ -52,3 +52,14 @@ pub struct EmissionDifficultyChanged {
     /// Current energy required for one SRC token.
     pub energy_per_token: u128,
 }
+
+/// Emitted after tokens are burned from the buyback fund.
+#[event]
+pub struct TokensBurned {
+    /// Amount of SRC burned.
+    pub amount: u64,
+    /// Remaining balance in buyback fund.
+    pub remaining: u64,
+    /// New total supply after burn.
+    pub total_supply: u64,
+}
