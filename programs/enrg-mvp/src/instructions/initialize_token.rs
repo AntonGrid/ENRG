@@ -40,20 +40,14 @@ pub struct InitializeToken<'info> {
     )]
     pub mint: Account<'info, Mint>,
 
-    /// Mint Authority PDA — sole signer for token::mint_to().
-    /// This PDA:
-    /// - does NOT hold tokens
-    /// - does NOT own Treasury
-    /// - is NOT used as protocol authority
-    /// - is ONLY a PDA signer for emission
+    /// CHECK: Mint Authority PDA is used solely as a signer for token::mint_to().
+    /// Security is enforced by seed derivation matching TokenMint.mint_authority.
     #[account(
-        init,
-        payer = authority,
+        mut,
         seeds = [b"mint-authority"],
         bump,
-        space = 8, // no data needed, just a PDA signer
     )]
-    pub mint_authority: Account<'info, MintAuthority>,
+    pub mint_authority: UncheckedAccount<'info>,
 
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -61,21 +55,6 @@ pub struct InitializeToken<'info> {
     pub token_program: Program<'info, Token>,
     pub system_program: Program<'info, System>,
     pub rent: Sysvar<'info, Rent>,
-}
-
-/// Mint Authority storage.
-///
-/// This account exists only to be a PDA signer.
-/// It stores no meaningful data — the bump seed
-/// is what makes it a valid PDA signer.
-#[account]
-pub struct MintAuthority {
-    /// Bump seed for PDA derivation.
-    pub bump: u8,
-}
-
-impl MintAuthority {
-    pub const LEN: usize = 1; // bump
 }
 
 pub fn initialize_token(ctx: Context<InitializeToken>) -> Result<()> {
@@ -92,10 +71,6 @@ pub fn initialize_token(ctx: Context<InitializeToken>) -> Result<()> {
     token_mint.mint_bump = mint_bump;
     token_mint.mint_authority_bump = mint_authority_bump;
     token_mint.bump = token_mint_bump;
-
-    // Store bump in MintAuthority PDA for security
-    let mint_authority = &mut ctx.accounts.mint_authority;
-    mint_authority.bump = mint_authority_bump;
 
     // Token Accounts (buyback, staking, dao, emergency)
     // are initialized separately in Package 2.2 (InitializeFunds)

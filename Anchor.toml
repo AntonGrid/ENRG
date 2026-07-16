@@ -3,7 +3,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-enrg_mvp = "2cH1gexK4XiYHCcwiq1CnfzuLxgmkofiFNgNzYbEnAhF"
+enrg_mvp = "8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a"
 
 [programs.devnet]
 enrg_mvp = "8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a"

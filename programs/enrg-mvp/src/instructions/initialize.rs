@@ -1,7 +1,6 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
-use crate::constants::*;
 use crate::state::*;
 
 #[derive(Accounts)]
@@ -68,40 +67,21 @@ pub struct InitializeFunds<'info> {
     )]
     pub vault_authority: UncheckedAccount<'info>,
 
-    /// Buyback reserve ATA — owned by Vault PDA.
-    #[account(
-        init,
-        payer = authority,
-        token::mint = mint,
-        token::authority = vault_authority,
-    )]
+    /// Buyback ATA — owned by Vault PDA.
+    /// Must be pre-created before calling this instruction.
+    #[account(mut)]
     pub buyback_account: Account<'info, TokenAccount>,
 
     /// Staking rewards ATA — owned by Vault PDA.
-    #[account(
-        init,
-        payer = authority,
-        token::mint = mint,
-        token::authority = vault_authority,
-    )]
+    #[account(mut)]
     pub staking_account: Account<'info, TokenAccount>,
 
     /// DAO treasury ATA — owned by Vault PDA.
-    #[account(
-        init,
-        payer = authority,
-        token::mint = mint,
-        token::authority = vault_authority,
-    )]
+    #[account(mut)]
     pub dao_account: Account<'info, TokenAccount>,
 
     /// Emergency reserve ATA — owned by Vault PDA.
-    #[account(
-        init,
-        payer = authority,
-        token::mint = mint,
-        token::authority = vault_authority,
-    )]
+    #[account(mut)]
     pub emergency_account: Account<'info, TokenAccount>,
 
     #[account(mut)]
@@ -118,24 +98,7 @@ pub fn initialize_vault(
 
     if vault.deployer == Pubkey::default() {
         vault.deployer = ctx.accounts.authority.key();
-    } else {
-        require_keys_eq!(
-            vault.deployer,
-            ctx.accounts.authority.key()
-        );
     }
-
-    vault.authority = ctx.accounts.authority.key();
-
-    vault.protocol_version = 1;
-
-    vault.total_supply = 0;
-    vault.max_supply = MAX_SUPPLY;
-    vault.emission_k = EMISSION_DIFFICULTY_K;
-
-    vault.total_energy_wh = 0;
-    vault.total_producers = 0;
-    vault.total_proofs = 0;
 
     Ok(())
 }
