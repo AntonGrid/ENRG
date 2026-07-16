@@ -37,7 +37,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     );
     // verify_timestamp(now, report.verified_at)?; // включим ближе к mainnet
 
-    // Nonce validation (MVP: неубывающий, защищает от отката назад).
+    // Nonce validation (near-prod: строгий рост).
     msg!(
         "DEBUG NONCE report={} producer={}",
         report.nonce,
@@ -73,8 +73,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     );
 
     // Никаких "пустых" минтов: отчёты, дающие 0 SRC, отклоняем.
-    // TEMP: disabled ZeroAmountMint for tests
-    // require!(reward > 0, ErrorCode::ZeroAmountMint);
+    require!(reward > 0, ErrorCode::ZeroAmountMint);
 
     // ── Check supply cap ──
     let new_supply = vault
