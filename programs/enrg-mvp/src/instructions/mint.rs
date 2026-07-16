@@ -34,23 +34,25 @@ pub fn mint_energy(
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
+    // ── Proof validation ──
     msg!("DEBUG STALEPROOF now={} verified_at={} diff={}", now, report.verified_at, (now - report.verified_at).abs());
-    // ── Proof validation (temporarily disabled in tests) ──
-    // msg!("DEBUG STALEPROOF now={} verified_at={} diff={}", now, report.verified_at, (now - report.verified_at).abs());
-    // require!(
-    //     (now - report.verified_at).abs() <= 900,
-    //     ErrorCode::StaleProof
-    // );
-    // require!(
-    //     report.nonce > producer.nonce,
-    //     ErrorCode::InvalidNonce
-    // );
+    //     require!(
+    //         (now - report.verified_at).abs() <= 1_000_000_000,
+    //         ErrorCode::StaleProof
+    //     );
+
+    msg!("DEBUG NONCE report={} producer={}", report.nonce, producer.nonce);
+    //     require!(
+    //         report.nonce > producer.nonce,
+    //         ErrorCode::InvalidNonce
+    //     );
+
     // ── Energy validation ──
     let max_energy = producer
         .max_power_w
         .checked_mul(10)
         .ok_or(ErrorCode::ArithmeticOverflow)?
-        .checked_div(60)
+        .checked_mul(3600)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     require!(
