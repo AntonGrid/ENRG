@@ -8,6 +8,10 @@ pub fn emission_share(
 }
 
 /// Returns current asymptotic difficulty coefficient.
+///
+/// difficulty(share) = K^share, где:
+/// - K = EMISSION_DIFFICULTY_K
+/// - share ∈ [0, 1]
 pub fn emission_difficulty(
     total_supply: u64,
 ) -> f64 {
@@ -16,7 +20,7 @@ pub fn emission_difficulty(
     (EMISSION_DIFFICULTY_K as f64).powf(share)
 }
 
-/// Returns Wh required for one SRC.
+/// Returns Wh required for one SRC unit (in SRC_BASIS terms).
 pub fn energy_per_src(
     total_supply: u64,
 ) -> u128 {
@@ -25,7 +29,7 @@ pub fn energy_per_src(
         as u128
 }
 
-/// Converts verified energy into SRC.
+/// Converts verified energy into SRC units (in SRC_BASIS).
 pub fn reward_for_energy(
     energy_wh: u64,
     energy_per_src: u128,

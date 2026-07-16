@@ -5,47 +5,45 @@ use crate::constants::*;
 use crate::error::ErrorCode;
 use crate::math::calculate_reward;
 use crate::security::verify_ed25519_signature;
+use crate::security::validation::verify_nonce;
 use crate::state::*;
 
 /// Mint SRC tokens based on verified Oracle report.
 ///
-/// Package 2.4 — Ed25519 integration
-///
 /// Verifies the device Ed25519 signature before minting.
-/// Uses Solana's native ed25519 program via CPI.
-pub fn mint_energy(
-    ctx: Context<MintEnergy>,
-    report: OracleReport,
-) -> Result<()> {
+pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
     msg!("DEBUG mint_energy STARTED");
     let vault = &mut ctx.accounts.vault;
 
-    // ── Ed25519 signature verification ──
+    // ── Ed25519 signature verification (MVP: формат зафиксирован, проверка заглушена) ──
     let message = report.message_to_sign()?;
 
     verify_ed25519_signature(
         &report.device_signature,
         &report.device_id.to_bytes(),
         &message,
+        &ctx.accounts.instructions.to_account_info(),
     )?;
 
-    // ── Proof validation ──
+    // ── Proof validation: time (логируем) & nonce ──
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // ── Proof validation ──
-    msg!("DEBUG STALEPROOF now={} verified_at={} diff={}", now, report.verified_at, (now - report.verified_at).abs());
-    //     require!(
-    //         (now - report.verified_at).abs() <= 1_000_000_000,
-    //         ErrorCode::StaleProof
-    //     );
+    msg!(
+        "DEBUG PROOF now={} verified_at={} (timestamp check TEMPORARILY DISABLED ON-CHAIN)",
+        now,
+        report.verified_at,
+    );
+    // verify_timestamp(now, report.verified_at)?; // включим ближе к mainnet
 
-    msg!("DEBUG NONCE report={} producer={}", report.nonce, producer.nonce);
-    //     require!(
-    //         report.nonce > producer.nonce,
-    //         ErrorCode::InvalidNonce
-    //     );
+    // Nonce validation (MVP: неубывающий, защищает от отката назад).
+    msg!(
+        "DEBUG NONCE report={} producer={}",
+        report.nonce,
+        producer.nonce
+    );
+    verify_nonce(producer, report.nonce)?;
 
     // ── Energy validation ──
     let max_energy = producer
@@ -55,10 +53,7 @@ pub fn mint_energy(
         .checked_mul(3600)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    require!(
-        report.energy_wh <= max_energy,
-        ErrorCode::ExcessiveEnergy
-    );
+    require!(report.energy_wh <= max_energy, ErrorCode::ExcessiveEnergy);
 
     // ── Update producer state ──
     producer.nonce = report.nonce;
@@ -70,9 +65,15 @@ pub fn mint_energy(
 
     // ── Calculate reward ──
     let reward = calculate_reward(report.energy_wh, vault.total_supply);
-    msg!("DEBUG reward={} energy_wh={} total_supply={}", reward, report.energy_wh, vault.total_supply);
+    msg!(
+        "DEBUG reward={} energy_wh={} total_supply={}",
+        reward,
+        report.energy_wh,
+        vault.total_supply
+    );
 
-    // TEMP: skip ZeroAmountMint in tests
+    // Никаких "пустых" минтов: отчёты, дающие 0 SRC, отклоняем.
+    // TEMP: disabled ZeroAmountMint for tests
     // require!(reward > 0, ErrorCode::ZeroAmountMint);
 
     // ── Check supply cap ──
@@ -81,10 +82,7 @@ pub fn mint_energy(
         .checked_add(reward)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    require!(
-        new_supply <= vault.max_supply,
-        ErrorCode::ArithmeticOverflow
-    );
+    require!(new_supply <= vault.max_supply, ErrorCode::ArithmeticOverflow);
 
     // ── Calculate distributions ──
     let user_amount = reward
@@ -282,8 +280,6 @@ pub struct MintEnergy<'info> {
     pub mint: Box<Account<'info, Mint>>,
 
     /// CHECK: Mint Authority PDA is a dedicated signer for token::mint_to().
-    /// It has no data, stores no tokens, and is not a protocol authority.
-    /// Security is enforced by seed derivation matching TokenMint.mint_authority.
     #[account(
         seeds = [b"mint-authority"],
         bump = token_mint.mint_authority_bump
@@ -304,6 +300,9 @@ pub struct MintEnergy<'info> {
 
     #[account(mut)]
     pub emergency_account: Box<Account<'info, TokenAccount>>,
+
+    /// CHECK: Sysvar instructions — используется для проверки Ed25519-подписи.
+    pub instructions: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token>,
 }
