@@ -1,8 +1,10 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
+use crate::constants::*;
 use crate::state::*;
 
+/// Инициализация глобального Vault PDA — хранилища экономики протокола.
 #[derive(Accounts)]
 pub struct InitializeVault<'info> {
     #[account(
@@ -34,9 +36,10 @@ pub struct InitializeVault<'info> {
     pub system_program: Program<'info, System>,
 }
 
+/// Инициализация адресов фондов в TokenMint PDA.
 #[derive(Accounts)]
 pub struct InitializeFunds<'info> {
-    /// Vault PDA — global protocol state and owner of all Token Accounts.
+    /// Vault PDA — глобальное состояние протокола и владелец всех Token Accounts.
     #[account(
         mut,
         seeds = [b"vault"],
@@ -44,7 +47,7 @@ pub struct InitializeFunds<'info> {
     )]
     pub vault: Account<'info, Vault>,
 
-    /// TokenMint PDA — stores all token configuration addresses.
+    /// TokenMint PDA — хранит все конфигурационные адреса токена.
     #[account(
         mut,
         seeds = [b"token-mint"],
@@ -59,28 +62,28 @@ pub struct InitializeFunds<'info> {
     )]
     pub mint: Account<'info, Mint>,
 
-    /// Vault PDA as token authority for all protocol ATA.
-    /// CHECK: Vault PDA signs via seeds.
+    /// Vault PDA как токенный авторити для всех протокольных ATA.
+    /// CHECK: Vault PDA подписывает через seeds.
     #[account(
         seeds = [b"vault"],
         bump
     )]
     pub vault_authority: UncheckedAccount<'info>,
 
-    /// Buyback ATA — owned by Vault PDA.
-    /// Must be pre-created before calling this instruction.
+    /// Buyback ATA — принадлежит Vault PDA.
+    /// Должен быть создан заранее.
     #[account(mut)]
     pub buyback_account: Account<'info, TokenAccount>,
 
-    /// Staking rewards ATA — owned by Vault PDA.
+    /// Staking rewards ATA — принадлежит Vault PDA.
     #[account(mut)]
     pub staking_account: Account<'info, TokenAccount>,
 
-    /// DAO treasury ATA — owned by Vault PDA.
+    /// DAO treasury ATA — принадлежит Vault PDA.
     #[account(mut)]
     pub dao_account: Account<'info, TokenAccount>,
 
-    /// Emergency reserve ATA — owned by Vault PDA.
+    /// Emergency reserve ATA — принадлежит Vault PDA.
     #[account(mut)]
     pub emergency_account: Account<'info, TokenAccount>,
 
@@ -91,24 +94,33 @@ pub struct InitializeFunds<'info> {
     pub system_program: Program<'info, System>,
 }
 
-pub fn initialize_vault(
-    ctx: Context<InitializeVault>,
-) -> Result<()> {
+pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
     let vault = &mut ctx.accounts.vault;
 
+    // Аккаунт только что создан (все поля в нулях) — настраиваем дефолтную экономику.
     if vault.deployer == Pubkey::default() {
         vault.deployer = ctx.accounts.authority.key();
+        vault.authority = ctx.accounts.authority.key();
+
+        vault.protocol_version = 1;
+
+        vault.total_supply = 0;
+        vault.max_supply = MAX_SUPPLY;
+
+        vault.emission_k = EMISSION_DIFFICULTY_K;
+
+        vault.total_energy_wh = 0;
+        vault.total_producers = 0;
+        vault.total_proofs = 0;
     }
 
     Ok(())
 }
 
-pub fn initialize_funds(
-    ctx: Context<InitializeFunds>,
-) -> Result<()> {
+pub fn initialize_funds(ctx: Context<InitializeFunds>) -> Result<()> {
     let token_mint = &mut ctx.accounts.token_mint;
 
-    // Save all protocol Token Account addresses into TokenMint PDA
+    // Сохраняем все адреса фондов в TokenMint PDA
     token_mint.buyback_account = ctx.accounts.buyback_account.key();
     token_mint.staking_account = ctx.accounts.staking_account.key();
     token_mint.dao_account = ctx.accounts.dao_account.key();

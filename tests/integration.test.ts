@@ -6,6 +6,8 @@ import {
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
   SYSVAR_INSTRUCTIONS_PUBKEY,
+  Ed25519Program,
+  Transaction,
 } from "@solana/web3.js";
 import {
   TOKEN_PROGRAM_ID,
@@ -289,22 +291,30 @@ describe("ENRG Protocol — Core Flow", () => {
 
     // Подписываем Ed25519-ключом устройства (реальная подпись, как в проде)
     const signature = nacl.sign.detached(message, deviceKeypair.secretKey);
-
-    // ВАЖНО: на ончейне подпись пока не проверяется, но формат и данные уже зафиксированы.
     const sigArray = Array.from(signature);
 
-    const mintSig = await program.methods
-      .mintEnergy({
-        report: {
-          oracle: oracleKeypair.publicKey,
-          deviceId: deviceId,
-          nonce,
-          deviceTimestamp: now,
-          verifiedAt: now,
-          energyWh,
-          deviceSignature: sigArray,
-        },
-      })
+    const pubkeyBytes = deviceKeypair.publicKey;
+
+    // 1) ed25519 precompile instruction
+    const ed25519Ix = Ed25519Program.createInstructionWithPublicKey({
+      publicKey: pubkeyBytes,
+      message,
+      signature,
+    });
+
+    // 2) Собираем OracleReport как единый аргумент, без вложенного { report: ... }
+    const report = {
+      oracle: oracleKeypair.publicKey,
+      deviceId: deviceId,
+      nonce,
+      deviceTimestamp: now,
+      verifiedAt: now,
+      energyWh,
+      deviceSignature: sigArray,
+    };
+
+    const mintIx = await program.methods
+      .mintEnergy(report)
       .accounts({
         producer: producerPda,
         vault: vaultPda,
@@ -319,8 +329,12 @@ describe("ENRG Protocol — Core Flow", () => {
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
         tokenProgram: TOKEN_PROGRAM_ID,
       })
-      .rpc();
+      .instruction();
 
-    console.log("Energy Minted:", mintSig);
+    // 3) Одна транзакция: сначала ed25519, потом mintEnergy
+    const tx = new Transaction().add(ed25519Ix, mintIx);
+
+    const txSig2 = await provider.sendAndConfirm(tx, []);
+    console.log("Energy Minted tx:", txSig2);
   });
 });
