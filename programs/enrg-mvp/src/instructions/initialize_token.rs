@@ -11,12 +11,13 @@ use crate::state::TokenMint;
 /// Creates:
 /// - SRC Mint (SPL Token Mint)
 /// - Mint Authority PDA (dedicated mint-to signer)
+/// - Fund-buyback PDA (dedicated authority for buyback Account)
 /// - TokenMint PDA (configuration storage)
 ///
 /// Mint Authority PDA has ONLY one responsibility:
 /// executing token::mint_to().
-/// It does NOT hold tokens, does NOT own Treasury,
-/// does NOT own Token Accounts.
+/// Fund-buyback PDA has ONLY one responsibility:
+/// signing burn() from the buyback account.
 #[derive(Accounts)]
 pub struct InitializeToken<'info> {
     /// TokenMint PDA — stores all token configuration.
@@ -41,13 +42,21 @@ pub struct InitializeToken<'info> {
     pub mint: Account<'info, Mint>,
 
     /// CHECK: Mint Authority PDA is used solely as a signer for token::mint_to().
-    /// Security is enforced by seed derivation matching TokenMint.mint_authority.
     #[account(
         mut,
         seeds = [b"mint-authority"],
         bump,
     )]
     pub mint_authority: UncheckedAccount<'info>,
+
+    /// CHECK: Fund-buyback PDA signs for burning tokens from buyback_account.
+    /// Seeds: ["fund-buyback"]. Bump stored in TokenMint.buyback_authority_bump.
+    #[account(
+        mut,
+        seeds = [b"fund-buyback"],
+        bump,
+    )]
+    pub buyback_authority: UncheckedAccount<'info>,
 
     #[account(mut)]
     pub authority: Signer<'info>,
@@ -62,6 +71,7 @@ pub fn initialize_token(ctx: Context<InitializeToken>) -> Result<()> {
 
     let mint_bump = ctx.bumps.mint;
     let mint_authority_bump = ctx.bumps.mint_authority;
+    let buyback_authority_bump = ctx.bumps.buyback_authority;
     let token_mint_bump = ctx.bumps.token_mint;
 
     // Store all token configuration
@@ -70,11 +80,12 @@ pub fn initialize_token(ctx: Context<InitializeToken>) -> Result<()> {
     token_mint.decimals = SRC_DECIMALS;
     token_mint.mint_bump = mint_bump;
     token_mint.mint_authority_bump = mint_authority_bump;
+    token_mint.buyback_authority_bump = buyback_authority_bump;
     token_mint.bump = token_mint_bump;
 
     // Token Accounts (buyback, staking, dao, emergency)
     // are initialized separately in Package 2.2 (InitializeFunds)
-    // with Vault PDA as their token::authority.
+    // with their respective fund PDAs as token::authority.
     token_mint.buyback_account = Pubkey::default();
     token_mint.staking_account = Pubkey::default();
     token_mint.dao_account = Pubkey::default();

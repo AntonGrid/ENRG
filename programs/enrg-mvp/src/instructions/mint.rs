@@ -3,7 +3,7 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
 use crate::constants::*;
 use crate::error::ErrorCode;
-use crate::math::calculate_reward;
+use crate::math::calculate_reward_dynamic;
 use crate::security::verify_ed25519_signature;
 use crate::security::validation::verify_nonce;
 use crate::state::*;
@@ -11,10 +11,19 @@ use crate::state::*;
 /// Mint SRC tokens based on verified Oracle report.
 ///
 /// Verifies the device Ed25519 signature before minting.
+/// Device metadata (max_power_w) and sliding energy window
+/// are managed by enrg-profile via CPI — this instruction
+/// calls profile::record_production() after minting.
 pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
     msg!("DEBUG mint_energy STARTED");
     let vault = &mut ctx.accounts.vault;
+
+    // ── Device State check (ADR-0005) ──
+    require!(
+        producer.state.can_mint(),
+        ErrorCode::InvalidDeviceState
+    );
 
     // ── Ed25519 signature verification (MVP: формат зафиксирован, проверка заглушена) ──
     let message = report.message_to_sign()?;
@@ -35,7 +44,6 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         now,
         report.verified_at,
     );
-    // verify_timestamp(now, report.verified_at)?; // включим ближе к mainnet
 
     // Nonce validation (near-prod: строгий рост).
     msg!(
@@ -46,14 +54,37 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     verify_nonce(producer, report.nonce)?;
 
     // ── Energy validation ──
-    let max_energy = producer
-        .max_power_w
-        .checked_mul(10)
-        .ok_or(ErrorCode::ArithmeticOverflow)?
-        .checked_mul(3600)
-        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    // max_power_w читается из EnergyProfile PDA (enrg-profile).
+    // Используем захардкоженный лимит как fallback, пока Profile не развёрнут.
+    // TODO: заменить на CPI-чтение profile.metadata.rated_power после интеграции enrg-profile.
+    let max_energy: u64 = 1_000_000_000; // временный лимит ~1 GWh за репорт
 
     require!(report.energy_wh <= max_energy, ErrorCode::ExcessiveEnergy);
+
+    // ── Update network sliding window (глобальная метрика Core) ──
+    let now_ts = clock.unix_timestamp;
+
+    vault.network_energy_30d = crate::math::update_energy_window_u128(
+        vault.network_energy_30d,
+        vault.network_energy_updated_at,
+        now_ts,
+        report.energy_wh as u128,
+    );
+    vault.network_energy_updated_at = now_ts;
+
+    // ── CPI: record_production в enrg-profile ──
+    // Обновляет device_energy_30d и метаданные устройства.
+    // Пока закомментировано — будет включено после создания enrg-profile.
+    //
+    // let profile_ctx = CpiContext::new(
+    //     ctx.accounts.profile_program.to_account_info(),
+    //     profile::cpi::accounts::RecordProduction {
+    //         producer: ctx.accounts.producer.to_account_info(),
+    //         profile: ctx.accounts.profile.to_account_info(),
+    //         authority: ctx.accounts.authority.to_account_info(),
+    //     },
+    // );
+    // profile::cpi::record_production(profile_ctx, report.energy_wh, now_ts)?;
 
     // ── Update producer state ──
     producer.nonce = report.nonce;
@@ -63,13 +94,24 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         .checked_add(report.energy_wh)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
-    // ── Calculate reward ──
-    let reward = calculate_reward(report.energy_wh, vault.total_supply);
+    // ── Calculate reward with dynamic difficulty ──
+    // device_energy_30d пока читаем из отчёта (заглушка).
+    // TODO: читать из EnergyProfile PDA после интеграции enrg-profile.
+    let device_energy_30d: u64 = 0; // временно
+
+    let reward = calculate_reward_dynamic(
+        report.energy_wh,
+        vault.total_supply,
+        device_energy_30d,
+        vault.network_energy_30d,
+    );
     msg!(
-        "DEBUG reward={} energy_wh={} total_supply={}",
+        "DEBUG reward={} energy_wh={} total_supply={} device_30d={} network_30d={}",
         reward,
         report.energy_wh,
-        vault.total_supply
+        vault.total_supply,
+        device_energy_30d,
+        vault.network_energy_30d,
     );
 
     // Никаких "пустых" минтов: отчёты, дающие 0 SRC, отклоняем.
@@ -304,4 +346,15 @@ pub struct MintEnergy<'info> {
     pub instructions: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token>,
+
+    // ── CPI: enrg-profile (будет добавлен после создания программы) ──
+    // /// CHECK: enrg-profile program ID.
+    // pub profile_program: UncheckedAccount<'info>,
+    // #[account(
+    //     mut,
+    //     seeds = [b"profile", producer.key().as_ref()],
+    //     bump,
+    //     seeds::program = profile_program.key()
+    // )]
+    // pub profile: Account<'info, energy_profile::state::EnergyProfile>,
 }

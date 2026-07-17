@@ -1,21 +1,22 @@
+pub mod buyback;
+pub mod device_lifecycle;
+pub mod init_config;
 pub mod initialize;
 pub mod initialize_token;
-pub mod init_config;
 pub mod mint;
 pub mod oracle_registry;
 pub mod pool;
 pub mod producer;
 pub mod staking;
 pub mod vesting;
-pub mod buyback;
-
+pub use buyback::*;
+pub use device_lifecycle::*;
+pub use init_config::*;
 pub use initialize::*;
 pub use initialize_token::*;
-pub use init_config::*;
 pub use mint::*;
 pub use oracle_registry::*;
 pub use pool::*;
 pub use producer::*;
 pub use staking::*;
 pub use vesting::*;
-pub use buyback::*;

@@ -37,6 +37,13 @@ pub struct Vault {
 
     /// Total accepted proofs.
     pub total_proofs: u64,
+
+    /// Sum of all device energy for last 30 days (Wh).
+    /// Used for dynamic difficulty calculation.
+    pub network_energy_30d: u128,
+
+    /// Unix timestamp of the last network energy update.
+    pub network_energy_updated_at: i64,
 }
 
 impl Vault {
@@ -49,7 +56,9 @@ impl Vault {
         8  + // emission_k
         16 + // total_energy_wh
         8  + // total_producers
-        8;   // total_proofs
+        8  + // total_proofs
+        16 + // network_energy_30d
+        8;   // network_energy_updated_at
 }
 
 impl Default for Vault {
@@ -57,17 +66,15 @@ impl Default for Vault {
         Self {
             deployer: Pubkey::default(),
             authority: Pubkey::default(),
-
             protocol_version: 1,
-
             total_supply: 0,
             max_supply: MAX_SUPPLY,
-
             emission_k: EMISSION_DIFFICULTY_K,
-
             total_energy_wh: 0,
             total_producers: 0,
             total_proofs: 0,
+            network_energy_30d: 0,
+            network_energy_updated_at: 0,
         }
     }
 }

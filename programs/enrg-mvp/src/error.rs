@@ -2,7 +2,6 @@ use anchor_lang::prelude::*;
 
 #[error_code]
 pub enum ErrorCode {
-    // Protocol errors
     #[msg("Unauthorized access")]
     Unauthorized,
     #[msg("Invalid nonce")]
@@ -27,12 +26,22 @@ pub enum ErrorCode {
     ZeroAmountMint,
     #[msg("Arithmetic overflow")]
     ArithmeticOverflow,
-
-    // Ed25519 verification errors
     #[msg("Invalid signature length")]
     InvalidSignatureLength,
     #[msg("Invalid public key length")]
     InvalidPublicKeyLength,
     #[msg("Ed25519 verification failed")]
     Ed25519VerificationFailed,
+    #[msg("Device is not in the required state for this operation")]
+    InvalidDeviceState,
+    #[msg("Device state transition is not allowed")]
+    InvalidStateTransition,
+    #[msg("Device is in quarantine — minting is suspended")]
+    DeviceInQuarantine,
+    #[msg("Device is revoked — operation not allowed")]
+    DeviceRevoked,
+    #[msg("Device is not registered")]
+    DeviceNotRegistered,
+    #[msg("Device is already claimed by another wallet")]
+    DeviceAlreadyClaimed,
 }
