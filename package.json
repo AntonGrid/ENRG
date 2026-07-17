@@ -16,10 +16,13 @@
     "cors": "^2.8.6",
     "express": "^4.22.2",
     "express-validator": "^7.3.2",
+    "keccak": "^3.0.3",
     "mocha": "^11.7.6",
     "node-fetch": "^2.7.0",
     "ts-mocha": "^11.1.0",
     "tweetnacl": "^1.0.3",
+    "tweetnacl-util": "^0.15.1",
+    "uuid": "^9.0.0",
     "winston": "^3.19.0"
   },
   "devDependencies": {
