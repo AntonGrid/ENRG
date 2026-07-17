@@ -1,5 +1,6 @@
 pub mod initialize;
 pub mod initialize_token;
+pub mod init_config;
 pub mod mint;
 pub mod oracle_registry;
 pub mod pool;
@@ -10,6 +11,7 @@ pub mod buyback;
 
 pub use initialize::*;
 pub use initialize_token::*;
+pub use init_config::*;
 pub use mint::*;
 pub use oracle_registry::*;
 pub use pool::*;

@@ -65,3 +65,10 @@ enrg.db
 .DS_Store
 Thumbs.db
 test-ledger/
+
+# Secret keys
+*-keypair.json
+admin-keypair.json
+oracle-keypair.json
+validator.log
+test-ledger/

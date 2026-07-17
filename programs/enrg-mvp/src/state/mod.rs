@@ -8,6 +8,7 @@ pub mod oracle;
 pub mod token_mint;
 pub mod registry;
 pub mod events;
+pub mod config;
 
 pub use vault::*;
 pub use producer::*;
@@ -19,3 +20,4 @@ pub use oracle::*;
 pub use token_mint::*;
 pub use registry::*;
 pub use events::*;
+pub use config::*;
