@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "main": "server.js",
   "license": "MIT",
+  "scripts": {
+    "start": "node server.js",
+    "test": "mocha test/**/*.js"
+  },
   "dependencies": {
     "express": "^4.18.2",
     "cors": "^2.8.5",
@@ -11,5 +15,9 @@
     "tweetnacl": "^1.0.3",
     "tweetnacl-util": "^0.15.1",
     "keccak": "^3.0.3"
+  },
+  "devDependencies": {
+    "mocha": "^10.9.0",
+    "node-fetch": "^2.7.0"
   }
 }
