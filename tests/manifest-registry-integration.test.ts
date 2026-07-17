@@ -69,6 +69,7 @@ describe("Manifest Registry Integration", () => {
 
   let registryAccount: PublicKey;
   let publishedManifests: Array<{ manifest_id: string; payload: ManifestPayload }> = [];
+  const oracleKeypair = anchor.web3.Keypair.generate();
 
   it("should initialize Manifest Registry on-chain", async () => {
     const tx = await program.methods
@@ -87,10 +88,10 @@ describe("Manifest Registry Integration", () => {
     assert.ok(account, "Registry account should exist");
     assert.strictEqual(account.version, 1);
     assert.strictEqual(account.manifestCount, 0);
+    assert.strictEqual(account.oracleAuthority.toBase58(), wallet.publicKey.toBase58());
   });
 
-  it("should publish manifests via off-chain registry", async () => {
-    const manifest1Payload: ManifestPayload = {
+  it("should publish manifests via off-chain registry", async () => {    const manifest1Payload: ManifestPayload = {
       manifest_version: "1.0",
       device_type: "sensor",
       manufacturer: "ENRG",
@@ -127,6 +128,7 @@ describe("Manifest Registry Integration", () => {
       .updateMerkleRoot([...Array.from(rootBytes).slice(0, 32).fill(0, rootBytes.length)], new BN(snapshot.total))
       .accounts({
         registry: registryAccount,
+        oracle: wallet.publicKey,
         authority: wallet.publicKey,
       })
       .rpc();
@@ -160,5 +162,52 @@ describe("Manifest Registry Integration", () => {
       assert.ok(data.signature, "Manifest should have signature");
       console.log(`✅ Retrieved manifest ${manifest_id}`);
     }
+  });
+
+  it("should register manifest verification on-chain", async () => {
+    if (publishedManifests.length === 0) {
+      console.log("⏭️  Skipping verification registration (no published manifests)");
+      return;
+    }
+
+    const { manifest_id } = publishedManifests[0];
+    const manifestUuid = manifest_id.substring(0, 16);
+    const manifestIdBytes = Buffer.from(manifestUuid.split("-").join(""), "hex");
+
+    if (manifestIdBytes.length !== 16) {
+      console.log("⏭️  Skipping (invalid manifest ID format)");
+      return;
+    }
+
+    const [verificationPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("manifest-verification"), manifestIdBytes],
+      program.programId
+    );
+
+    const publisherKey = new Uint8Array(32).fill(1);
+    const contentHash = new Uint8Array(32).fill(2);
+    const signature = new Uint8Array(64).fill(3);
+
+    const tx = await program.methods
+      .registerManifestVerification(
+        [...manifestIdBytes],
+        [...publisherKey],
+        [...contentHash],
+        [...signature],
+        1
+      )
+      .accounts({
+        verification: verificationPda,
+        publisher: wallet.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
+      .rpc();
+
+    console.log(`✅ Manifest verification registered on-chain: tx = ${tx}`);
+    console.log(`📍 Verification PDA: ${verificationPda.toBase58()}`);
+
+    const verification = await program.account.manifestVerification.fetch(verificationPda);
+    assert.ok(verification, "Verification account should exist");
+    assert.strictEqual(verification.manifestVersion, 1);
   });
 });

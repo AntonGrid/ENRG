@@ -68,6 +68,31 @@ pub mod enrg_mvp {
         instructions::manifest_registry::update_merkle_root(ctx, new_root, manifest_count)
     }
 
+    pub fn set_oracle_authority(
+        ctx: Context<SetOracleAuthority>,
+        new_oracle: Pubkey,
+    ) -> Result<()> {
+        instructions::manifest_registry::set_oracle_authority(ctx, new_oracle)
+    }
+
+    pub fn register_manifest_verification(
+        ctx: Context<RegisterManifestVerification>,
+        manifest_id: [u8; 16],
+        publisher_key: [u8; 32],
+        content_hash: [u8; 32],
+        signature: [u8; 64],
+        manifest_version: u8,
+    ) -> Result<()> {
+        instructions::manifest_verification::register_manifest_verification(
+            ctx,
+            manifest_id,
+            publisher_key,
+            content_hash,
+            signature,
+            manifest_version,
+        )
+    }
+
     // ═══════════════════════════════════════════
     //  PHASE 2 — Oracle Management
     // ═══════════════════════════════════════════
