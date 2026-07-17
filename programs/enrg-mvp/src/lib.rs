@@ -54,6 +54,20 @@ pub mod enrg_mvp {
         instructions::oracle_registry::initialize_oracle_registry(ctx)
     }
 
+    pub fn initialize_manifest_registry(
+        ctx: Context<InitializeManifestRegistry>,
+    ) -> Result<()> {
+        instructions::manifest_registry::initialize_manifest_registry(ctx)
+    }
+
+    pub fn update_merkle_root(
+        ctx: Context<UpdateMerkleRoot>,
+        new_root: [u8; 32],
+        manifest_count: u64,
+    ) -> Result<()> {
+        instructions::manifest_registry::update_merkle_root(ctx, new_root, manifest_count)
+    }
+
     // ═══════════════════════════════════════════
     //  PHASE 2 — Oracle Management
     // ═══════════════════════════════════════════

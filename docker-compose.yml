@@ -1,0 +1,29 @@
+version: '3.9'
+
+services:
+  oracle:
+    build:
+      context: ./oracle
+      dockerfile: Dockerfile
+    container_name: enrg-oracle
+    ports:
+      - "3000:3000"
+    environment:
+      PORT: 3000
+      PROGRAM_ID: ${PROGRAM_ID:-}
+      MINT_ADDRESS: ${MINT_ADDRESS:-}
+      FOUNDER_KEY: ${FOUNDER_KEY:-}
+    restart: unless-stopped
+
+  manifest-registry:
+    build:
+      context: ./oracle/registry
+      dockerfile: Dockerfile
+    container_name: enrg-manifest-registry
+    ports:
+      - "4000:4000"
+    environment:
+      PORT: 4000
+      REGISTRY_ADMIN_KEY: ${REGISTRY_ADMIN_KEY:-secure-key}
+      SERVICE_NAME: enrg-manifest-registry
+    restart: unless-stopped
