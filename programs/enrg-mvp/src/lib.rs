@@ -93,6 +93,20 @@ pub mod enrg_mvp {
         )
     }
 
+    pub fn verify_merkle_proof(
+        ctx: Context<VerifyMerkleProof>,
+        manifest_id: [u8; 16],
+        proof_path: Vec<[u8; 32]>,
+        leaf_hash: [u8; 32],
+    ) -> Result<()> {
+        instructions::merkle_proof_verification::verify_merkle_proof(
+            ctx,
+            manifest_id,
+            proof_path,
+            leaf_hash,
+        )
+    }
+
     // ═══════════════════════════════════════════
     //  PHASE 2 — Oracle Management
     // ═══════════════════════════════════════════
