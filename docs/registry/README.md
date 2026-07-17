@@ -1,18 +1,19 @@
-# ENRG Protocol Registries
+# Manifest Registry — ENRG
 
-## Status
+Назначение
+---------
+Manifest Registry — canonical service для публикации и распространения:
+- Device Enrollment Manifests (device identity + pubkey + provenance)
+- Firmware Manifests (firmware metadata + hashes + signatures)
+- Revocation entries (key compromises, device blacklist)
 
-Normative
+Принципы
+--------
+- Подпись обязательна: каждый манифест подписывается приватным ключом.
+- Верификация: сервер проверяет подпись перед сохранением.
+- Якорение: ежедневный Merkle root публикуется в блокчейн.
+- Отзыв: поддержка revocation списков.
 
----
-
-The ENRG Protocol Registries define standardized identifiers used throughout the protocol.
-
-Current registries include:
-
-- Event Registry
-- Error Registry
-- Capability Registry
-- Manifest Registry
-
-Additional registries MAY be introduced through Protocol Governance.
+Быстрый старт
+-------------
+См. oracle/registry/README.md
