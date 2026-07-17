@@ -2,8 +2,11 @@ use anchor_lang::prelude::*;
 
 #[account]
 pub struct ManifestRegistry {
-    /// Authority that can update Merkle root
+    /// Authority that can initialize and manage registry
     pub authority: Pubkey,
+
+    /// Oracle authority that can update Merkle root (multisig or trusted oracle)
+    pub oracle_authority: Pubkey,
 
     /// Current Merkle root (256-bit hash)
     pub merkle_root: [u8; 32],
@@ -22,5 +25,5 @@ pub struct ManifestRegistry {
 }
 
 impl ManifestRegistry {
-    pub const SPACE: usize = 8 + 32 + 32 + 8 + 8 + 8 + 64;
+    pub const SPACE: usize = 8 + 32 + 32 + 32 + 8 + 8 + 8 + 64;
 }

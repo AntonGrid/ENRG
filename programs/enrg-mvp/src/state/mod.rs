@@ -8,6 +8,7 @@ pub mod oracle;
 pub mod token_mint;
 pub mod registry;
 pub mod manifest_registry;
+pub mod manifest_verification;
 pub mod events;
 pub mod config;
 
@@ -21,5 +22,6 @@ pub use oracle::*;
 pub use token_mint::*;
 pub use registry::*;
 pub use manifest_registry::*;
+pub use manifest_verification::*;
 pub use events::*;
 pub use config::*;
