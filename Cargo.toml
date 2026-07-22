@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "programs/enrg-mvp",
+    "programs/enrg-profile",
 ]
 
 [profile.release]
