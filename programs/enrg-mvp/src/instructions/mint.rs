@@ -5,7 +5,7 @@ use crate::constants::*;
 use crate::error::ErrorCode;
 use crate::math::calculate_reward_dynamic;
 use crate::security::verify_ed25519_signature;
-use crate::security::validation::verify_nonce;
+use crate::security::validation::{verify_nonce, verify_timestamp};
 use crate::state::*;
 
 /// Mint SRC tokens based on verified Oracle report.
@@ -16,7 +16,6 @@ use crate::state::*;
 /// calls profile::record_production() after minting.
 pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
-    msg!("DEBUG mint_energy STARTED");
     let vault = &mut ctx.accounts.vault;
 
     // ── Device State check (ADR-0005) ──
@@ -25,7 +24,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         ErrorCode::InvalidDeviceState
     );
 
-    // ── Ed25519 signature verification (MVP: формат зафиксирован, проверка заглушена) ──
+    // ── Ed25519 signature verification ──
     let message = report.message_to_sign()?;
 
     verify_ed25519_signature(
@@ -35,29 +34,18 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         &ctx.accounts.instructions.to_account_info(),
     )?;
 
-    // ── Proof validation: time (логируем) & nonce ──
+    // ── Proof validation: timestamp & nonce ──
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    msg!(
-        "DEBUG PROOF now={} verified_at={} (timestamp check TEMPORARILY DISABLED ON-CHAIN)",
-        now,
-        report.verified_at,
-    );
+    verify_timestamp(now, report.verified_at)?;
 
-    // Nonce validation (near-prod: строгий рост).
-    msg!(
-        "DEBUG NONCE report={} producer={}",
-        report.nonce,
-        producer.nonce
-    );
+    // Nonce validation (строгий рост).
     verify_nonce(producer, report.nonce)?;
 
     // ── Energy validation ──
     // max_power_w читается из EnergyProfile PDA (enrg-profile).
-    // Используем захардкоженный лимит как fallback, пока Profile не развёрнут.
-    // TODO: заменить на CPI-чтение profile.metadata.rated_power после интеграции enrg-profile.
-    let max_energy: u64 = 1_000_000_000; // временный лимит ~1 GWh за репорт
+    let max_energy = ctx.accounts.profile.rated_power;
 
     require!(report.energy_wh <= max_energy, ErrorCode::ExcessiveEnergy);
 
@@ -74,17 +62,14 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
 
     // ── CPI: record_production в enrg-profile ──
     // Обновляет device_energy_30d и метаданные устройства.
-    // Пока закомментировано — будет включено после создания enrg-profile.
-    //
-    // let profile_ctx = CpiContext::new(
-    //     ctx.accounts.profile_program.to_account_info(),
-    //     profile::cpi::accounts::RecordProduction {
-    //         producer: ctx.accounts.producer.to_account_info(),
-    //         profile: ctx.accounts.profile.to_account_info(),
-    //         authority: ctx.accounts.authority.to_account_info(),
-    //     },
-    // );
-    // profile::cpi::record_production(profile_ctx, report.energy_wh, now_ts)?;
+    let profile_ctx = CpiContext::new(
+        ctx.accounts.profile_program.key(),
+        crate::enrg_profile::cpi::accounts::RecordProduction {
+            authority: ctx.accounts.authority.to_account_info(),
+            profile: ctx.accounts.profile.to_account_info(),
+        },
+    );
+    crate::enrg_profile::cpi::record_production(profile_ctx, report.energy_wh, now_ts)?;
 
     // ── Update producer state ──
     producer.nonce = report.nonce;
@@ -95,9 +80,8 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     // ── Calculate reward with dynamic difficulty ──
-    // device_energy_30d пока читаем из отчёта (заглушка).
-    // TODO: читать из EnergyProfile PDA после интеграции enrg-profile.
-    let device_energy_30d: u64 = 0; // временно
+    // device_energy_30d читается из EnergyProfile PDA после CPI.
+    let device_energy_30d = ctx.accounts.profile.device_energy_30d as u64;
 
     let reward = calculate_reward_dynamic(
         report.energy_wh,
@@ -347,14 +331,19 @@ pub struct MintEnergy<'info> {
 
     pub token_program: Program<'info, Token>,
 
-    // ── CPI: enrg-profile (будет добавлен после создания программы) ──
-    // /// CHECK: enrg-profile program ID.
-    // pub profile_program: UncheckedAccount<'info>,
-    // #[account(
-    //     mut,
-    //     seeds = [b"profile", producer.key().as_ref()],
-    //     bump,
-    //     seeds::program = profile_program.key()
-    // )]
-    // pub profile: Account<'info, energy_profile::state::EnergyProfile>,
+    // ── CPI: enrg-profile ──
+    /// CHECK: enrg-profile program ID.
+    pub profile_program: UncheckedAccount<'info>,
+
+    /// Authority of the EnergyProfile (producer's owner).
+    /// Должен подписывать CPI-вызов record_production.
+    pub authority: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"profile", authority.key().as_ref()],
+        bump,
+        seeds::program = profile_program.key()
+    )]
+    pub profile: Account<'info, crate::enrg_profile::accounts::EnergyProfile>,
 }

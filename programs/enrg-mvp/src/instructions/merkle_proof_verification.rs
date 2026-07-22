@@ -15,7 +15,7 @@ pub struct VerifyMerkleProof<'info> {
         init,
         payer = verifier,
         space = MerkleProofVerification::SPACE,
-        seeds = [b"merkle-proof-verification", &manifest_id, registry.key().as_ref()],
+        seeds = [b"merkle-proof-verification", manifest_id.as_ref(), registry.key().as_ref()],
         bump
     )]
     pub proof_verification: Account<'info, MerkleProofVerification>,
@@ -30,9 +30,7 @@ pub struct VerifyMerkleProof<'info> {
 pub fn verify_merkle_proof(
     ctx: Context<VerifyMerkleProof>,
     manifest_id: [u8; 16],
-    /// Merkle proof path: array of sibling hashes from leaf to root
     proof_path: Vec<[u8; 32]>,
-    /// The computed leaf hash (from manifest verification)
     leaf_hash: [u8; 32],
 ) -> Result<()> {
     let registry = &ctx.accounts.registry;
@@ -41,9 +39,8 @@ pub fn verify_merkle_proof(
     let clock = Clock::get()?;
 
     // Verify that the manifest_id matches
-    require_eq!(
-        manifest.manifest_id,
-        manifest_id,
+    require!(
+        manifest.manifest_id == manifest_id,
         ProofError::ManifestIdMismatch
     );
 

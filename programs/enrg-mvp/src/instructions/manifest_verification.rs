@@ -8,7 +8,7 @@ pub struct RegisterManifestVerification<'info> {
         init,
         payer = publisher,
         space = ManifestVerification::SPACE,
-        seeds = [b"manifest-verification", &manifest_id],
+        seeds = [b"manifest-verification", manifest_id.as_ref()],
         bump
     )]
     pub verification: Account<'info, ManifestVerification>,

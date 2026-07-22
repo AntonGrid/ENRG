@@ -1,0 +1,373 @@
+{
+  "address": "GFfYSAen1RcbqdYWcqdGB2btKSWouEya8pKVfRWKxDiQ",
+  "metadata": {
+    "name": "enrg_profile",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "ENRG Energy Profile — device metadata and sliding energy window"
+  },
+  "instructions": [
+    {
+      "name": "initialize_profile",
+      "docs": [
+        "Создаёт PDA EnergyProfile для указанного authority.",
+        "",
+        "Seeds: [b\"profile\", authority.key().as_ref()]"
+      ],
+      "discriminator": [
+        32,
+        145,
+        77,
+        213,
+        58,
+        39,
+        251,
+        234
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Владелец профиля (подписывает транзакцию)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "PDA EnergyProfile, создаётся с seeds [b\"profile\", authority.key().as_ref()]."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "device_id",
+          "type": "pubkey"
+        },
+        {
+          "name": "rated_power",
+          "type": "u64"
+        },
+        {
+          "name": "device_type",
+          "type": "string"
+        },
+        {
+          "name": "location",
+          "type": "string"
+        }
+      ]
+    },
+    {
+      "name": "read_profile",
+      "docs": [
+        "View-функция для чтения профиля.",
+        "Возвращает все поля EnergyProfile."
+      ],
+      "discriminator": [
+        221,
+        127,
+        18,
+        130,
+        112,
+        49,
+        200,
+        247
+      ],
+      "accounts": [
+        {
+          "name": "profile",
+          "docs": [
+            "PDA EnergyProfile (только для чтения)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "Authority, чей профиль читаем (не обязательно подписант)."
+          ]
+        }
+      ],
+      "args": [],
+      "returns": {
+        "defined": {
+          "name": "EnergyProfile"
+        }
+      }
+    },
+    {
+      "name": "record_production",
+      "docs": [
+        "Записывает производство энергии в скользящее окно устройства.",
+        "Вызывается CPI из enrg-mvp при каждом минте."
+      ],
+      "discriminator": [
+        163,
+        114,
+        92,
+        28,
+        253,
+        121,
+        126,
+        53
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Владелец профиля (authority) — подписывает CPI."
+          ],
+          "signer": true
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "PDA EnergyProfile (mut для обновления скользящего окна)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "energy_wh",
+          "type": "u64"
+        },
+        {
+          "name": "timestamp",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "update_metadata",
+      "docs": [
+        "Обновляет метаданные устройства (rated_power, device_type, location).",
+        "Может вызывать только authority профиля."
+      ],
+      "discriminator": [
+        170,
+        182,
+        43,
+        239,
+        97,
+        78,
+        225,
+        186
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Владелец профиля (подписывает транзакцию)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "PDA EnergyProfile."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "rated_power",
+          "type": "u64"
+        },
+        {
+          "name": "device_type",
+          "type": "string"
+        },
+        {
+          "name": "location",
+          "type": "string"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "EnergyProfile",
+      "discriminator": [
+        187,
+        23,
+        63,
+        205,
+        77,
+        187,
+        96,
+        229
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "DeviceTypeTooLong",
+      "msg": "Device type string exceeds maximum length (32 bytes)"
+    },
+    {
+      "code": 6001,
+      "name": "LocationTooLong",
+      "msg": "Location string exceeds maximum length (64 bytes)"
+    }
+  ],
+  "types": [
+    {
+      "name": "EnergyProfile",
+      "docs": [
+        "Energy Profile PDA — хранит метаданные устройства и скользящее окно энергии за 30 дней.",
+        "",
+        "Seeds: [b\"profile\", authority.key().as_ref()]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Владелец профиля (authority)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "device_id",
+            "docs": [
+              "Привязка к устройству (device_id из EnergyProducer)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "rated_power",
+            "docs": [
+              "Максимальная мощность устройства в ваттах (W)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "device_type",
+            "docs": [
+              "Тип устройства (до 32 байт), например \"solar\", \"wind\", \"hydro\"."
+            ],
+            "type": "string"
+          },
+          {
+            "name": "location",
+            "docs": [
+              "Локация устройства (до 64 байт)."
+            ],
+            "type": "string"
+          },
+          {
+            "name": "device_energy_30d",
+            "docs": [
+              "Скользящее окно суммарной энергии за 30 дней (в Wh)."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "device_energy_updated_at",
+            "docs": [
+              "Timestamp последнего обновления скользящего окна."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Bump seed для PDA."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    }
+  ]
+}
