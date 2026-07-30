@@ -1,0 +1,48 @@
+openapi: 3.0.3
+info:
+  title: ENRG Manifest Registry API
+  version: "1.0.0"
+  description: Manifest Registry for ENRG Protocol.
+paths:
+  /api/v1/manifests:
+    post:
+      summary: Publish a signed manifest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                manifest_id:
+                  type: string
+                  format: uuid
+                payload:
+                  type: object
+                signature:
+                  type: string
+      responses:
+        '201':
+          description: Manifest published
+        '400':
+          description: Invalid signature
+  /api/v1/manifests/{manifest_id}:
+    get:
+      summary: Get manifest by ID
+      responses:
+        '200':
+          description: Manifest found
+        '404':
+          description: Not found
+  /api/v1/merkle/snapshot:
+    post:
+      summary: Create a Merkle snapshot
+      responses:
+        '201':
+          description: Snapshot created
+  /api/v1/merkle/current:
+    get:
+      summary: Get current Merkle root
+      responses:
+        '200':
+          description: Current root

@@ -1,0 +1,211 @@
+ENRG FastAPI minimal skeleton
+
+# Предварительные зависимости
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+pip install fastapi uvicorn[standard] pydantic jsonschema
+
+# Структура проекта (вариант)
+.
+├── app
+│   ├── __init__.py
+│   ├── main.py
+│   ├── api
+│   │   ├── __init__.py
+│   │   ├── provisioning.py
+│   │   └── registry.py
+│   ├── schemas
+│   │   ├── device_manifest.schema.json
+│   │   ├── device_record.schema.json
+│   │   └── device_proof.schema.json
+│   └── services
+│       ├── __init__.py
+│       ├── provisioning_service.py
+│       └── registry_service.py
+├── tests
+│   ├── __init__.py
+│   └── test_smoke.py
+├── pyproject.toml  # или requirements.txt
+└── README.md
+
+# app/main.py
+from fastapi import FastAPI
+
+from app.api import provisioning, registry
+
+app = FastAPI(title="ENRG Part II Mock", version="0.1.0")
+
+app.include_router(provisioning.router, prefix="/provisioning", tags=["provisioning"])
+app.include_router(registry.router, prefix="/registry", tags=["registry"])
+
+
+@app.get("/health")
+async def health_check():
+    return {"status": "ok"}
+
+# app/api/provisioning.py
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from app.services.provisioning_service import register_device
+
+router = APIRouter()
+
+
+class ProvisioningRequest(BaseModel):
+    # payload от устройства (черновой вариант)
+    public_key: str
+    manifest_ref: str | None = None
+    proof: dict | None = None  # потом свяжем с JSON Schema
+
+
+class ProvisioningResponse(BaseModel):
+    device_id: str
+    manifest_ref: str
+    bootstrap_policy: dict
+
+
+@router.post("/register", response_model=ProvisioningResponse)
+async def provisioning_register(req: ProvisioningRequest):
+    try:
+        result = register_device(req)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+# app/api/registry.py
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
+
+from app.services.registry_service import get_device_record
+
+router = APIRouter()
+
+
+class DeviceRecord(BaseModel):
+    device_id: str
+    public_key: str
+    owner: str | None = None
+    lifecycle_state: str
+    firmware_version: str | None = None
+    manifest_ref: str
+
+
+@router.get("/devices/{device_id}", response_model=DeviceRecord)
+async def registry_get_device(device_id: str):
+    record = get_device_record(device_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="Device not found")
+    return record
+
+# app/services/provisioning_service.py
+from dataclasses import dataclass
+from typing import Dict
+
+from jsonschema import validate, ValidationError
+
+# TODO: загрузка JSON Schema из файлов в app/schemas/*.schema.json
+
+
+@dataclass
+class RegisteredDevice:
+    device_id: str
+    public_key: str
+    manifest_ref: str
+    bootstrap_policy: Dict
+
+
+# На старте — простое in-memory хранилище
+_DB: Dict[str, RegisteredDevice] = {}
+
+
+def _generate_device_id(public_key: str) -> str:
+    # Плейсхолдер: позже заменим на детерминированный хэш
+    import hashlib
+
+    return "dev_" + hashlib.sha256(public_key.encode()).hexdigest()[:16]
+
+
+def register_device(req) -> Dict:
+    # Здесь позже добавим валидацию против JSON Schema (manifest, proof и т. д.)
+    if not req.public_key:
+        raise ValueError("public_key is required")
+
+    device_id = _generate_device_id(req.public_key)
+    manifest_ref = req.manifest_ref or "manifest:v0-placeholder"
+
+    bootstrap_policy = {
+        "allowed": True,
+        "max_power_kw": 3.5,
+    }
+
+    _DB[device_id] = RegisteredDevice(
+        device_id=device_id,
+        public_key=req.public_key,
+        manifest_ref=manifest_ref,
+        bootstrap_policy=bootstrap_policy,
+    )
+
+    return {
+        "device_id": device_id,
+        "manifest_ref": manifest_ref,
+        "bootstrap_policy": bootstrap_policy,
+    }
+
+# app/services/registry_service.py
+from typing import Dict, Optional
+
+from .provisioning_service import _DB, RegisteredDevice
+
+
+def get_device_record(device_id: str) -> Optional[Dict]:
+    dev: RegisteredDevice | None = _DB.get(device_id)
+    if not dev:
+        return None
+
+    return {
+        "device_id": dev.device_id,
+        "public_key": dev.public_key,
+        "owner": None,
+        "lifecycle_state": "provisioned",
+        "firmware_version": None,
+        "manifest_ref": dev.manifest_ref,
+    }
+
+# tests/test_smoke.py
+from fastapi.testclient import TestClient
+
+from app.main import app
+
+
+client = TestClient(app)
+
+
+def test_health():
+    resp = client.get("/health")
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "ok"
+
+
+def test_provisioning_and_registry():
+    prov_resp = client.post(
+        "/provisioning/register",
+        json={"public_key": "test-key"},
+    )
+    assert prov_resp.status_code == 200
+    body = prov_resp.json()
+    device_id = body["device_id"]
+
+    reg_resp = client.get(f"/registry/devices/{device_id}")
+    assert reg_resp.status_code == 200
+    rec = reg_resp.json()
+    assert rec["device_id"] == device_id
+
+# Запуск сервера
+uvicorn app.main:app --reload
+
+# Быстрая проверка
+curl http://localhost:8000/health
+curl -X POST http://localhost:8000/provisioning/register \
+  -H 'Content-Type: application/json' \
+  -d '{"public_key": "test-key"}'
