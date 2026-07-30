@@ -1,16 +1,16 @@
-# Contributing to ENRG Protocol
+# Contributing to ENRG
 
 Thank you for your interest in ENRG.
 
-ENRG is an open protocol. We welcome contributions that improve the protocol, documentation, security, developer experience, and reference implementations.
+ENRG is the first application built on the [Axis Protocol](https://github.com/AntonGrid/Axis-protocol). We welcome contributions that improve the application, documentation, security, developer experience, and reference implementation.
 
 ---
 
-# Principles
+## Principles
 
 Every contribution should follow these principles:
 
-- Keep the protocol open.
+- Keep the application open.
 - Do not break backward compatibility without discussion.
 - Security first.
 - Architecture before implementation.
@@ -18,7 +18,7 @@ Every contribution should follow these principles:
 
 ---
 
-# Workflow
+## Workflow
 
 1. Fork the repository.
 2. Create a feature branch.
@@ -29,7 +29,7 @@ Every contribution should follow these principles:
 
 ---
 
-# Pull Requests
+## Pull Requests
 
 Good pull requests:
 
@@ -40,7 +40,7 @@ Good pull requests:
 
 ---
 
-# Coding Standards
+## Coding Standards
 
 - Write readable code.
 - Keep functions small.
@@ -49,20 +49,19 @@ Good pull requests:
 
 ---
 
-# Architecture
+## Architecture
 
-Before changing the protocol, read:
+Before making significant changes, read:
 
-- Architecture Book
-- Technical Documentation
-- ADR
-- RFC
+- [Axis Protocol Specification](https://github.com/AntonGrid/Axis-protocol)
+- [Axis Core Implementation](https://github.com/AntonGrid/Axis-core)
+- [ENRG Architecture](docs/)
 
 Architecture decisions should always be documented.
 
 ---
 
-# Security
+## Security
 
 Never submit:
 
@@ -71,11 +70,11 @@ Never submit:
 - API secrets;
 - production credentials.
 
-See SECURITY.md.
+See [SECURITY.md](SECURITY.md).
 
 ---
 
-# Questions
+## Questions
 
 Open a GitHub Issue or start a Discussion before making major architectural changes.
 

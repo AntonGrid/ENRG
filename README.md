@@ -1,303 +1,104 @@
-# ENRG
+# ENRG — Energy Tokenization on Solana
 
-ENRG is an experimental prototype architecture for managing devices and their attestations with a minimal on-chain layer.
+ENRG is the **first application** built on the [Axis Protocol](https://github.com/AntonGrid/Axis-protocol) — an open standard for cryptographically verifiable trust between physical devices and digital systems.
 
-The goal is to establish a **chain-agnostic** trust framework where:
-
-- the root of trust is a cryptographic key on the device;
-- the off-chain layer is responsible for identity, Provisioning, Registry, Policy Engine, and Oracle;
-- the on-chain layer is minimal and relies on attestations from trusted oracles.
-
-ENRG is also the first application built on the broader **Axis Protocol** concept: a higher-level trust layer connecting physical devices with digital systems, including blockchains. In this repo, most elements are “Axis core” (generic attestation and bridging logic), with ENRG providing an energy-domain example (e.g., max power, generation constraints).
+ENRG focuses on the **energy domain**: it tokenizes real electricity production using cryptographic proofs from IoT devices, verifies them through oracles, and mints SRC tokens on Solana.
 
 ---
 
-## Repository structure
+## What ENRG Does
 
-- `app/` — off-chain services (FastAPI) and helper code:
-  - Provisioning Service;
-  - Device Registry;
-  - Oracle (`/oracle/attest`, attestation storage);
-  - `onchain_bridge.py` — bridge from Attestation JSON to smart‑contract parameters.
+ENRG connects physical energy producers (solar panels, wind turbines, meters) to the Solana blockchain.
 
-- `tests/` — pytest tests for off-chain code:
-  - registration and provisioning tests;
-  - DeviceProof creation/validation;
-  - Oracle (`/oracle/attest`) behavior;
-  - attestation storage and retrieval;
-  - mapping from Attestation JSON to on-chain parameters (`test_onchain_bridge.py`).
-
-- `schemas/` — JSON Schemas for the core artifacts:
-  - `DeviceManifest`;
-  - `DeviceRecord`;
-  - `DeviceProof`;
-  - `Attestation`.
-
-- `attestation-example.json` — example Oracle attestation used in demos/tests.
-
-- `scripts/` — helper scripts:
-  - `demo_onchain_bridge.py` — demonstrates mapping off-chain Attestation → on-chain parameters;
-  - `send_attestation_onchain.py` — end-to-end demo (Oracle-style attestation → on-chain submit to local node);
-  - `full_oracle_onchain_demo.py` — extended end-to-end demo (optional).
-
-- `onchain/` — minimal on-chain layer (Foundry):
-  - `src/EnrgOracleAttestation.sol` — reference contract for receiving/storing attestations;
-  - `test/EnrgOracleAttestation.t.sol` — contract tests;
-  - `onchain/README.md` — on-chain contracts and tests documentation.
-
-- `docs/`:
-  - `onchain-attestation.md` — detailed mapping specification from Attestation JSON to `submitAttestation` parameters;
-  - (optionally) Axis / architecture notes (`axis-architecture.md`, etc.).
+- **Device** — measures energy, signs data with Ed25519, sends Proof to Oracle.
+- **Oracle** — verifies signatures, accumulates data, calls smart contract.
+- **Smart Contract** — mints SRC tokens based on verified energy production.
+- **Owner** — receives tokens proportional to produced energy.
 
 ---
 
-## Conceptual overview
+## Repository Structure
 
-### Axis Protocol (core layer)
-
-Axis is the underlying protocol idea behind ENRG. It defines:
-
-- how devices are provisioned and registered;
-- how devices produce attestations (via `DeviceProof` and `DeviceManifest`);
-- how Oracles / Registries / Policy Engines validate these proofs;
-- how validated attestations are bridged to a minimal on-chain representation.
-
-In the current implementation:
-
-- **Off-chain core includes:**
-  - JSON schemas (`schemas/`);
-  - Provisioning and Registry flows (FastAPI app);
-  - Oracle endpoint and decision logic (mock Policy Engine);
-  - bridge helper (`app/onchain_bridge.py`) that translates attestation JSON into on-chain calldata.
-
-- **On-chain core includes:**
-  - `EnrgOracleAttestation.sol` as a reference contract for:
-    - accepting attestations from trusted oracle addresses;
-    - storing a minimal attestation structure;
-    - emitting events for downstream consumers.
-
-### ENRG (first application on Axis)
-
-ENRG is the first domain-specific application on Axis, focused on **energy**:
-
-- the Oracle produces a decision with domain-specific fields such as:
-  - `allowed` — whether the device is allowed to operate / inject power;
-  - `max_power_kw` — maximum allowed power in kW for the device;
-- these are interpreted and then mapped into a minimal on-chain representation (e.g., watts, boolean flags).
-
-Future directions include:
-
-- **SRC** (tokenized representation of verified energy production) built on top of Axis attestations;
-- settlement and incentive logic using on-chain attestations as ground truth.
+- `programs/` — Solana smart contracts (Anchor).
+- `onchain/` — Foundry contracts (Ethereum-compatible).
+- `contracts/` — Solidity contracts.
+- `oracle/` — Oracle service (verification, aggregation, minting).
+- `firmware/` — ESP32 firmware for energy measurement and signing.
+- `app/` — Backend services (FastAPI).
+- `src/` — Application-specific code.
+- `tests/` — Integration and unit tests.
+- `scripts/` — Helper scripts.
+- `schemas/` — JSON Schemas for core artifacts.
+- `sdk/` — Client SDK (if applicable).
+- `api/` — API definitions.
+- `examples/` — Example payloads and flows.
+- `docs/` — Implementation-specific documentation.
 
 ---
 
-## Off-chain layer (Python / FastAPI)
+## Quick Start
 
-The main components are:
+### Prerequisites
 
-- **Provisioning Service**
-  - Registers devices and creates a `DeviceRecord`.
-  - Associates `device_id`, keys, ownership data, firmware version, and references to the device manifest.
+- [Solana CLI](https://docs.solana.com/cli/install-solana-cli-tools)
+- [Anchor](https://www.anchor-lang.com/docs/installation)
+- [Node.js](https://nodejs.org/) (v18+)
+- [Python 3.10+](https://www.python.org/)
+- [Foundry](https://book.getfoundry.sh/getting-started/installation) (for on-chain tests)
 
-- **Device Registry**
-  - Source of truth for devices:
-    - `device_id`, public keys;
-    - owner / operator;
-    - lifecycle state (e.g., provisioned, active, revoked);
-    - firmware version;
-    - `manifest_ref` (reference to `DeviceManifest`).
-
-- **Oracle**
-  - Accepts a `DeviceProof` (evidence generated by the device and/or provisioning pipeline).
-  - Applies policy (currently a **mock Policy Engine**):
-    - Business / technical rules (placeholder in this prototype).
-  - Issues an `Attestation` with a decision payload, including:
-    - `allowed` (bool);
-    - `max_power_kw` and other domain-specific fields.
-  - Stores attestations for later retrieval (e.g., for bridges or auditors).
-
-JSON Schemas and artifact formats are defined in `schemas/` and enforced in tests under `tests/`.
-
----
-
-## Off-chain tests
-
-Run from the repository root:
+### Clone and Install
 
 ```bash
-source .venv/bin/activate  # optional, if you use a virtualenv
-pytest -q
-Tests cover:
+git clone https://github.com/AntonGrid/ENRG.git
+cd ENRG
 
-device registration and provisioning;
-creation and validation of DeviceProof;
-Oracle behavior (/oracle/attest);
-storing and retrieving attestations;
-mapping Attestation JSON → on-chain parameters (tests/test_onchain_bridge.py).
-On-chain layer (Foundry)
-The on-chain components live under onchain/.
+# Install Node.js dependencies
+npm install
 
-Key contract: EnrgOracleAttestation
-The contract stores a minimal core attestation structure:
+# Install Python dependencies
+pip install -r requirements.txt
 
-struct AttestationCore {
-    bytes32 attestationId;
-    bytes32 deviceId;
-    bool allowed;
-    uint64 maxPowerW;
-    address oracle;
-    uint64 issuedAt; // unix timestamp
-}
-Core properties:
+# Install Anchor dependencies
+cd programs && anchor build
+Run Oracle
+bash
+node server.js
+Run Tests
+bash
+# Python tests
+pytest
 
-Accepts attestations only from trusted oracles:
-setTrustedOracle(address,bool)
-trustedOracles(address) → bool
-Does not allow the same attestationId to be recorded twice.
-Emits an Attested event on successful submission.
-Provides read access for stored attestations (see contract for details).
-On-chain tests
-From the onchain/ directory:
+# Anchor tests
+anchor test
 
-cd onchain
-forge test -q
-See onchain/README.md for more details about:
+# Foundry tests
+cd onchain && forge test
+Architecture
+ENRG follows the Axis Protocol trust pipeline:
 
-test coverage and scenarios;
-gas considerations;
-event structure and usage patterns.
-Bridge: Off-chain → On-chain
-The mapping from Attestation JSON to submitAttestation parameters is implemented in:
+text
+Device → Proof → Oracle → Attestation → Smart Contract → SRC Token
+Components
+Component	Responsibility
+Device	Measures energy, signs Proof with Ed25519.
+Oracle	Verifies signatures, accumulates data, calls mint.
+Smart Contract	Mints SRC tokens based on verified Proofs.
+Owner	Receives tokens proportional to energy produced.
+Relationship with Axis Repositories
+Axis-protocol — the normative specification of the trust standard.
 
-app/onchain_bridge.py — main function:
-build_attestation_params(attestation: dict) -> Tuple[bytes32, bytes32, bool, int, int]
-What it does:
+Axis-core — the universal reference implementation of the protocol.
 
-Input: an attestation of the form in attestation-example.json.
-ID hashing:
-Computes keccak256 of attestation_id string → attestationId (bytes32).
-Computes keccak256 of device_id string → deviceId (bytes32).
-Power conversion:
-Extracts decision.max_power_kw (float / decimal).
-Converts to watts: maxPowerW (uint64).
-Timestamp conversion:
-Parses issued_at (ISO 8601 with trailing Z).
-Converts to Unix timestamp (issuedAt as uint64).
-The resulting parameters correspond exactly to the contract’s submitAttestation signature:
+ENRG (this repository) — the first application on Axis, focused on energy tokenization on Solana.
 
-submitAttestation(
-    bytes32 attestationId,
-    bytes32 deviceId,
-    bool allowed,
-    uint64 maxPowerW,
-    uint64 issuedAt
-)
-A textual mapping specification, including field-by-field descriptions and examples, is in:
-
-docs/onchain-attestation.md
-Demo: mapping Attestation JSON → on-chain parameters
-From the repository root:
-
-source .venv/bin/activate
-python scripts/demo_onchain_bridge.py
-The script:
-
-reads attestation-example.json;
-builds parameters for the smart contract via build_attestation_params;
-prints ready-to-use values:
-attestationId (bytes32): 0x...
-deviceId      (bytes32): 0x...
-allowed       (bool)   : true/false
-maxPowerW     (uint64) : XXXX
-issuedAt      (uint64) : 1XXXXXXXXX
-These parameters can be fed directly into submitAttestation on a local network (Anvil, Hardhat, etc.).
-
-End-to-end local on-chain demo
-This section describes how to run a full flow:
-
-Prerequisites
-
-Foundry (provides forge, anvil, cast);
-Python 3.x, venv (optional but recommended);
-web3.py (for Python-based on-chain interaction).
-1) Start a local Ethereum node (Anvil)
-In a dedicated terminal:
-
-anvil
-Leave it running.
-
-2) Deploy the on-chain Attestation contract
-In another terminal (with Foundry installed and anvil running):
-
-cd onchain
-forge create src/EnrgOracleAttestation.sol:EnrgOracleAttestation \
-  --rpc-url http://127.0.0.1:8545 \
-  --private-key <PRIVATE_KEY_OF_ANVIL_ACCOUNT> \
-  --broadcast
-Note the deployed address from the output:
-
-Deployed to: 0x<your-contract-address>
-3) Prepare environment variables for interaction
-In the same or a new terminal:
-
-export CONTRACT=0x<your-contract-address>
-export RPC=http://127.0.0.1:8545
-export PK=<private-key-for-signer>  # must control a funded anvil account
-4) Mark a trusted oracle
-Using cast (or any tool you prefer):
-
-OWNER=0x<owner-address>  # e.g., an anvil account
-
-cast send $CONTRACT \
-  "setTrustedOracle(address,bool)" \
-  $OWNER true \
-  --rpc-url $RPC \
-  --private-key $PK
-
-# Verify:
-cast call $CONTRACT \
-  "trustedOracles(address)(bool)" \
-  $OWNER \
-  --rpc-url $RPC
-5) Run the end-to-end on-chain demo script
-From the repo root (with your Python environment active):
-
-source .venv/bin/activate  # if using venv
-python scripts/send_attestation_onchain.py
-Expected behavior:
-
-prints:
-the Attestation JSON;
-on-chain parameters derived by build_attestation_params;
-submitted transaction hash;
-transaction status;
-stored attestation as read back from the contract.
-Note: if you restart Anvil, you must re-deploy the contract and re-configure the trusted oracle. The demo is meant to run in a single local session.
-
-Status
-Off-chain: working prototype with FastAPI services, JSON Schemas, and tests.
-On-chain: minimal contract with safety checks and Foundry tests.
-Bridge: implemented and documented; demo scripts provided.
-Axis / ENRG: serves as a reference architecture for:
-future Policy Engine iterations;
-more advanced Oracle logic;
-multi-chain integration;
-future tokenization (e.g., SRC) and settlement flows on top.
-This repository can be used as a foundation for further work on:
-
-richer policy definitions (risk scoring, contextual constraints);
-pluggable Oracle backends;
-support for additional attestation domains beyond energy;
-production-grade deployment and monitoring.
 Contributing
-Contributions are welcome. Typical workflow:
+Contributions are welcome! Please read:
 
-Open an issue for feature requests or bug reports.
-Fork the repo and create a branch for your change.
-Add or update tests:
-pytest -q for off-chain;
-cd onchain && forge test for on-chain.
-Submit a pull request with a clear description and rationale.
+CONTRIBUTING.md — guidelines for PRs and coding standards.
+
+SECURITY.md — for reporting security issues.
+
+CODE_OF_CONDUCT.md — community standards.
+
 License
-Specify your license here (e.g., MIT License) and any third-party licenses used in the project.
+Apache 2.0 © 2026 Anton Gulda

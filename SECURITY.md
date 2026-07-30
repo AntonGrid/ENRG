@@ -1,6 +1,6 @@
 # Security Policy
 
-# Reporting Security Issues
+## Reporting Security Issues
 
 Security is a top priority for ENRG.
 
@@ -10,7 +10,7 @@ Instead, report it privately so it can be investigated and fixed.
 
 ---
 
-# Scope
+## Scope
 
 This includes:
 
@@ -24,17 +24,15 @@ This includes:
 
 ---
 
-# Out of Scope
+## Out of Scope
 
-General support questions.
-
-Feature requests.
-
-Configuration problems.
+- General support questions.
+- Feature requests.
+- Configuration problems.
 
 ---
 
-# Responsible Disclosure
+## Responsible Disclosure
 
 Please include:
 
@@ -45,9 +43,9 @@ Please include:
 
 ---
 
-# Security Principles
+## Security Principles
 
-ENRG follows these architectural principles:
+ENRG follows these architectural principles (inherited from [Axis Protocol](https://github.com/AntonGrid/Axis-protocol)):
 
 - Private keys never leave devices.
 - Every Proof must be cryptographically verifiable.
@@ -57,9 +55,9 @@ ENRG follows these architectural principles:
 
 ---
 
-# Cryptography
+## Cryptography
 
-Current reference implementation:
+Current implementation:
 
 - Ed25519 signatures
 - Nonce replay protection
@@ -68,7 +66,7 @@ Current reference implementation:
 
 ---
 
-# Future
+## Future
 
 Planned improvements:
 
@@ -77,6 +75,14 @@ Planned improvements:
 - Remote attestation
 - Hardware-backed identity
 - Independent security audits
+
+---
+
+## Related Repositories
+
+- [Axis Protocol](https://github.com/AntonGrid/Axis-protocol) — normative specification of the trust standard.
+- [Axis Core](https://github.com/AntonGrid/Axis-core) — universal reference implementation.
+- **ENRG** (this repository) — first application on Axis, focused on energy tokenization.
 
 ---
 
