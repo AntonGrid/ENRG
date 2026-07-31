@@ -4,3 +4,4 @@ pydantic
 jsonschema
 httpx
 pycryptodome
+axis-core @ git+https://github.com/AntonGrid/Axis-core.git

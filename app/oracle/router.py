@@ -6,7 +6,7 @@ import uuid
 import json
 from jsonschema import validate as jsonschema_validate, ValidationError
 
-from app.schemas_loader import load_attestation_schema
+from axis_core.schemas_loader import load_attestation_schema
 
 router = APIRouter(prefix="/oracle", tags=["oracle"])
 

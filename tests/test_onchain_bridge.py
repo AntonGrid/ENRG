@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from eth_utils import keccak
 
-from app.onchain_bridge import build_attestation_params
+from axis_core.onchain_bridge import build_attestation_params
 
 
 def _example_attestation():

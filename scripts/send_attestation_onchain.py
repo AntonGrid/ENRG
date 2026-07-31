@@ -7,15 +7,15 @@ from pathlib import Path
 from eth_abi import encode as abi_encode
 from eth_utils import keccak, to_hex
 
-# Добавляем корень репозитория в sys.path, чтобы можно было импортировать app.*
+# Add repository root to sys.path to allow imports of app.*
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from app.onchain_bridge import build_attestation_params  # noqa: E402
+from axis_core.onchain_bridge import build_attestation_params  # noqa: E402
 
 
-# Сигнатура должна совпадать с контрактом
+# Signature must match the contract
 FUNCTION_SIGNATURE = "submitAttestation(bytes32,bytes32,bool,uint64,uint64)"
 
 
@@ -24,16 +24,16 @@ def load_attestation(path: Path):
         raise FileNotFoundError(f"Attestation file not found at {path}")
     with path.open("r", encoding="utf-8") as f:
         att = json.load(f)
-    # для совместимости с новой схемой
+    # compatibility with the new schema
     att.setdefault("schema_version", "1.0")
     return att
 
 
 def build_calldata(params) -> str:
-    # 4 байта селектора
+    # 4-byte selector
     selector = keccak(text=FUNCTION_SIGNATURE)[:4]
 
-    # порядок типов должен совпадать с сигнатурой
+    # type order must match the signature
     encoded_args = abi_encode(
         [
             "bytes32",  # attestationId
@@ -79,7 +79,7 @@ def main():
 
     print("\n=== Calldata for submitAttestation ===")
     print(calldata)
-    print("\n(Скрипт не шлёт транзакцию, только выводит calldata — дальше её можно использовать в EOF-транзакции/CLI-туле.)")
+    print("\n(Script does NOT send a transaction. It only outputs calldata — usable in an EOF transaction / CLI tool.)")
 
 
 if __name__ == "__main__":

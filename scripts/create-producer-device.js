@@ -10,7 +10,7 @@ const crypto = require('crypto');
   const programId = new PublicKey('8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a');
   const deviceId = 'device-001';
 
-  // PDA на основе device_id (именно его использует оракул)
+  // PDA based on device_id (this is what the oracle uses)
   const [producerPda] = PublicKey.findProgramAddressSync(
     [Buffer.from(deviceId)],
     programId
@@ -25,7 +25,7 @@ const crypto = require('crypto');
 
   console.log('⚠️ Producer not initialized. Creating...');
 
-  // Данные для create_producer
+  // Data for create_producer
   const deviceIdPubkey = new PublicKey('11111111111111111111111111111111');
   const maxPowerW = 600_000_000n;
   const data = Buffer.alloc(48);

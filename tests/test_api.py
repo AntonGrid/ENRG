@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
+from axis_core.main import app
 
 
 client = TestClient(app)
@@ -88,7 +88,7 @@ def test_oracle_attest_ok():
 
 def test_oracle_attest_invalid_missing_field():
     att = {
-        # "attestation_id" отсутствует
+        # "attestation_id" отсутствует — попадает в Mode 2 как oracle_attest_request
         "device_id": "dev_9e9c644e1580a83b",
         "proof": {},
         "decision": {"allowed": True, "reason": "ok"},
@@ -97,6 +97,7 @@ def test_oracle_attest_invalid_missing_field():
         "oracle_signature": "cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe",
     }
     resp = client.post("/oracle/attest", json=att)
+    # Axis-core возвращает 400 со строкой в detail
     assert resp.status_code == 400
     body = resp.json()
-    assert body["detail"]["message"] == "Invalid Attestation"
+    assert isinstance(body["detail"], str)

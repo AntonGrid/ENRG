@@ -8,19 +8,19 @@ from typing import Any, Dict, Optional
 
 import httpx
 
-# --- Импортируем on-chain bridge ---
+# --- Import on-chain bridge ---
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from app.onchain_bridge import build_attestation_params  # noqa: E402
+from axis_core.onchain_bridge import build_attestation_params  # noqa: E402
 
 
 @dataclass
 class SimpleENRGClient:
     """
-    Минимальный клиент только для /health и /oracle/attest (новый формат запроса).
+    Minimal client for /health and /oracle/attest (new request format).
     """
     base_url: str = "http://localhost:8000"
 
@@ -69,7 +69,7 @@ def build_full_attestation_from_oracle_response(
     oracle_id: str = "oracle_main_1",
 ) -> Dict[str, Any]:
     """
-    Строим полную Attestation (schema_version=1.0) из ответа /oracle/attest.
+    Build a full Attestation (schema_version=1.0) from the /oracle/attest response.
     """
     now = datetime.now(timezone.utc).replace(microsecond=0)
     ts_str = now.isoformat().replace("+00:00", "Z")
@@ -110,10 +110,10 @@ def encode_submit_attestation_calldata(
     issued_at: int,
 ) -> str:
     """
-    Encoder для:
+    Encoder for:
       submitAttestation(bytes32 attestationId, bytes32 deviceId, bool allowed, uint64 maxPowerW, uint64 issuedAt)
 
-    selector уже известен: 0x44b67025
+    selector is already known: 0x44b67025
     """
     selector = "44b67025"
 
@@ -235,7 +235,7 @@ def main() -> None:
     print(f"calldata: {calldata}")
     print()
 
-    # Готовая команда для cast send
+    # Ready cast send command
     allowed_str = str(params.allowed).lower()
     cast_cmd = (
         f'cast send {args.contract_address} '

@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 
-from app.api.provisioning import router as provisioning_router
-from app.api.registry import router as registry_router
-from app.api.oracle import router as oracle_router
+from axis_core.api.provisioning import router as provisioning_router
+from axis_core.api.registry import router as registry_router
+from axis_core.api.oracle import router as oracle_router
 
 
 app = FastAPI()
@@ -17,5 +17,5 @@ async def health():
 app.include_router(provisioning_router, prefix="/provisioning", tags=["provisioning"])
 app.include_router(registry_router, prefix="/registry", tags=["registry"])
 
-# Oracle (старый мок с jsonschema-валидацией)
+# Oracle (legacy mock with jsonschema validation)
 app.include_router(oracle_router)

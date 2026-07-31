@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.oracle_storage import InMemoryOracleStorage
+from axis_core.oracle_storage import InMemoryOracleStorage
 
 
 def _now_utc_no_microseconds() -> datetime:

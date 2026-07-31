@@ -8,12 +8,12 @@ from pathlib import Path
 from eth_abi import encode as abi_encode
 from eth_utils import keccak, to_hex
 
-# Добавляем корень репозитория в sys.path, чтобы можно было импортировать app.* и tools.*
+# Add repository root to sys.path to allow imports of app.* and tools.*
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from app.onchain_bridge import build_attestation_params  # noqa: E402
+from axis_core.onchain_bridge import build_attestation_params  # noqa: E402
 from tools.client import ENRGClient  # noqa: E402
 
 
@@ -22,9 +22,9 @@ FUNCTION_SIGNATURE = "submitAttestation(bytes32,bytes32,bool,uint64,uint64)"
 
 def build_full_attestation_deny_from_oracle_response(resp: dict) -> dict:
     """
-    Превращает ответ /oracle/attest (новый формат) в полную Attestation,
-    но принудительно устанавливает decision.allowed = False,
-    чтобы продемонстрировать on-chain поведение для отказа.
+    Convert /oracle/attest response (new format) into a full Attestation,
+    but forcefully set decision.allowed = False,
+    to demonstrate on-chain behaviour for a deny case.
     """
     device_id = resp["device_id"]
     attestation_id = resp["attestation_id"]
@@ -50,7 +50,7 @@ def build_full_attestation_deny_from_oracle_response(resp: dict) -> dict:
         "device_id": device_id,
         "proof": proof,
         "decision": {
-            # ключевой момент: здесь гарантированно False
+            # key point: guaranteed False here
             "allowed": False,
             "reason": "overridden-to-deny-demo",
             "max_power_kw": oracle_decision.get("max_power_kw"),
@@ -144,8 +144,9 @@ def main():
     calldata = build_calldata(params)
     print(calldata)
     print(
-        "\n(Скрипт НЕ шлёт транзакцию, а только печатает calldata с allowed=false — "
-        "его можно использовать в EOF-транзакции / CLI-туле для демонстрации отказного кейса.)"
+        "\n(Script does NOT send a transaction. It only prints calldata "
+        "with allowed=false — usable in an EOF transaction / CLI tool "
+        "to demonstrate the deny case.)"
     )
 
 

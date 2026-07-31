@@ -3,19 +3,19 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-# Добавляем корень репозитория в sys.path, чтобы можно было импортировать app.* и tools.*
+# Add repository root to sys.path to allow imports of app.* and tools.*
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
 
-from app.onchain_bridge import build_attestation_params  # noqa: E402
+from axis_core.onchain_bridge import build_attestation_params  # noqa: E402
 from tools.client import ENRGClient  # noqa: E402
 
 
 def build_full_attestation_from_oracle_response(resp: dict) -> dict:
     """
-    Превращает ответ /oracle/attest (новый формат) в полную Attestation,
-    совместимую с attestation.schema.json и demo_onchain_bridge.
+    Convert /oracle/attest response (new format) into a full Attestation
+    compatible with attestation.schema.json and demo_onchain_bridge.
     """
     device_id = resp["device_id"]
     attestation_id = resp["attestation_id"]
@@ -24,7 +24,7 @@ def build_full_attestation_from_oracle_response(resp: dict) -> dict:
     now = datetime.now(timezone.utc).replace(microsecond=0)
     issued_at = now.isoformat().replace("+00:00", "Z")
 
-    # Имитация исходного запроса (proof) на основе решения
+    # Simulate original proof based on oracle decision
     proof = {
         "device_id": device_id,
         "nonce": "demo_nonce_123",
@@ -37,7 +37,7 @@ def build_full_attestation_from_oracle_response(resp: dict) -> dict:
     }
 
     full_attestation = {
-        "schema_version": "1.0",  # явно указываем версию схемы
+        "schema_version": "1.0",
         "attestation_id": attestation_id,
         "device_id": device_id,
         "proof": proof,

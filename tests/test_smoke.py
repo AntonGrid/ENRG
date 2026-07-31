@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from app.main import app
+from axis_core.main import app
 
 
 client = TestClient(app)

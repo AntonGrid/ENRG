@@ -5,21 +5,21 @@ from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from jsonschema import ValidationError
 
-from app.schema_utils import get_validator, validate_payload
+from axis_core.schema_utils import get_validator, validate_payload
 
 router = APIRouter(prefix="/oracle", tags=["oracle"])
 
-# Валидация старой Attestation
+# Legacy Attestation validator
 ATT_VALIDATOR = get_validator("attestation")
 
-# Простое in-memory хранилище
+# Simple in-memory storage
 _ATTESTATIONS: Dict[str, Dict[str, Any]] = {}
 
 
 def _ensure_iso8601_z(ts: str) -> None:
     """
-    Проверка, что timestamp в ISO 8601 и в UTC с 'Z' на конце.
-    Пример корректного значения: '2026-07-25T19:05:00Z'.
+    Verify that timestamp is in ISO 8601 UTC format with 'Z' suffix.
+    Example of a valid value: '2026-07-25T19:05:00Z'.
     """
     if not isinstance(ts, str):
         raise ValueError("timestamp must be a string")
@@ -33,8 +33,8 @@ def _ensure_iso8601_z(ts: str) -> None:
 
 def _looks_like_attestation(body: dict) -> bool:
     """
-    Эвристика: распознать старый формат Attestation.
-    Тесты шлют поля: device_id, proof, decision, oracle_id, issued_at, oracle_signature.
+    Heuristic: detect legacy Attestation format.
+    Tests send fields: device_id, proof, decision, oracle_id, issued_at, oracle_signature.
     """
     attestation_keys = {
         "proof",
@@ -49,10 +49,10 @@ def _looks_like_attestation(body: dict) -> bool:
 
 def _handle_legacy_attestation(attestation: dict) -> Dict[str, Any]:
     """
-    Обработка старого формата Attestation (используется в tests/test_api.py).
-    Теперь:
-    - обязательна схема attestation.schema.json
-    - обязательна schema_version == "1.0"
+    Process legacy Attestation format (used in tests/test_api.py).
+    Now:
+    - attestation.schema.json is mandatory
+    - schema_version == "1.0" is mandatory
     """
     try:
         ATT_VALIDATOR.validate(attestation)
@@ -66,7 +66,7 @@ def _handle_legacy_attestation(attestation: dict) -> Dict[str, Any]:
             },
         )
 
-    # Проверка schema_version
+    # Validate schema_version
     version = attestation.get("schema_version")
     if version is None:
         raise HTTPException(
@@ -87,7 +87,7 @@ def _handle_legacy_attestation(attestation: dict) -> Dict[str, Any]:
             },
         )
 
-    # Дополнительная проверка issued_at
+    # Additional validation of issued_at
     issued_at = attestation.get("issued_at")
     if isinstance(issued_at, str):
         try:
@@ -118,13 +118,13 @@ def _handle_legacy_attestation(attestation: dict) -> Dict[str, Any]:
 
 def _handle_new_attest_request(payload: dict) -> Dict[str, Any]:
     """
-    Обработка нового запроса oracle_attest_request (tests/test_oracle_attest.py).
+    Process new oracle_attest_request payload (tests/test_oracle_attest.py).
     """
-    # Backwards-compatible: если клиент не прислал schema_version, считаем, что это "1.0"
+    # Backwards-compatible: if client does not send schema_version, assume "1.0"
     if "schema_version" not in payload:
         payload = {**payload, "schema_version": "1.0"}
 
-    # Схемная валидация
+    # Schema validation
     try:
         validate_payload("oracle_attest_request", payload)
     except ValidationError as e:
@@ -136,7 +136,7 @@ def _handle_new_attest_request(payload: dict) -> Dict[str, Any]:
             },
         )
 
-    # Проверка timestamp
+    # Timestamp validation
     ts = payload.get("timestamp")
     try:
         _ensure_iso8601_z(ts)
@@ -154,7 +154,7 @@ def _handle_new_attest_request(payload: dict) -> Dict[str, Any]:
 
     attestation_id = str(uuid4())
 
-    # Простейшее правило: ограничиваем мощность 5 кВт
+    # Simple policy: limit power to 5 kW
     limit_kw = 5.0
     if max_power_kw is not None and max_power_kw > limit_kw:
         decision = {
@@ -187,12 +187,12 @@ def _handle_new_attest_request(payload: dict) -> Dict[str, Any]:
 @router.post("/attest")
 def oracle_attest(body: dict):
     """
-    Универсальный эндпоинт Oracle:
+    Universal Oracle endpoint:
 
-    1) Старый режим: принимает полную Attestation, валидирует по схеме
-       'attestation' и возвращает статус 'received'.
-    2) Новый режим: принимает запрос с device_id/nonce/timestamp/...,
-       валидирует по схеме 'oracle_attest_request' и возвращает решение.
+    1) Legacy mode: accepts a full Attestation, validates against 'attestation'
+       schema, returns status 'received'.
+    2) New mode: accepts a request with device_id/nonce/timestamp/...,
+       validates against 'oracle_attest_request' schema, returns decision.
     """
     if _looks_like_attestation(body):
         return _handle_legacy_attestation(body)
@@ -202,7 +202,7 @@ def oracle_attest(body: dict):
 @router.get("/attestations/{attestation_id}")
 def get_attestation(attestation_id: str):
     """
-    Вернуть ранее сохранённую аттестацию или результат.
+    Return a previously stored attestation or result.
     """
     att = _ATTESTATIONS.get(attestation_id)
     if not att:

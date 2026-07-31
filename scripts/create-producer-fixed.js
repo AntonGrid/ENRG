@@ -3,21 +3,21 @@ const fs = require('fs');
 const crypto = require('crypto');
 
 (async () => {
-  // Загружаем ключ основателя
+  // Load founder keypair
   const founderKeypair = Keypair.fromSecretKey(
     Uint8Array.from(JSON.parse(fs.readFileSync('/home/enrg/founder-keypair.json', 'utf8')))
   );
   const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
   const programId = new PublicKey('8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a');
 
-  // Вычисляем PDA так же, как в оракуле (на основе 'producer' + founder.publicKey)
+  // Compute PDA the same way as in the oracle (based on 'producer' + founder.publicKey)
   const [producerPda] = PublicKey.findProgramAddressSync(
     [Buffer.from('producer'), founderKeypair.publicKey.toBuffer()],
     programId
   );
   console.log('Producer PDA:', producerPda.toBase58());
 
-  // Проверяем аккаунт
+  // Check account
   const accountInfo = await connection.getAccountInfo(producerPda);
   if (accountInfo && accountInfo.data.length > 0) {
     console.log('✅ Producer already initialized. Data length:', accountInfo.data.length);
@@ -26,7 +26,7 @@ const crypto = require('crypto');
 
   console.log('⚠️ Producer not initialized. Creating...');
 
-  // Подготавливаем данные для create_producer (как в твоём рабочем скрипте)
+  // Prepare data for create_producer (same as in the working script)
   const deviceIdPubkey = new PublicKey('11111111111111111111111111111111');
   const maxPowerW = 600_000_000n;
   const data = Buffer.alloc(48);

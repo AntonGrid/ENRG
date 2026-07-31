@@ -11,11 +11,11 @@ const crypto = require("crypto");
 
   const programId = new PublicKey("934VCuafJTsGvJ43u2sqAv7VaxNGf8Egtk8wYAXh5crn");
 
-  // ИСПОЛЬЗУЕМ СУЩЕСТВУЮЩИЙ MINT (из предыдущего успешного запуска)
+  // USE THE EXISTING MINT (from the previous successful run)
   const mint = new PublicKey("HzAWLdrMZiS2wEsnZc6hHmg4CdAZM4CaYMYv53BYqw6G");
   console.log("Using existing mint:", mint.toBase58());
 
-  // PDA (они уже созданы, но убедимся)
+  // PDAs (they already exist, but verify)
   const [vaultPda] = await PublicKey.findProgramAddress([Buffer.from("vault")], programId);
   const [buyback] = await PublicKey.findProgramAddress([Buffer.from("buyback"), mint.toBuffer()], programId);
   const [staking] = await PublicKey.findProgramAddress([Buffer.from("staking"), mint.toBuffer()], programId);
@@ -26,7 +26,7 @@ const crypto = require("crypto");
 
   const getDisc = (name) => crypto.createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
 
-  // Проверяем, существует ли Vault, и если нет — создаём
+  // Check if Vault exists, create if not
   const vaultInfo = await connection.getAccountInfo(vaultPda);
   if (!vaultInfo) {
     const ivIx = new TransactionInstruction({
@@ -46,7 +46,7 @@ const crypto = require("crypto");
     console.log("Vault already initialized");
   }
 
-  // Проверяем Funds
+  // Check Funds
   const buybackInfo = await connection.getAccountInfo(buyback);
   if (!buybackInfo) {
     const ifIx = new TransactionInstruction({
@@ -70,7 +70,7 @@ const crypto = require("crypto");
     console.log("Funds already initialized");
   }
 
-  // Producer (ПЕРЕСОЗДАЁМ ОТ ОСНОВНОГО КЛЮЧА)
+  // Producer (RECREATE FROM THE MAIN KEY)
   const producerInfo = await connection.getAccountInfo(producerPda);
   if (!producerInfo) {
     const deviceId = new PublicKey("11111111111111111111111111111111");
