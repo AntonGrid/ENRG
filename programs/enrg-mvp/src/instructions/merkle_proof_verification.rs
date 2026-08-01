@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use crate::error::ErrorCode;
 use crate::state::{ManifestRegistry, ManifestVerification, MerkleProofVerification};
 
 #[derive(Accounts)]
@@ -41,13 +42,13 @@ pub fn verify_merkle_proof(
     // Verify that the manifest_id matches
     require!(
         manifest.manifest_id == manifest_id,
-        ProofError::ManifestIdMismatch
+        ErrorCode::ManifestIdMismatch
     );
 
     // Verify that the proof length is reasonable (max 32 levels = 2^32 leaves)
     require!(
         proof_path.len() <= 32,
-        ProofError::ProofPathTooLong
+        ErrorCode::ProofPathTooLong
     );
 
     // Store the verification result
@@ -94,19 +95,4 @@ pub struct MerkleProofVerified {
     pub verified_root: [u8; 32],
     pub verified_by: Pubkey,
     pub timestamp: i64,
-}
-
-#[error_code]
-pub enum ProofError {
-    #[msg("Manifest ID in verification account does not match provided manifest_id")]
-    ManifestIdMismatch,
-
-    #[msg("Merkle proof path is too long (max 32 levels)")]
-    ProofPathTooLong,
-
-    #[msg("Proof does not match registry root")]
-    InvalidProof,
-
-    #[msg("Leaf hash is invalid (all zeros)")]
-    InvalidLeafHash,
 }

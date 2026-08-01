@@ -12,7 +12,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("DxhPrg1kTZPu7kXLvQfjVuVnANNNhfUHNEwNkm4TEnrK");
+declare_id!("6st9wJAeRssLvJEHjNt9wcDypaNnTTzjvnLWiyk8JsJF");
 
 /// Declare enrg-profile program for CPI access.
 /// IDL is loaded from <workspace-root>/idls/enrg_profile.json

@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use crate::error::ErrorCode;
 use crate::state::ManifestRegistry;
 
 #[derive(Accounts)]
@@ -84,7 +85,7 @@ pub fn update_merkle_root(
 
     registry.merkle_root = new_root;
     registry.updated_at = clock.unix_timestamp;
-    registry.version = registry.version.checked_add(1).ok_or(error!(RegistryError::Overflow))?;
+    registry.version = registry.version.checked_add(1).ok_or(error!(ErrorCode::RegistryOverflow))?;
     registry.manifest_count = manifest_count;
 
     emit!(MerkleRootUpdated {
@@ -127,10 +128,4 @@ pub struct OracleAuthorityChanged {
     pub old_oracle: Pubkey,
     pub new_oracle: Pubkey,
     pub changed_by: Pubkey,
-}
-
-#[error_code]
-pub enum RegistryError {
-    #[msg("Overflow in version counter")]
-    Overflow,
 }

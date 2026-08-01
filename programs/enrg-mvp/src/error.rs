@@ -44,4 +44,14 @@ pub enum ErrorCode {
     DeviceNotRegistered,
     #[msg("Device is already claimed by another wallet")]
     DeviceAlreadyClaimed,
+    #[msg("Overflow in registry version counter")]
+    RegistryOverflow,
+    #[msg("Manifest ID in verification account does not match provided manifest_id")]
+    ManifestIdMismatch,
+    #[msg("Merkle proof path is too long (max 32 levels)")]
+    ProofPathTooLong,
+    #[msg("Proof does not match registry root")]
+    InvalidProof,
+    #[msg("Leaf hash is invalid (all zeros)")]
+    InvalidLeafHash,
 }
