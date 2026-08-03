@@ -72,3 +72,5 @@ admin-keypair.json
 oracle-keypair.json
 validator.log
 test-ledger/
+solana-release/
+solana-release-x86_64-unknown-linux-gnu.tar.bz2
