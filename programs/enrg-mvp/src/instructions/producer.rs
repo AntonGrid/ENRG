@@ -7,10 +7,12 @@ pub struct CreateProducer<'info> {
         init,
         payer = authority,
         space = 8 + EnergyProducer::INIT_SPACE,
-        seeds = [b"producer", authority.key().as_ref()],
+        seeds = [b"producer", device_id.key().as_ref()],
         bump
     )]
     pub producer: Account<'info, EnergyProducer>,
+    /// CHECK: device identity public key.
+    pub device_id: UncheckedAccount<'info>,
     #[account(mut)]
     pub authority: Signer<'info>,
     pub system_program: Program<'info, System>,

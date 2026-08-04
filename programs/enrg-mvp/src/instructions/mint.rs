@@ -24,6 +24,18 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         ErrorCode::InvalidDeviceState
     );
 
+    // ══ C-1: отчёт должен принадлежать именно этому устройству ══
+    require!(
+        producer.device_id == report.device_id,
+        ErrorCode::DeviceMismatch
+    );
+
+    // ══ C-2: signer обязан быть владельцем producer'а (authority) ══
+    require!(
+        producer.authority == ctx.accounts.authority.key(),
+        ErrorCode::NotProducerOwner
+    );
+
     // ── Ed25519 signature verification ──
     let message = report.message_to_sign()?;
 
@@ -39,19 +51,14 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     let now = clock.unix_timestamp;
 
     verify_timestamp(now, report.verified_at)?;
-
-    // Nonce validation (строгий рост).
     verify_nonce(producer, report.nonce)?;
 
     // ── Energy validation ──
-    // max_power_w читается из EnergyProfile PDA (enrg-profile).
     let max_energy = ctx.accounts.profile.rated_power;
-
     require!(report.energy_wh <= max_energy, ErrorCode::ExcessiveEnergy);
 
-    // ── Update network sliding window (глобальная метрика Core) ──
+    // ── Update network sliding window ──
     let now_ts = clock.unix_timestamp;
-
     vault.network_energy_30d = crate::math::update_energy_window_u128(
         vault.network_energy_30d,
         vault.network_energy_updated_at,
@@ -61,7 +68,6 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     vault.network_energy_updated_at = now_ts;
 
     // ── CPI: record_production в enrg-profile ──
-    // Обновляет device_energy_30d и метаданные устройства.
     let profile_ctx = CpiContext::new(
         ctx.accounts.profile_program.key(),
         crate::enrg_profile::cpi::accounts::RecordProduction {
@@ -80,9 +86,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     // ── Calculate reward with dynamic difficulty ──
-    // device_energy_30d читается из EnergyProfile PDA после CPI.
     let device_energy_30d = ctx.accounts.profile.device_energy_30d as u64;
-
     let reward = calculate_reward_dynamic(
         report.energy_wh,
         vault.total_supply,
@@ -98,7 +102,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         vault.network_energy_30d,
     );
 
-    // Никаких "пустых" минтов: отчёты, дающие 0 SRC, отклоняем.
+    // Никаких "пустых" минтов
     require!(reward > 0, ErrorCode::ZeroAmountMint);
 
     // ── Check supply cap ──
@@ -106,7 +110,6 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         .total_supply
         .checked_add(reward)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
-
     require!(new_supply <= vault.max_supply, ErrorCode::ArithmeticOverflow);
 
     // ── Calculate distributions ──
@@ -115,29 +118,24 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         .ok_or(ErrorCode::ArithmeticOverflow)?
         .checked_div(100)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
-
     let fee = reward
         .checked_sub(user_amount)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
-
     let buyback_amount = fee
         .checked_mul(BUYBACK_PERCENT)
         .ok_or(ErrorCode::ArithmeticOverflow)?
         .checked_div(100)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
-
     let staking_amount = fee
         .checked_mul(STAKING_PERCENT)
         .ok_or(ErrorCode::ArithmeticOverflow)?
         .checked_div(100)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
-
     let dao_amount = fee
         .checked_mul(DAO_PERCENT)
         .ok_or(ErrorCode::ArithmeticOverflow)?
         .checked_div(100)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
-
     let emergency_amount = fee
         .checked_sub(buyback_amount)
         .ok_or(ErrorCode::ArithmeticOverflow)?
@@ -152,10 +150,8 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         &[ctx.accounts.token_mint.mint_authority_bump],
     ];
     let signer_seeds = &[&mint_authority_seeds[..]];
-
     let token_program = ctx.accounts.token_program.key();
 
-    // Mint to producer (user)
     token::mint_to(
         CpiContext::new(
             token_program,
@@ -169,7 +165,6 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         user_amount,
     )?;
 
-    // Mint to buyback
     token::mint_to(
         CpiContext::new(
             token_program,
@@ -183,7 +178,6 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         buyback_amount,
     )?;
 
-    // Mint to staking
     token::mint_to(
         CpiContext::new(
             token_program,
@@ -197,7 +191,6 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         staking_amount,
     )?;
 
-    // Mint to DAO
     token::mint_to(
         CpiContext::new(
             token_program,
@@ -211,7 +204,6 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         dao_amount,
     )?;
 
-    // Mint to emergency
     token::mint_to(
         CpiContext::new(
             token_program,
@@ -311,7 +303,11 @@ pub struct MintEnergy<'info> {
     )]
     pub mint_authority: UncheckedAccount<'info>,
 
-    #[account(mut)]
+    /// C-2: user token account должен принадлежать authority (владельцу producer'а).
+    #[account(
+        mut,
+        constraint = user_token_account.owner == authority.key() @ ErrorCode::UnauthorizedTokenAccountOwner,
+    )]
     pub user_token_account: Box<Account<'info, TokenAccount>>,
 
     #[account(mut)]
@@ -336,7 +332,6 @@ pub struct MintEnergy<'info> {
     pub profile_program: UncheckedAccount<'info>,
 
     /// Authority of the EnergyProfile (producer's owner).
-    /// Должен подписывать CPI-вызов record_production.
     pub authority: Signer<'info>,
 
     #[account(

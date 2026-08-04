@@ -54,4 +54,10 @@ pub enum ErrorCode {
     InvalidProof,
     #[msg("Leaf hash is invalid (all zeros)")]
     InvalidLeafHash,
+    #[msg("Mint only allowed into the token account owned by the producer's owner")]
+    UnauthorizedTokenAccountOwner,
+    #[msg("Report device_id does not match the producer's registered device")]
+    DeviceMismatch,
+    #[msg("Signer is not the owner of the producer")]
+    NotProducerOwner,
 }
