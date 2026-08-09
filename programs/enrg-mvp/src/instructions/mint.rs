@@ -24,6 +24,12 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         ErrorCode::InvalidDeviceState
     );
 
+    // ══ C-0: оракул должен быть доверенным (OracleRegistry) ══
+    require!(
+        ctx.accounts.oracle_registry.contains(&report.oracle),
+        ErrorCode::UntrustedOracle
+    );
+
     // ══ C-1: отчёт должен принадлежать именно этому устройству ══
     require!(
         producer.device_id == report.device_id,
@@ -324,6 +330,13 @@ pub struct MintEnergy<'info> {
 
     /// CHECK: Sysvar instructions — используется для проверки Ed25519-подписи.
     pub instructions: UncheckedAccount<'info>,
+
+    /// Trusted Oracle Registry (whitelist of oracles, ADR-0003 / ADR-0006).
+    #[account(
+        seeds = [b"oracle-registry"],
+        bump
+    )]
+    pub oracle_registry: Account<'info, OracleRegistry>,
 
     pub token_program: Program<'info, Token>,
 

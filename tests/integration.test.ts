@@ -246,24 +246,97 @@ describe("ENRG Protocol — Core Flow", () => {
       console.log("Oracle add skipped (may already exist)");
     }
 
-    // Producer
+    // ── Device Lifecycle (ADR-0005): register → claim → provision → activate ──
+    const profileProgramId = new PublicKey(
+      "BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn"
+    );
     const [producerPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("producer"), producerKeypair.publicKey.toBuffer()],
+      [Buffer.from("producer"), deviceId.toBuffer()],
       program.programId
     );
+    const [profilePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("profile"), producerKeypair.publicKey.toBuffer()],
+      profileProgramId
+    );
+
+    // 1) Register device (создаёт Producer PDA + EnergyProfile через CPI)
     try {
       await program.methods
-        .createProducer(deviceId, maxPowerW)
+        .registerDevice()
         .accounts({
           producer: producerPda,
-          authority: producerKeypair.publicKey,
+          operator: producerKeypair.publicKey,
+          deviceId: deviceId,
           systemProgram: SystemProgram.programId,
+          profileProgram: profileProgramId,
+          profile: profilePda,
         })
         .signers([producerKeypair])
         .rpc();
-      console.log("Producer created");
+      console.log("Device registered");
     } catch (e: any) {
-      console.log("Producer create skipped (may already exist)");
+      console.log("Device register skipped (may already exist)");
+    }
+
+    // 2) Claim device (владелец = producerKeypair)
+    try {
+      await program.methods
+        .claimDevice()
+        .accounts({
+          producer: producerPda,
+          authority: producerKeypair.publicKey,
+        })
+        .signers([producerKeypair])
+        .rpc();
+      console.log("Device claimed");
+    } catch (e: any) {
+      console.log("Device claim skipped (may already claimed)");
+    }
+
+    // 3) Provision device
+    try {
+      await program.methods
+        .provisionDevice()
+        .accounts({
+          producer: producerPda,
+          authority: producerKeypair.publicKey,
+        })
+        .signers([producerKeypair])
+        .rpc();
+      console.log("Device provisioned");
+    } catch (e: any) {
+      console.log("Device provision skipped");
+    }
+
+    // 4) Activate device
+    try {
+      await program.methods
+        .activateDevice()
+        .accounts({
+          producer: producerPda,
+          authority: producerKeypair.publicKey,
+        })
+        .signers([producerKeypair])
+        .rpc();
+      console.log("Device activated");
+    } catch (e: any) {
+      console.log("Device activate skipped");
+    }
+
+    // 5) Update profile metadata (rated_power должен покрывать energy_wh)
+    const profileProgram = anchor.workspace.EnrgProfile as any;
+    try {
+      await profileProgram.methods
+        .updateMetadata(new BN(50_000_000), "solar", "test-location")
+        .accounts({
+          authority: producerKeypair.publicKey,
+          profile: profilePda,
+        })
+        .signers([producerKeypair])
+        .rpc();
+      console.log("Profile metadata updated");
+    } catch (e: any) {
+      console.log("Profile metadata update skipped:", e.message?.split("\n")[0]);
     }
 
     // Create ATA for producer (user token account)
@@ -318,6 +391,7 @@ describe("ENRG Protocol — Core Flow", () => {
       publicKey: pubkeyBytes,
       message,
       signature,
+      instructionIndex: 0, // <--- ЯВНО УКАЗЫВАЕМ ИНДЕКС ТЕКУЩЕЙ ИНСТРУКЦИИ
     });
 
     // 2) Собираем OracleReport
@@ -330,6 +404,12 @@ describe("ENRG Protocol — Core Flow", () => {
       energyWh,
       deviceSignature: sigArray,
     };
+
+    // ── Диагностика: фактический владелец аккаунта profile ──
+    const profileInfo = await provider.connection.getAccountInfo(profilePda);
+    console.log("DIAG profile owner:", profileInfo?.owner?.toBase58() ?? "NULL");
+    console.log("DIAG expected BYB51:", profileProgramId.toBase58());
+    console.log("DIAG profile size:", profileInfo?.data?.length);
 
     const mintIx = await program.methods
       .mintEnergy(report)
@@ -345,14 +425,28 @@ describe("ENRG Protocol — Core Flow", () => {
         daoAccount: fundAtas.dao,
         emergencyAccount: fundAtas.emergency,
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        oracleRegistry: oracleRegistryPda,
         tokenProgram: TOKEN_PROGRAM_ID,
+        profileProgram: profileProgramId,
+        authority: producerKeypair.publicKey,
+        profile: profilePda,
       })
       .instruction();
 
-    // 3) Одна транзакция: сначала ed25519, потом mintEnergy
-    const tx = new Transaction().add(ed25519Ix, mintIx);
+    // 3) Создаем транзакцию с двумя инструкциями: сначала ed25519, потом mintEnergy
+    const tx = new Transaction();
+    tx.add(ed25519Ix);
+    tx.add(mintIx);
 
-    const txSig2 = await provider.sendAndConfirm(tx, []);
-    console.log("Energy Minted tx:", txSig2);
+    try {
+      const txSig2 = await provider.sendAndConfirm(tx, [producerKeypair]);
+      console.log("Energy Minted tx:", txSig2);
+    } catch (e: any) {
+      console.error("MINT ERROR:", e.message?.split("\n")[0]);
+      if (typeof e.getLogs === "function") {
+        try { console.error("TX LOGS:\n" + (await e.getLogs()).join("\n")); } catch (_) {}
+      }
+      throw e;
+    }
   });
 });

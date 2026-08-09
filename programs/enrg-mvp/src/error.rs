@@ -60,4 +60,6 @@ pub enum ErrorCode {
     DeviceMismatch,
     #[msg("Signer is not the owner of the producer")]
     NotProducerOwner,
+    #[msg("Report oracle is not in the trusted Oracle Registry")]
+    UntrustedOracle,
 }

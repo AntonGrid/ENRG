@@ -12,7 +12,7 @@ pub mod state;
 
 use instructions::*;
 
-declare_id!("HrQZPeKYtDJCxo9R2wv8XUK43ex1XLcb3CqykYauGn64");
+declare_id!("5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin");
 
 /// Declare enrg-profile program for CPI access.
 /// IDL is loaded from <workspace-root>/idls/enrg_profile.json
@@ -132,17 +132,6 @@ pub mod enrg_mvp {
     }
 
     // ═══════════════════════════════════════════
-    //  PHASE 3 — Producer Management
-    // ═══════════════════════════════════════════
-
-    pub fn create_producer(
-        ctx: Context<CreateProducer>,
-        device_id: Pubkey,
-    ) -> Result<()> {
-        instructions::producer::create_producer(ctx, device_id)
-    }
-
-    // ═══════════════════════════════════════════
     //  PHASE 4 — Energy Minting
     // ═══════════════════════════════════════════
 
@@ -254,6 +243,12 @@ pub mod enrg_mvp {
         ctx: Context<QuarantineDevice>,
     ) -> Result<()> {
         instructions::device_lifecycle::quarantine_device(ctx)
+    }
+
+    pub fn maintenance_device(
+        ctx: Context<MaintenanceDevice>,
+    ) -> Result<()> {
+        instructions::device_lifecycle::maintenance_device(ctx)
     }
 
     pub fn release_from_quarantine(

@@ -1,7 +1,7 @@
 import * as anchor from "@coral-xyz/anchor";
 import { Program } from "@coral-xyz/anchor";
 import { PublicKey, Keypair, SystemProgram, Connection, clusterApiUrl } from "@solana/web3.js";
-import * as keccak from "keccak";
+import { keccak256 } from "js-sha3";
 import * as assert from "assert";
 
 /**
@@ -20,7 +20,7 @@ import * as assert from "assert";
  */
 
 function sha256(data: Buffer): Buffer {
-  return keccak("keccak256").update(data).digest();
+  return Buffer.from(keccak256.update(data).arrayBuffer());
 }
 
 interface MerkleTree {

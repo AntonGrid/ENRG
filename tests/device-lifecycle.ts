@@ -26,7 +26,13 @@ describe("ENRG Protocol — Device Lifecycle (ADR-0005)", () => {
   const otherWallet = Keypair.generate();
   const deviceKeypair = Keypair.generate();
 
+  // enrg-profile program ID (Anchor.toml localnet)
+  const profileProgramId = new PublicKey(
+    "BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn"
+  );
+
   let devicePda: PublicKey;
+  let profilePda: PublicKey;
 
   const airdrop = async (pubkey: PublicKey, amount: number = 10 * anchor.web3.LAMPORTS_PER_SOL) => {
     const sig = await provider.connection.requestAirdrop(pubkey, amount);
@@ -43,16 +49,23 @@ describe("ENRG Protocol — Device Lifecycle (ADR-0005)", () => {
       [Buffer.from("producer"), deviceKeypair.publicKey.toBytes()],
       program.programId
     );
+
+    [profilePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("profile"), operator.publicKey.toBytes()],
+      profileProgramId
+    );
   });
 
   it("1. Register Device — UNREGISTERED → REGISTERED", async () => {
     await program.methods
-      .registerDevice(new anchor.BN(5000))
+      .registerDevice()
       .accounts({
         operator: operator.publicKey,
         producer: devicePda,
         deviceId: deviceKeypair.publicKey,
         systemProgram: SystemProgram.programId,
+        profileProgram: profileProgramId,
+        profile: profilePda,
       })
       .signers([operator])
       .rpc();

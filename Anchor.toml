@@ -9,8 +9,8 @@ enrg_mvp = "EsaKY8C3EZeRLL1wG5UECAnDWjbLfWJr7jL3pBLmpFfW"
 enrg_profile = "H9GDJQhaLqHeZZmuiqL1JTCaQ4nSquKterUyFVRdL5GZ"
 
 [programs.localnet]
-enrg_mvp = "HrQZPeKYtDJCxo9R2wv8XUK43ex1XLcb3CqykYauGn64"
-enrg_profile = "AhTLtjnhapquhyYuKFUSVcQVveEXzvYTEVkn1YTyxcTv"
+enrg_mvp = "5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin"
+enrg_profile = "BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn"
 
 [provider]
 cluster = "localnet"

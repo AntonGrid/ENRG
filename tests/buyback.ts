@@ -89,11 +89,16 @@ describe("ENRG Protocol — Buyback & Burn", () => {
   const producerKeypair = Keypair.generate();
   const deviceKeypair = nacl.sign.keyPair();
   const deviceId = new PublicKey(deviceKeypair.publicKey);
-  const maxPowerW = new BN(1000);
   const oracleKeypair = Keypair.generate();
 
   let userAta: PublicKey;
   let producerPda: PublicKey;
+  let profilePda: PublicKey;
+
+  // enrg-profile program ID (same as Anchor.toml localnet)
+  const profileProgramId = new PublicKey(
+    "BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn"
+  );
 
   before(async () => {
     for (const pk of [producerKeypair.publicKey, oracleKeypair.publicKey]) {
@@ -102,9 +107,15 @@ describe("ENRG Protocol — Buyback & Burn", () => {
       );
     }
 
+    // Producer PDA теперь выводится из device_id (seeds: ["producer", device_id])
     [producerPda] = PublicKey.findProgramAddressSync(
-      [Buffer.from("producer"), producerKeypair.publicKey.toBuffer()],
+      [Buffer.from("producer"), deviceId.toBuffer()],
       program.programId
+    );
+
+    [profilePda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("profile"), producerKeypair.publicKey.toBuffer()],
+      profileProgramId
     );
 
     userAta = getAssociatedTokenAddressSync(
@@ -190,13 +201,54 @@ describe("ENRG Protocol — Buyback & Burn", () => {
       .accounts({ registry: oracleRegistryPda, authority: wallet.publicKey })
       .rpc();
 
-    // ── Producer ──
+    // ── Device Lifecycle: register → claim → provision → activate ──
     await program.methods
-      .createProducer(deviceId, maxPowerW)
+      .registerDevice()
+      .accounts({
+        producer: producerPda,
+        operator: producerKeypair.publicKey,
+        deviceId: deviceId,
+        systemProgram: SystemProgram.programId,
+        profileProgram: profileProgramId,
+        profile: profilePda,
+      })
+      .signers([producerKeypair])
+      .rpc();
+
+    await program.methods
+      .claimDevice()
       .accounts({
         producer: producerPda,
         authority: producerKeypair.publicKey,
-        systemProgram: SystemProgram.programId,
+      })
+      .signers([producerKeypair])
+      .rpc();
+
+    await program.methods
+      .provisionDevice()
+      .accounts({
+        producer: producerPda,
+        authority: producerKeypair.publicKey,
+      })
+      .signers([producerKeypair])
+      .rpc();
+
+    await program.methods
+      .activateDevice()
+      .accounts({
+        producer: producerPda,
+        authority: producerKeypair.publicKey,
+      })
+      .signers([producerKeypair])
+      .rpc();
+
+    // ── Update profile metadata (rated_power >= energy_wh) ──
+    const profileProgram = anchor.workspace.EnrgProfile as any;
+    await profileProgram.methods
+      .updateMetadata(new BN(50_000_000), "solar", "test-location")
+      .accounts({
+        authority: producerKeypair.publicKey,
+        profile: profilePda,
       })
       .signers([producerKeypair])
       .rpc();
@@ -230,6 +282,7 @@ describe("ENRG Protocol — Buyback & Burn", () => {
       publicKey: deviceKeypair.publicKey,
       message,
       signature,
+      instructionIndex: 0, // <--- ЯВНО УКАЗЫВАЕМ ИНДЕКС ТЕКУЩЕЙ ИНСТРУКЦИИ
     });
 
     const report = {
@@ -256,12 +309,16 @@ describe("ENRG Protocol — Buyback & Burn", () => {
         daoAccount: fundAtas.dao,
         emergencyAccount: fundAtas.emergency,
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+        oracleRegistry: oracleRegistryPda,
         tokenProgram: TOKEN_PROGRAM_ID,
+        profileProgram: profileProgramId,
+        authority: producerKeypair.publicKey,
+        profile: profilePda,
       })
       .instruction();
 
     const tx = new Transaction().add(ed25519Ix, mintIx);
-    await provider.sendAndConfirm(tx, []);
+    await provider.sendAndConfirm(tx, [producerKeypair]);
   });
 
   it("2. Buyback and Burn — burns tokens from buyback fund", async () => {

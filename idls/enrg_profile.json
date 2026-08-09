@@ -1,5 +1,5 @@
 {
-  "address": "GFfYSAen1RcbqdYWcqdGB2btKSWouEya8pKVfRWKxDiQ",
+  "address": "BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn",
   "metadata": {
     "name": "enrg_profile",
     "version": "0.1.0",
@@ -303,9 +303,9 @@
     {
       "name": "EnergyProfile",
       "docs": [
-        "Energy Profile PDA — хранит метаданные устройства и скользящее окно энергии за 30 дней.",
+        "EnergyProfile — хранит метаданные устройства и скользящее окно энергии.",
         "",
-        "Seeds: [b\"profile\", authority.key().as_ref()]"
+        "Seeds PDA: [b\"profile\", authority.key().as_ref()]"
       ],
       "type": {
         "kind": "struct",
@@ -320,42 +320,42 @@
           {
             "name": "device_id",
             "docs": [
-              "Привязка к устройству (device_id из EnergyProducer)."
+              "ID устройства (из Device Registry)."
             ],
             "type": "pubkey"
           },
           {
             "name": "rated_power",
             "docs": [
-              "Максимальная мощность устройства в ваттах (W)."
+              "Номинальная мощность устройства (Вт)."
             ],
             "type": "u64"
           },
           {
             "name": "device_type",
             "docs": [
-              "Тип устройства (до 32 байт), например \"solar\", \"wind\", \"hydro\"."
+              "Тип устройства (строка до 32 байт)."
             ],
             "type": "string"
           },
           {
             "name": "location",
             "docs": [
-              "Локация устройства (до 64 байт)."
+              "Локация (строка до 64 байт)."
             ],
             "type": "string"
           },
           {
             "name": "device_energy_30d",
             "docs": [
-              "Скользящее окно суммарной энергии за 30 дней (в Wh)."
+              "Скользящее окно энергии за 30 дней (Вт·ч)."
             ],
             "type": "u128"
           },
           {
             "name": "device_energy_updated_at",
             "docs": [
-              "Timestamp последнего обновления скользящего окна."
+              "Время последнего обновления окна."
             ],
             "type": "i64"
           },

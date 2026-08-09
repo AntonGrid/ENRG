@@ -17,19 +17,11 @@ pub struct RegisterDevice<'info> {
     /// CHECK: device identity public key
     pub device_id: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
-
-    // ── CPI: enrg-profile (будет добавлен после создания программы) ──
-    // /// CHECK: enrg-profile program ID.
-    // pub profile_program: UncheckedAccount<'info>,
-    // #[account(
-    //     init,
-    //     payer = operator,
-    //     space = 8 + energy_profile::state::EnergyProfile::INIT_SPACE,
-    //     seeds = [b"profile", producer.key().as_ref()],
-    //     bump,
-    //     seeds::program = profile_program.key()
-    // )]
-    // pub profile: Account<'info, energy_profile::state::EnergyProfile>,
+    /// CHECK: enrg-profile program ID (для CPI создания профиля).
+    pub profile_program: UncheckedAccount<'info>,
+    /// CHECK: EnergyProfile PDA, создаётся через CPI-вызов в enrg-profile.
+    #[account(mut)]
+    pub profile: UncheckedAccount<'info>,
 }
 
 pub fn register_device(ctx: Context<RegisterDevice>) -> Result<()> {
@@ -42,8 +34,36 @@ pub fn register_device(ctx: Context<RegisterDevice>) -> Result<()> {
     producer.state = DeviceState::Registered;
     msg!("Device registered: {}", producer.device_id);
 
-    // TODO: CPI call to profile::init_profile() with metadata
-    // profile::cpi::init_profile(...)
+    // ── CPI: создание EnergyProfile в enrg-profile ──
+    // Seeds PDPA профиля: [b"profile", operator.key().as_ref()] (см. enrg-profile).
+    let operator_key = ctx.accounts.operator.key();
+    let profile_seeds = &[b"profile".as_ref(), operator_key.as_ref()];
+    let (profile_pda, _bump) = Pubkey::find_program_address(
+        profile_seeds,
+        &ctx.accounts.profile_program.key(),
+    );
+    require!(
+        ctx.accounts.profile.key() == profile_pda,
+        ErrorCode::InvalidParameter
+    );
+
+    let cpi_program = ctx.accounts.profile_program.key();
+    let cpi_ctx = CpiContext::new(
+        cpi_program,
+        crate::enrg_profile::cpi::accounts::InitializeProfile {
+            authority: ctx.accounts.operator.to_account_info(),
+            profile: ctx.accounts.profile.to_account_info(),
+            system_program: ctx.accounts.system_program.to_account_info(),
+        },
+    );
+
+    crate::enrg_profile::cpi::initialize_profile(
+        cpi_ctx,
+        ctx.accounts.device_id.key(),
+        0, // rated_power — заполняется позже через enrg-profile::update_metadata
+        String::new(), // device_type
+        String::new(), // location
+    )?;
 
     Ok(())
 }
@@ -118,6 +138,7 @@ pub struct QuarantineDevice<'info> {
         mut,
         seeds = [b"producer", producer.device_id.as_ref()],
         bump,
+        has_one = authority @ ErrorCode::Unauthorized
     )]
     pub producer: Account<'info, EnergyProducer>,
 }
@@ -131,12 +152,33 @@ pub fn quarantine_device(ctx: Context<QuarantineDevice>) -> Result<()> {
 }
 
 #[derive(Accounts)]
+pub struct MaintenanceDevice<'info> {
+    pub authority: Signer<'info>,
+    #[account(
+        mut,
+        seeds = [b"producer", producer.device_id.as_ref()],
+        bump,
+        has_one = authority @ ErrorCode::Unauthorized
+    )]
+    pub producer: Account<'info, EnergyProducer>,
+}
+
+pub fn maintenance_device(ctx: Context<MaintenanceDevice>) -> Result<()> {
+    let producer = &mut ctx.accounts.producer;
+    require!(producer.state.can_transition_to(DeviceState::Maintenance), ErrorCode::InvalidStateTransition);
+    producer.state = DeviceState::Maintenance;
+    msg!("Device moved to maintenance: {}", producer.device_id);
+    Ok(())
+}
+
+#[derive(Accounts)]
 pub struct RevokeDevice<'info> {
     pub authority: Signer<'info>,
     #[account(
         mut,
         seeds = [b"producer", producer.device_id.as_ref()],
         bump,
+        has_one = authority @ ErrorCode::Unauthorized
     )]
     pub producer: Account<'info, EnergyProducer>,
 }
@@ -156,6 +198,7 @@ pub struct ReleaseFromQuarantine<'info> {
         mut,
         seeds = [b"producer", producer.device_id.as_ref()],
         bump,
+        has_one = authority @ ErrorCode::Unauthorized
     )]
     pub producer: Account<'info, EnergyProducer>,
 }

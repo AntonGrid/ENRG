@@ -27,6 +27,7 @@ impl DeviceState {
             (Active, Maintenance) => true,
             (Active, Revoked) => true,
             (Quarantine, Active) => true,
+            (Quarantine, Maintenance) => true,
             (Quarantine, Revoked) => true,
             (Maintenance, Active) => true,
             (Maintenance, Revoked) => true,

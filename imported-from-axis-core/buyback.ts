@@ -230,6 +230,7 @@ describe("ENRG Protocol — Buyback & Burn", () => {
       publicKey: deviceKeypair.publicKey,
       message,
       signature,
+      instructionIndex: 0, // <--- ЯВНО УКАЗЫВАЕМ ИНДЕКС ТЕКУЩЕЙ ИНСТРУКЦИИ
     });
 
     const report = {

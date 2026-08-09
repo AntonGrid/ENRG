@@ -76,7 +76,7 @@ describe("Manifest Registry Integration", () => {
       .initializeManifestRegistry()
       .accounts({
         registry: manifestRegistryPda,
-        authority: wallet.publicKey,
+        payer: wallet.publicKey,
         systemProgram: SystemProgram.programId,
       })
       .rpc();
@@ -86,12 +86,13 @@ describe("Manifest Registry Integration", () => {
 
     const account = await program.account.manifestRegistry.fetch(manifestRegistryPda);
     assert.ok(account, "Registry account should exist");
-    assert.strictEqual(account.version, 1);
-    assert.strictEqual(account.manifestCount, 0);
+    assert.strictEqual(account.version.toNumber(), 1);
+    assert.strictEqual(account.manifestCount.toNumber(), 0);
     assert.strictEqual(account.oracleAuthority.toBase58(), wallet.publicKey.toBase58());
   });
 
-  it("should publish manifests via off-chain registry", async () => {    const manifest1Payload: ManifestPayload = {
+  it("should publish manifests via off-chain registry", async () => {
+    const manifest1Payload: ManifestPayload = {
       manifest_version: "1.0",
       device_type: "sensor",
       manufacturer: "ENRG",
@@ -117,15 +118,42 @@ describe("Manifest Registry Integration", () => {
   });
 
   it("should create a Merkle snapshot and update on-chain registry", async () => {
+    // Ensure the on-chain registry exists. When running the full suite it is
+    // initialized by the first test; when running this test in isolation we
+    // initialize it here so the registry account is always provided.
+    registryAccount = manifestRegistryPda;
+    let registryInitialized = true;
+    try {
+      await program.account.manifestRegistry.fetch(manifestRegistryPda);
+    } catch {
+      registryInitialized = false;
+    }
+
+    if (!registryInitialized) {
+      console.log("🔄 Registry account not found — initializing on-chain registry...");
+      const initTx = await program.methods
+        .initializeManifestRegistry()
+        .accounts({
+          registry: manifestRegistryPda,
+          payer: wallet.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      console.log("✅ Registry initialized: tx =", initTx);
+    } else {
+      console.log("✅ Registry already initialized");
+    }
+
     const snapshot = await createMerkleSnapshot();
     console.log(`✅ Merkle snapshot created: root = ${snapshot.root}, total = ${snapshot.total}`);
 
     const rootHex = snapshot.root;
     const rootBuffer = Buffer.from(rootHex.replace("0x", ""), "hex");
-    const rootBytes = new Uint8Array(rootBuffer.length > 32 ? rootBuffer.slice(0, 32) : rootBuffer);
+    const rootBytes = new Uint8Array(32);
+    rootBytes.set(rootBuffer.subarray(0, 32));
 
     const tx = await program.methods
-      .updateMerkleRoot([...Array.from(rootBytes).slice(0, 32).fill(0, rootBytes.length)], new BN(snapshot.total))
+      .updateMerkleRoot([...rootBytes], new BN(snapshot.total))
       .accounts({
         registry: registryAccount,
         oracle: wallet.publicKey,
@@ -136,8 +164,8 @@ describe("Manifest Registry Integration", () => {
     console.log("✅ Merkle root updated on-chain: tx =", tx);
 
     const account = await program.account.manifestRegistry.fetch(manifestRegistryPda);
-    assert.strictEqual(account.manifestCount, snapshot.total);
-    assert.strictEqual(account.version, 2);
+    assert.strictEqual(account.manifestCount.toNumber(), snapshot.total);
+    assert.strictEqual(account.version.toNumber(), 2);
   });
 
   it("should retrieve current Merkle root and verify consistency", async () => {
@@ -148,7 +176,6 @@ describe("Manifest Registry Integration", () => {
     const onChainRoot = Buffer.from(account.merkleRoot).toString("hex");
     console.log("📝 On-chain stored root:", onChainRoot);
 
-    // Both should exist (may differ due to in-memory vs on-chain)
     assert.ok(currentRoot, "Registry should have a root");
     assert.ok(account.merkleRoot, "On-chain registry should have a root");
   });
@@ -208,6 +235,6 @@ describe("Manifest Registry Integration", () => {
 
     const verification = await program.account.manifestVerification.fetch(verificationPda);
     assert.ok(verification, "Verification account should exist");
-    assert.strictEqual(verification.manifestVersion, 1);
+    assert.strictEqual(verification.manifestVersion.toNumber(), 1);
   });
 });

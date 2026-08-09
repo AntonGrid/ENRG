@@ -4,11 +4,17 @@ use crate::state::ManifestRegistry;
 
 #[derive(Accounts)]
 pub struct InitializeManifestRegistry<'info> {
-    #[account(init, payer = authority, space = ManifestRegistry::SPACE)]
+    #[account(
+        init_if_needed,
+        payer = payer,
+        space = ManifestRegistry::SPACE,
+        seeds = [b"manifest-registry"],
+        bump,
+    )]
     pub registry: Account<'info, ManifestRegistry>,
 
     #[account(mut)]
-    pub authority: Signer<'info>,
+    pub payer: Signer<'info>,
 
     pub system_program: Program<'info, System>,
 }
@@ -38,8 +44,8 @@ pub fn initialize_manifest_registry(ctx: Context<InitializeManifestRegistry>) ->
     let registry = &mut ctx.accounts.registry;
     let clock = Clock::get()?;
 
-    registry.authority = ctx.accounts.authority.key();
-    registry.oracle_authority = ctx.accounts.authority.key();
+    registry.authority = ctx.accounts.payer.key();
+    registry.oracle_authority = ctx.accounts.payer.key();
     registry.merkle_root = [0u8; 32];
     registry.updated_at = clock.unix_timestamp;
     registry.version = 1;
