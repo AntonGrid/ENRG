@@ -3,7 +3,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const nacl = require('tweetnacl');
 const util = require('tweetnacl-util');
-const keccak = require('keccak');
+const crypto = require('crypto'); // built-in SHA-256
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
@@ -32,14 +32,53 @@ function canonicalize(data) {
   return typeof data === 'string' ? data : JSON.stringify(data);
 }
 
+// SHA-256 — single hash, per AXIS docs/merkle-proof-verification.md.
+function hash(data) {
+  return crypto.createHash('sha256').update(data).digest();
+}
+
+/**
+ * Build a Merkle tree bottom-up exactly as specified in
+ * docs/merkle-proof-verification.md ("Create Merkle Tree (Off-chain)"):
+ *   parent = hash(left || right); odd node is duplicated.
+ * Returns the root (Buffer, 32 bytes).
+ */
+function buildMerkleRoot(leaves) {
+  if (leaves.length === 0) {
+    return Buffer.alloc(32, 0);
+  }
+
+  let currentLevel = leaves.map((leaf) => hash(leaf));
+
+  while (currentLevel.length > 1) {
+    const nextLevel = [];
+    for (let i = 0; i < currentLevel.length; i += 2) {
+      const left = currentLevel[i];
+      const right = i + 1 < currentLevel.length ? currentLevel[i + 1] : left;
+      nextLevel.push(hash(Buffer.concat([left, right])));
+    }
+    currentLevel = nextLevel;
+  }
+
+  return currentLevel[0];
+}
+
+/**
+ * Compute the canonical leaf hash for a manifest.
+ * On-chain verification compares proved leaves against this scheme, so the
+ * leaf input MUST be deterministic across implementations.
+ */
+function manifestLeafHash(manifest_id, entry) {
+  return hash(Buffer.concat([
+    Buffer.from(manifest_id, 'utf8'),
+    Buffer.from(canonicalize(entry.payload || entry)),
+  ]));
+}
+
 function createSnapshot() {
   const ids = Array.from(manifests.keys());
-  let root = Buffer.alloc(32, 0);
-  for (const id of ids) {
-    const entry = manifests.get(id);
-    const hash = keccak('keccak256').update(canonicalize(entry)).digest();
-    root = keccak('keccak256').update(Buffer.concat([root, hash])).digest();
-  }
+  const leaves = ids.map((id) => manifestLeafHash(id, manifests.get(id)));
+  const root = buildMerkleRoot(leaves);
 
   return {
     id: uuidv4(),

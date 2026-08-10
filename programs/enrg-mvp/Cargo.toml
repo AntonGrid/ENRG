@@ -3,9 +3,13 @@ name = "enrg-mvp"
 version = "0.1.0"
 description = "ENRG Protocol MVP"
 edition = "2021"
+rust-version = "1.75.0"
 
 [lib]
 crate-type = ["cdylib", "lib"]
+
+[lints]
+workspace = true
 
 [dependencies]
 anchor-lang = { version = "1.0.3", features = ["init-if-needed"] }

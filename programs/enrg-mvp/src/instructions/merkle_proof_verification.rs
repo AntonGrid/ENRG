@@ -89,14 +89,13 @@ mod sha256 {
     }
 }
 
-/// Double-SHA256: H(H(data)) — Solana/SPL merkle convention.
+/// SHA-256 merkle node hash: H(left || right) — single hash per AXIS spec
+/// (docs/merkle-proof-verification.md, "Create Merkle Tree (Off-chain)").
 fn merkle_hash(left: &[u8; 32], right: &[u8; 32]) -> [u8; 32] {
     let mut buf = [0u8; 64];
     buf[..32].copy_from_slice(left);
     buf[32..].copy_from_slice(right);
-    let first = sha256::hash(&buf);
-    let second = sha256::hash(&first);
-    second
+    sha256::hash(&buf)
 }
 
 /// Compute the Merkle root from a leaf + path (bottom-up).

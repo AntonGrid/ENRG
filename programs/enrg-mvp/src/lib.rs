@@ -14,8 +14,8 @@ use instructions::*;
 
 declare_id!("5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin");
 
-/// Declare enrg-profile program for CPI access.
-/// IDL is loaded from <workspace-root>/idls/enrg_profile.json
+// Declare enrg-profile program for CPI access.
+// IDL is loaded from <workspace-root>/idls/enrg_profile.json
 declare_program!(enrg_profile);
 
 #[program]

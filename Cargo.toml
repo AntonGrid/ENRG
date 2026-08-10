@@ -3,6 +3,10 @@ members = [
     "programs/enrg-mvp",
     "programs/enrg-profile",
 ]
+resolver = "2"
+
+[workspace.lints.rust]
+unexpected_cfgs = { level = "allow", check-cfg = ["cfg(no_entrypoint)"] }
 
 [profile.release]
 opt-level = "z"
