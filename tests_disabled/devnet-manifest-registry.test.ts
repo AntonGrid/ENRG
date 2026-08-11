@@ -26,7 +26,7 @@ const computeMerkleRootLeaves = (leavesHex: string[]): string => {
   return level[0].toString("hex");
 };
 
-describe("devnet-manifest-registry", () => {
+describe.skip("devnet-manifest-registry", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 

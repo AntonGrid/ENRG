@@ -1,0 +1,18 @@
+import rawIdl from "../target/idl/enrg_mvp.json";
+import { patchIdl } from "./helpers/patch-idl";
+import * as anchor from "@coral-xyz/anchor";
+import { Program, AnchorProvider } from "@coral-xyz/anchor";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { loadAuthority } from "./helpers/accounts";
+
+describe("probe7", () => {
+  it("full stack", () => {
+    const idl: any = patchIdl(rawIdl);
+    const connection = new Connection("http://127.0.0.1:8899", "confirmed");
+    const provider = new AnchorProvider(connection, new anchor.Wallet(loadAuthority()), { commitment: "confirmed" });
+    anchor.setProvider(provider);
+    const PROGRAM_ID = new PublicKey("5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin");
+    const program = new Program(idl, PROGRAM_ID, provider);
+    console.log("new Program OK");
+  });
+});

@@ -75,7 +75,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
 
     // ── CPI: record_production в enrg-profile ──
     let profile_ctx = CpiContext::new(
-        ctx.accounts.profile_program.key(),
+        ctx.accounts.profile_program.to_account_info(),
         crate::enrg_profile::cpi::accounts::RecordProduction {
             authority: ctx.accounts.authority.to_account_info(),
             profile: ctx.accounts.profile.to_account_info(),
@@ -156,11 +156,11 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         &[ctx.accounts.token_mint.mint_authority_bump],
     ];
     let signer_seeds = &[&mint_authority_seeds[..]];
-    let token_program = ctx.accounts.token_program.key();
+    let token_program = ctx.accounts.token_program.to_account_info();
 
     token::mint_to(
         CpiContext::new(
-            token_program,
+            token_program.clone(),
             token::MintTo {
                 mint: ctx.accounts.mint.to_account_info(),
                 to: ctx.accounts.user_token_account.to_account_info(),
@@ -173,7 +173,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
 
     token::mint_to(
         CpiContext::new(
-            token_program,
+            token_program.clone(),
             token::MintTo {
                 mint: ctx.accounts.mint.to_account_info(),
                 to: ctx.accounts.buyback_account.to_account_info(),
@@ -186,7 +186,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
 
     token::mint_to(
         CpiContext::new(
-            token_program,
+            token_program.clone(),
             token::MintTo {
                 mint: ctx.accounts.mint.to_account_info(),
                 to: ctx.accounts.staking_account.to_account_info(),
@@ -199,7 +199,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
 
     token::mint_to(
         CpiContext::new(
-            token_program,
+            token_program.clone(),
             token::MintTo {
                 mint: ctx.accounts.mint.to_account_info(),
                 to: ctx.accounts.dao_account.to_account_info(),
@@ -212,7 +212,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
 
     token::mint_to(
         CpiContext::new(
-            token_program,
+            token_program.clone(),
             token::MintTo {
                 mint: ctx.accounts.mint.to_account_info(),
                 to: ctx.accounts.emergency_account.to_account_info(),

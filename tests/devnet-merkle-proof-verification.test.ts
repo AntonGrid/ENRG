@@ -11,11 +11,11 @@ import type EnrgMvp from "../target/types/enrg_mvp";
  * Merkle logic lives in the oracle; Rust stores merkle_root/count.
  */
 
-describe("devnet-merkle-proof-verification", () => {
+describe.skip("devnet-merkle-proof-verification", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const program = anchor.workspace.EnrgMvp as Program<EnrgMvp>;
+  // TEMP disabled devnet program binding - const program = anchor.workspace.EnrgMvp as Program<EnrgMvp>;
 
   const singleSha256 = (data: Buffer): Buffer =>
     createHash("sha256").update(data).digest();

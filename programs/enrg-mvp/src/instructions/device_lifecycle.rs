@@ -47,7 +47,7 @@ pub fn register_device(ctx: Context<RegisterDevice>) -> Result<()> {
         ErrorCode::InvalidParameter
     );
 
-    let cpi_program = ctx.accounts.profile_program.key();
+    let cpi_program = ctx.accounts.profile_program.to_account_info();
     let cpi_ctx = CpiContext::new(
         cpi_program,
         crate::enrg_profile::cpi::accounts::InitializeProfile {

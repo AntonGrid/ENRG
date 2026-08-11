@@ -2,7 +2,8 @@
   "name": "enrg-protocol",
   "version": "1.0.0",
   "scripts": {
-    "start": "node oracle/server.js"
+    "start": "node oracle/server.js",
+    "test": "TS_NODE_TRANSPILE_ONLY=1 ts-mocha -p tsconfig.json \"tests/**/*.test.ts\""
   },
   "dependencies": {
     "@coral-xyz/anchor": "^0.32.1",

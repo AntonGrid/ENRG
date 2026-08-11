@@ -32,7 +32,7 @@ pub fn buyback_and_burn(ctx: Context<BuybackAndBurn>, amount: u64) -> Result<()>
     // Use buyback PDA as authority for burn
     token::burn(
         CpiContext::new_with_signer(
-            ctx.accounts.token_program.key(),
+            ctx.accounts.token_program.to_account_info(),
             Burn {
                 mint: ctx.accounts.mint.to_account_info(),
                 from: ctx.accounts.buyback_account.to_account_info(),
