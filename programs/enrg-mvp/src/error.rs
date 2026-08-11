@@ -62,4 +62,8 @@ pub enum ErrorCode {
     NotProducerOwner,
     #[msg("Report oracle is not in the trusted Oracle Registry")]
     UntrustedOracle,
+    #[msg("Instructions sysvar is required for Ed25519 signature verification")]
+    InvalidInstructionsAccount,
+    #[msg("Timestamp is in the future")]
+    FutureTimestamp,
 }

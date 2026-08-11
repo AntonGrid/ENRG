@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token, TokenAccount};
 
 use crate::constants::*;
+use crate::error::ErrorCode;
 use crate::state::*;
 
 /// Инициализация глобального Vault PDA — хранилища экономики протокола.
@@ -43,7 +44,8 @@ pub struct InitializeFunds<'info> {
     #[account(
         mut,
         seeds = [b"vault"],
-        bump
+        bump,
+        constraint = vault.authority == authority.key() @ ErrorCode::Unauthorized
     )]
     pub vault: Account<'info, Vault>,
 
@@ -58,7 +60,8 @@ pub struct InitializeFunds<'info> {
     /// SRC Mint.
     #[account(
         seeds = [b"src-mint"],
-        bump = token_mint.mint_bump
+        bump = token_mint.mint_bump,
+        constraint = mint.key() == token_mint.mint @ ErrorCode::InvalidParameter
     )]
     pub mint: Account<'info, Mint>,
 
@@ -119,6 +122,24 @@ pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
 
 pub fn initialize_funds(ctx: Context<InitializeFunds>) -> Result<()> {
     let token_mint = &mut ctx.accounts.token_mint;
+
+    // Фондовые Token Accounts обязаны принадлежать своим fund-PDA
+    // (fund-buyback / fund-staking / fund-dao / fund-emergency).
+    // Это исключает подмену фондовых аккаунтов произвольными ATA.
+    let program_id = ctx.program_id;
+    for (name, seed, account) in [
+        ("buyback", b"fund-buyback".as_ref(), &ctx.accounts.buyback_account),
+        ("staking", b"fund-staking".as_ref(), &ctx.accounts.staking_account),
+        ("dao", b"fund-dao".as_ref(), &ctx.accounts.dao_account),
+        ("emergency", b"fund-emergency".as_ref(), &ctx.accounts.emergency_account),
+    ] {
+        let (fund_pda, _) = Pubkey::find_program_address(&[seed], program_id);
+        require!(
+            account.owner == fund_pda,
+            ErrorCode::InvalidParameter
+        );
+        msg!("{} fund account verified: {}", name, account.key());
+    }
 
     // Сохраняем все адреса фондов в TokenMint PDA
     token_mint.buyback_account = ctx.accounts.buyback_account.key();

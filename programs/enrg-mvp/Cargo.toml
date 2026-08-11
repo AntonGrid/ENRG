@@ -32,6 +32,14 @@ anchor-spl = { version = "0.32.1", default-features = false, features = ["token"
 
 hex = "0.4"
 
+# Чтение sysvar Instructions для проверки Ed25519-подписей
+# (паттерн Axis: precompile-инструкция в транзакции + sysvar).
+solana-instructions-sysvar = "2.2.2"
+
+[dev-dependencies]
+# Типы BorrowedInstruction для host-side unit-тестов sysvar.
+solana-instruction = "2.3.3"
+
 [features]
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]
 test = []

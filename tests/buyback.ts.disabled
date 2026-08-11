@@ -34,6 +34,27 @@ function buildOracleMessage(params: {
   return Buffer.concat([Buffer.from(deviceBytes), nonceBytes, tsBytes, energyBytes]);
 }
 
+// Сообщение, которое подписывает ОРАКУЛ: добавляет verifiedAt к данным устройства.
+// Должно совпадать с OracleReport::oracle_message_to_sign() в on-chain коде.
+function buildOracleVerificationMessage(params: {
+  deviceId: PublicKey;
+  nonce: BN;
+  deviceTimestamp: BN;
+  verifiedAt: BN;
+  energyWh: BN;
+}): Buffer {
+  const { deviceId, nonce, deviceTimestamp, verifiedAt, energyWh } = params;
+  const deviceBytes = deviceId.toBytes();
+  const le64 = (v: BN) => Buffer.from(v.toArray("le", 8));
+  return Buffer.concat([
+    Buffer.from(deviceBytes),
+    le64(nonce),
+    le64(deviceTimestamp),
+    le64(verifiedAt),
+    le64(energyWh),
+  ]);
+}
+
 describe("ENRG Protocol — Buyback & Burn", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
@@ -285,6 +306,25 @@ describe("ENRG Protocol — Buyback & Burn", () => {
       instructionIndex: 0, // <--- ЯВНО УКАЗЫВАЕМ ИНДЕКС ТЕКУЩЕЙ ИНСТРУКЦИИ
     });
 
+    // ── Oracle signature: оракул подтверждает, что он верифицировал отчёт ──
+    const oracleMessage = buildOracleVerificationMessage({
+      deviceId,
+      nonce,
+      deviceTimestamp: now,
+      verifiedAt: now,
+      energyWh,
+    });
+    const oracleSig = nacl.sign.detached(
+      oracleMessage,
+      oracleKeypair.secretKey // Solana Ed25519 keypair: secretKey = seed || pubkey
+    );
+    const oracleEd25519Ix = Ed25519Program.createInstructionWithPublicKey({
+      publicKey: oracleKeypair.publicKey.toBytes(),
+      message: oracleMessage,
+      signature: oracleSig,
+      instructionIndex: 0,
+    });
+
     const report = {
       oracle: oracleKeypair.publicKey,
       deviceId,
@@ -293,6 +333,7 @@ describe("ENRG Protocol — Buyback & Burn", () => {
       verifiedAt: now,
       energyWh,
       deviceSignature: Array.from(signature),
+      oracleSignature: Array.from(oracleSig),
     };
 
     const mintIx = await program.methods
@@ -317,7 +358,7 @@ describe("ENRG Protocol — Buyback & Burn", () => {
       })
       .instruction();
 
-    const tx = new Transaction().add(ed25519Ix, mintIx);
+    const tx = new Transaction().add(oracleEd25519Ix, ed25519Ix, mintIx);
     await provider.sendAndConfirm(tx, [producerKeypair]);
   });
 

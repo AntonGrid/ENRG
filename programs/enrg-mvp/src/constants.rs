@@ -1,5 +1,26 @@
+use anchor_lang::prelude::*;
+
 /// SRC token decimals (on-chain mint decimals).
 pub const SRC_DECIMALS: u8 = 9;
+
+/// Встроенная Ed25519-программа Solana (precompile).
+/// Используется для on-chain проверки Ed25519-подписей.
+pub const ED25519_PROGRAM_ID: Pubkey =
+    pubkey!("Ed25519SigVerify111111111111111111111111111");
+
+/// Sysvar Instructions — список инструкций текущей транзакции.
+/// Требуется для проверки подписей Ed25519 в транзакции.
+pub const INSTRUCTIONS_SYSVAR_ID: Pubkey =
+    pubkey!("Sysvar1nstructions1111111111111111111111111");
+
+/// Program ID on-chain программы enrg-profile (CPI-цель для
+/// register_device / mint_energy). Совпадает с declared ID в
+/// `programs/enrg-profile/src/lib.rs` и адресом в `idls/enrg_profile.json`.
+pub const ENRG_PROFILE_PROGRAM_ID: Pubkey =
+    pubkey!("BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn");
+
+/// Допустимое отклонение часов при проверке timestamp (сек).
+pub const MAX_CLOCK_SKEW: i64 = 300;
 
 /// Smallest SRC unit used in reward math.
 /// Исторически это было ENRG_BASIS = 10^(decimals - 6).

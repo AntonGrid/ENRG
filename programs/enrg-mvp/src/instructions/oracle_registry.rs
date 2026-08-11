@@ -25,7 +25,8 @@ pub struct AddOracle<'info> {
     #[account(
         mut,
         seeds = [b"oracle-registry"],
-        bump
+        bump,
+        has_one = authority @ ErrorCode::Unauthorized
     )]
     pub registry: Account<'info, OracleRegistry>,
 
@@ -38,7 +39,8 @@ pub struct RemoveOracle<'info> {
     #[account(
         mut,
         seeds = [b"oracle-registry"],
-        bump
+        bump,
+        has_one = authority @ ErrorCode::Unauthorized
     )]
     pub registry: Account<'info, OracleRegistry>,
 
@@ -66,11 +68,6 @@ pub fn add_oracle(
     let registry = &mut ctx.accounts.registry;
 
     require!(
-        registry.authority == ctx.accounts.authority.key(),
-        ErrorCode::Unauthorized
-    );
-
-    require!(
         !registry.oracles.contains(&oracle),
         ErrorCode::AlreadyExists
     );
@@ -93,11 +90,6 @@ pub fn remove_oracle(
 ) -> Result<()> {
 
     let registry = &mut ctx.accounts.registry;
-
-    require!(
-        registry.authority == ctx.accounts.authority.key(),
-        ErrorCode::Unauthorized
-    );
 
     let index = registry
         .oracles

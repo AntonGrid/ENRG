@@ -21,7 +21,12 @@ pub struct InitializeManifestRegistry<'info> {
 
 #[derive(Accounts)]
 pub struct UpdateMerkleRoot<'info> {
-    #[account(mut, has_one = authority)]
+    #[account(
+        mut,
+        seeds = [b"manifest-registry"],
+        bump,
+        has_one = authority
+    )]
     pub registry: Account<'info, ManifestRegistry>,
 
     /// Oracle that is authorized to update the root
@@ -34,7 +39,12 @@ pub struct UpdateMerkleRoot<'info> {
 
 #[derive(Accounts)]
 pub struct SetOracleAuthority<'info> {
-    #[account(mut, has_one = authority)]
+    #[account(
+        mut,
+        seeds = [b"manifest-registry"],
+        bump,
+        has_one = authority
+    )]
     pub registry: Account<'info, ManifestRegistry>,
 
     pub authority: Signer<'info>,
@@ -44,20 +54,25 @@ pub fn initialize_manifest_registry(ctx: Context<InitializeManifestRegistry>) ->
     let registry = &mut ctx.accounts.registry;
     let clock = Clock::get()?;
 
-    registry.authority = ctx.accounts.payer.key();
-    registry.oracle_authority = ctx.accounts.payer.key();
-    registry.merkle_root = [0u8; 32];
-    registry.updated_at = clock.unix_timestamp;
-    registry.version = 1;
-    registry.manifest_count = 0;
-    registry.reserved = [0u8; 64];
+    // Guard: поля инициализации записываются ТОЛЬКО при первом создании.
+    // Иначе любой вызывающий мог бы повторным вызовом init_if_needed
+    // перезаписать authority и oracle_authority и захватить реестр.
+    if registry.authority == Pubkey::default() {
+        registry.authority = ctx.accounts.payer.key();
+        registry.oracle_authority = ctx.accounts.payer.key();
+        registry.merkle_root = [0u8; 32];
+        registry.updated_at = clock.unix_timestamp;
+        registry.version = 1;
+        registry.manifest_count = 0;
+        registry.reserved = [0u8; 64];
 
-    emit!(ManifestRegistryInitialized {
-        registry: registry.key(),
-        authority: registry.authority,
-        oracle_authority: registry.oracle_authority,
-        timestamp: clock.unix_timestamp,
-    });
+        emit!(ManifestRegistryInitialized {
+            registry: registry.key(),
+            authority: registry.authority,
+            oracle_authority: registry.oracle_authority,
+            timestamp: clock.unix_timestamp,
+        });
+    }
 
     Ok(())
 }

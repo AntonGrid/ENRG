@@ -78,13 +78,22 @@ pub struct BuybackAndBurn<'info> {
     #[account(
         mut,
         seeds = [b"src-mint"],
-        bump = token_mint.mint_bump
+        bump = token_mint.mint_bump,
+        constraint = mint.key() == token_mint.mint @ ErrorCode::InvalidParameter
     )]
     pub mint: Box<Account<'info, Mint>>,
 
+    #[account(
+        seeds = [b"token-mint"],
+        bump = token_mint.bump
+    )]
     pub token_mint: Box<Account<'info, TokenMint>>,
 
-    #[account(mut)]
+    #[account(
+        mut,
+        constraint = buyback_account.key() == token_mint.buyback_account @ ErrorCode::InvalidParameter,
+        constraint = buyback_account.owner == buyback_authority.key() @ ErrorCode::Unauthorized
+    )]
     pub buyback_account: Box<Account<'info, TokenAccount>>,
 
     /// CHECK: Buyback PDA (fund-buyback) is the owner of buyback_account.

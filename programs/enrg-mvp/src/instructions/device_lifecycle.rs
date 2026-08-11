@@ -18,6 +18,10 @@ pub struct RegisterDevice<'info> {
     pub device_id: UncheckedAccount<'info>,
     pub system_program: Program<'info, System>,
     /// CHECK: enrg-profile program ID (для CPI создания профиля).
+    /// Единственная разрешённая CPI-цель для создания EnergyProfile.
+    #[account(
+        constraint = profile_program.key() == crate::constants::ENRG_PROFILE_PROGRAM_ID @ ErrorCode::InvalidParameter
+    )]
     pub profile_program: UncheckedAccount<'info>,
     /// CHECK: EnergyProfile PDA, создаётся через CPI-вызов в enrg-profile.
     #[account(mut)]

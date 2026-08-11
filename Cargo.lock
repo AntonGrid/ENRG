@@ -489,6 +489,8 @@ dependencies = [
  "anchor-lang",
  "anchor-spl",
  "hex",
+ "solana-instruction",
+ "solana-instructions-sysvar",
 ]
 
 [[package]]

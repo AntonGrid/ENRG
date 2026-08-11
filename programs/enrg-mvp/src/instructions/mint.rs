@@ -42,13 +42,27 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         ErrorCode::NotProducerOwner
     );
 
-    // ── Ed25519 signature verification ──
-    let message = report.message_to_sign()?;
+    // ── Ed25519 signature verification (device) ──
+    // Устройство подписывает (device_id, nonce, device_timestamp, energy_wh).
+    let device_message = report.device_message_to_sign()?;
 
     verify_ed25519_signature(
         &report.device_signature,
         &report.device_id.to_bytes(),
-        &message,
+        &device_message,
+        &ctx.accounts.instructions.to_account_info(),
+    )?;
+
+    // ── Oracle signature verification (authenticity of the report) ──
+    // Оракул подписывает (device_id, nonce, device_timestamp, verified_at, energy_wh).
+    // Без этой подписи любой вызывающий мог бы выдать себя за доверенного
+    // оракула, просто указав его pubkey в поле report.oracle.
+    let oracle_message = report.oracle_message_to_sign()?;
+
+    verify_ed25519_signature(
+        &report.oracle_signature,
+        &report.oracle.to_bytes(),
+        &oracle_message,
         &ctx.accounts.instructions.to_account_info(),
     )?;
 
@@ -298,7 +312,8 @@ pub struct MintEnergy<'info> {
     #[account(
         mut,
         seeds = [b"src-mint"],
-        bump = token_mint.mint_bump
+        bump = token_mint.mint_bump,
+        constraint = mint.key() == token_mint.mint @ ErrorCode::InvalidParameter
     )]
     pub mint: Box<Account<'info, Mint>>,
 
@@ -316,19 +331,38 @@ pub struct MintEnergy<'info> {
     )]
     pub user_token_account: Box<Account<'info, TokenAccount>>,
 
-    #[account(mut)]
+    /// Протокольный buyback-фонд — жёстко привязан к конфигурации TokenMint.
+    #[account(
+        mut,
+        constraint = buyback_account.key() == token_mint.buyback_account @ ErrorCode::InvalidParameter
+    )]
     pub buyback_account: Box<Account<'info, TokenAccount>>,
 
-    #[account(mut)]
+    /// Протокольный staking-фонд — жёстко привязан к конфигурации TokenMint.
+    #[account(
+        mut,
+        constraint = staking_account.key() == token_mint.staking_account @ ErrorCode::InvalidParameter
+    )]
     pub staking_account: Box<Account<'info, TokenAccount>>,
 
-    #[account(mut)]
+    /// Протокольный DAO-фонд — жёстко привязан к конфигурации TokenMint.
+    #[account(
+        mut,
+        constraint = dao_account.key() == token_mint.dao_account @ ErrorCode::InvalidParameter
+    )]
     pub dao_account: Box<Account<'info, TokenAccount>>,
 
-    #[account(mut)]
+    /// Протокольный emergency-фонд — жёстко привязан к конфигурации TokenMint.
+    #[account(
+        mut,
+        constraint = emergency_account.key() == token_mint.emergency_account @ ErrorCode::InvalidParameter
+    )]
     pub emergency_account: Box<Account<'info, TokenAccount>>,
 
     /// CHECK: Sysvar instructions — используется для проверки Ed25519-подписи.
+    #[account(
+        constraint = instructions.key() == crate::constants::INSTRUCTIONS_SYSVAR_ID @ ErrorCode::InvalidInstructionsAccount
+    )]
     pub instructions: UncheckedAccount<'info>,
 
     /// Trusted Oracle Registry (whitelist of oracles, ADR-0003 / ADR-0006).
@@ -341,7 +375,10 @@ pub struct MintEnergy<'info> {
     pub token_program: Program<'info, Token>,
 
     // ── CPI: enrg-profile ──
-    /// CHECK: enrg-profile program ID.
+    /// CHECK: on-chain enrg-profile program (единственная разрешённая CPI-цель).
+    #[account(
+        constraint = profile_program.key() == crate::constants::ENRG_PROFILE_PROGRAM_ID @ ErrorCode::InvalidParameter
+    )]
     pub profile_program: UncheckedAccount<'info>,
 
     /// Authority of the EnergyProfile (producer's owner).

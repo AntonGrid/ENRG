@@ -116,7 +116,13 @@ pub fn compute_merkle_root(leaf_hash: &[u8; 32], proof_path: &[[u8; 32]], positi
 #[derive(Accounts)]
 #[instruction(manifest_id: [u8; 16], proof_path: Vec<[u8; 32]>, leaf_hash: [u8; 32], position: u8)]
 pub struct VerifyMerkleProof<'info> {
+    /// Единственный легитимный ManifestRegistry (PDA программы).
+    #[account(
+        seeds = [b"manifest-registry"],
+        bump
+    )]
     pub registry: Account<'info, ManifestRegistry>,
+
     pub manifest_verification: Account<'info, ManifestVerification>,
 
     #[account(
