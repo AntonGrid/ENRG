@@ -17,8 +17,8 @@ function probe(step: string, fn: () => void) {
 }
 
 probe("coder.instructions", () => { const c = new BorshCoder(idl as any); c.instructions; });
-probe("coder.accounts.init/encode Vault", () => {
+probe("coder.accounts.size Vault", () => {
   const c = new BorshCoder(idl as any);
-  const layout = c.accounts.layout("Vault");
-  console.log("  layout:", JSON.stringify(layout).slice(0, 120));
+  const size = c.accounts.size("Vault");
+  console.log("  size:", size);
 });

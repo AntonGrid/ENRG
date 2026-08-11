@@ -28,7 +28,7 @@ describe("probe6", () => {
     anchor.setProvider(provider);
     const PROGRAM_ID = new PublicKey("5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin");
     try {
-      const program = new Program(idl, PROGRAM_ID, provider);
+      const program = new Program(idl, provider);
       console.log("new Program OK, total typeSize calls:", calls);
     } catch (e: any) {
       console.log("new Program FAIL after", calls, "typeSize calls:", e.message);

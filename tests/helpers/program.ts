@@ -56,7 +56,12 @@ export function getProgram(): ProgramHandle {
   const coder = new BorshCoder(idl as anchor.Idl);
 
   try {
-    const program = new Program(idl as anchor.Idl, PROGRAM_ID, provider, coder);
+    // @coral-xyz/anchor 0.32.1: конструктор Program(idl, provider) —
+    // programId берётся из idl.address (нормализованного выше), а coder
+    // строится внутри из camelCase-версии idl. Явный coder передавать нельзя:
+    // он был бы построен из НЕ-camelCase idl, и имена аккаунтов (Config vs
+    // config) не совпали бы. Поэтому в handle отдаём свой coder отдельно.
+    const program = new Program(idl as anchor.Idl, provider);
     return { program, coder, connection, provider, idl, full: true, rawFallback: false };
   } catch (e: any) {
     console.warn("[getProgram] full Program failed → raw fallback:", e?.message);

@@ -27,7 +27,8 @@ describe("ENRG Merkle proof — Anchor IDL", () => {
 
   before(() => {
     anchor.setProvider(provider);
-    program = new anchor.Program(idl as EnrgMvp, PROGRAM_ID, provider);
+    // @coral-xyz/anchor 0.32.1: Program(idl, provider) — programId из idl.address.
+    program = new anchor.Program(idl as EnrgMvp, provider);
   });
 
   it("registry -> manifest -> update root (oracle) -> verify proof", async () => {
@@ -46,8 +47,10 @@ describe("ENRG Merkle proof — Anchor IDL", () => {
     const verification = await verificationPda(PROGRAM_ID, manifestId);
     const proofAccount = await proofPda(PROGRAM_ID, manifestId, registry);
 
-    const oracle = Keypair.generate();
-    await ensureFunded(connection, oracle.publicKey);
+    // updateMerkleRoot требует signer == registry.oracle_authority.
+    // initializeManifestRegistry ставит oracle_authority = payer (wallet),
+    // поэтому oracle здесь — тот же authority.
+    const oracle = authority;
 
     await program.methods
       .initializeManifestRegistry()
@@ -68,8 +71,8 @@ describe("ENRG Merkle proof — Anchor IDL", () => {
 
     await program.methods
       .updateMerkleRoot(Array.from(root), new BN(4))
-      .accounts({ registry, oracle: oracle.publicKey, authority })
-      .signers([provider.wallet.payer, oracle])
+      .accounts({ registry, oracle, authority })
+      .signers([provider.wallet.payer])
       .rpc();
     console.log("✔ updateMerkleRoot ; root =", root.toString("hex"));
 

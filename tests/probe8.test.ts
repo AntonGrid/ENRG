@@ -12,7 +12,7 @@ describe("probe8", () => {
     anchor.setProvider(provider);
     const PROGRAM_ID = new PublicKey("5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin");
     try {
-      const program = new Program(idl, PROGRAM_ID, provider);
+      const program = new Program(idl, provider);
       console.log("new Program WITHOUT patch: OK");
     } catch (e: any) {
       console.log("new Program WITHOUT patch FAIL:", e.message);

@@ -6,17 +6,25 @@ skip-lint = false
 
 [programs.devnet]
 enrg_mvp = "EsaKY8C3EZeRLL1wG5UECAnDWjbLfWJr7jL3pBLmpFfW"
-enrg_profile = "H9GDJQhaLqHeZZmuiqL1JTCaQ4nSquKterUyFVRdL5GZ"
 
 [programs.localnet]
 enrg_mvp = "5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin"
-enrg_profile = "BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn"
+
+[workspace]
+# anchor-cli берёт workspace из Anchor.toml, а не из корневого Cargo.toml.
+# Без этой секции он по умолчанию сканирует programs/* и цепляет
+# enrg-profile, для которого сейчас нет .so в target/deploy.
+members = ["programs/enrg-mvp"]
+exclude = ["programs/enrg-profile"]
 
 [provider]
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
 
 [scripts]
-test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+# Кавычки вокруг glob обязательны: без них bash (без globstar) раскроет
+# tests/**/*.ts только в tests/helpers/*.ts, и реальные тесты не запустятся.
+# В кавычках шаблон уходит в mocha, который сам делает рекурсивный glob.
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 'tests/**/*.ts'"
 
 [hooks]

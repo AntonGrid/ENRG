@@ -27,7 +27,7 @@ describe("probe5", () => {
     } catch(e) { console.log("instrument failed:", (e as any).message); }
 
     try {
-      const program = new Program(idl, PROGRAM_ID, provider);
+      const program = new Program(idl, provider);
       console.log("new Program OK");
     } catch (e: any) {
       console.log("new Program FAIL:", e.message);

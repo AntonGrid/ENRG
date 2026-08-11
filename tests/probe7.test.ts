@@ -12,7 +12,7 @@ describe("probe7", () => {
     const provider = new AnchorProvider(connection, new anchor.Wallet(loadAuthority()), { commitment: "confirmed" });
     anchor.setProvider(provider);
     const PROGRAM_ID = new PublicKey("5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin");
-    const program = new Program(idl, PROGRAM_ID, provider);
+    const program = new Program(idl, provider);
     console.log("new Program OK");
   });
 });
