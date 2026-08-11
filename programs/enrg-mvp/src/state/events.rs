@@ -63,3 +63,22 @@ pub struct TokensBurned {
     /// New total supply after burn.
     pub total_supply: u64,
 }
+
+/// Emitted when a device is registered
+/// (ADR-0005: UNREGISTERED → REGISTERED; требует Ed25519-подпись устройства).
+#[event]
+pub struct DeviceRegistered {
+    pub device_id: Pubkey,
+    pub registered_by: Pubkey,
+    pub timestamp: i64,
+}
+
+/// Emitted when a device is claimed by an owner
+/// (ADR-0005: REGISTERED → CLAIMED; требует Ed25519-подпись устройства).
+#[event]
+pub struct DeviceClaimed {
+    pub device_id: Pubkey,
+    pub owner: Pubkey,
+    pub claim_nonce: u64,
+    pub timestamp: i64,
+}

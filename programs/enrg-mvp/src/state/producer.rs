@@ -31,7 +31,6 @@ impl DeviceState {
             (Quarantine, Revoked) => true,
             (Maintenance, Active) => true,
             (Maintenance, Revoked) => true,
-            (_, Revoked) => true,
             _ => false,
         }
     }
@@ -71,4 +70,11 @@ pub struct EnergyProducer {
 
     /// Текущее состояние устройства (Device Lifecycle, ADR-0005).
     pub state: DeviceState,
+
+    /// Монотонный nonce последнего claim-сообщения (защита от replay).
+    /// Отдельно от `nonce` (proof-nonce отчётов): claim и proof не пересекаются.
+    pub claim_nonce: u64,
+
+    /// Временная метка успешного claim (аудит, ADR-0002).
+    pub claimed_at: i64,
 }

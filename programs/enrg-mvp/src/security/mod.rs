@@ -6,9 +6,11 @@ use crate::error::ErrorCode;
 
 pub mod validation;
 pub mod ed25519;
+pub mod lifecycle;
 
 pub use validation::*;
 pub use ed25519::*;
+pub use lifecycle::*;
 
 /// Максимальная глубина сканирования sysvar Instructions назад от текущей
 /// инструкции. Ed25519-precompile-инструкции размещаются клиентом ПЕРЕД
@@ -201,5 +203,86 @@ mod tests {
         );
         let res = verify_ed25519_signature(&TEST_SIGNATURE, &TEST_PUBKEY, &TEST_MESSAGE, &fake);
         assert!(res.is_err(), "expected Err for non-sysvar account");
+    }
+
+    /// Формирует data ed25519-инструкции в layout web3.js >= 1.9x:
+    /// индексы инструкций пишутся как u16 со значением 0xffff
+    /// («текущая инструкция»). Это формат, который реально отправляет
+    /// @solana/web3.js 1.98.4 без явного instructionIndex.
+    fn build_ed25519_data_web3js(
+        signature: &[u8; 64],
+        public_key: &[u8; 32],
+        message: &[u8],
+    ) -> Vec<u8> {
+        let mut data = Vec::with_capacity(16 + 64 + 32 + message.len());
+        data.push(1); // num_signatures
+        data.push(0); // padding
+        data.extend_from_slice(&16u16.to_le_bytes()); // signature_offset
+        data.extend_from_slice(&u16::MAX.to_le_bytes()); // signature_instruction_index = 0xffff
+        data.extend_from_slice(&80u16.to_le_bytes()); // public_key_offset
+        data.extend_from_slice(&u16::MAX.to_le_bytes()); // public_key_instruction_index = 0xffff
+        data.extend_from_slice(&112u16.to_le_bytes()); // message_data_offset
+        data.extend_from_slice(&(message.len() as u16).to_le_bytes()); // message_data_size
+        data.extend_from_slice(&u16::MAX.to_le_bytes()); // message_instruction_index = 0xffff
+        data.extend_from_slice(signature);
+        data.extend_from_slice(public_key);
+        data.extend_from_slice(message);
+        data
+    }
+
+    #[test]
+    fn verify_web3js_layout_signature() {
+        // Прямая проверка парсера на layout web3.js 1.98.4 (0xffff).
+        let data = build_ed25519_data_web3js(&TEST_SIGNATURE, &TEST_PUBKEY, &TEST_MESSAGE);
+        assert!(
+            ed25519::verify_ed25519_instruction_data(
+                &data,
+                &TEST_SIGNATURE,
+                &TEST_PUBKEY,
+                &TEST_MESSAGE,
+            ),
+            "web3js layout (0xffff) должен приниматься"
+        );
+
+        // Полный путь: sysvar Instructions + verify_ed25519_signature.
+        let mut sysvar_data = build_sysvar_data_web3js(&TEST_SIGNATURE, &TEST_PUBKEY, &TEST_MESSAGE);
+        let mut lamports: u64 = 0;
+        let sysvar = sysvar_account(&mut sysvar_data, &mut lamports);
+        let res = verify_ed25519_signature(&TEST_SIGNATURE, &TEST_PUBKEY, &TEST_MESSAGE, &sysvar);
+        assert!(res.is_ok(), "expected Ok for web3js layout, got {:?}", res);
+    }
+
+    #[test]
+    fn reject_foreign_instruction_index() {
+        // Индекс, ссылающийся на ЧУЖУЮ инструкцию (не 0 и не 0xffff), отклоняется.
+        let mut data = build_ed25519_data(&TEST_SIGNATURE, &TEST_PUBKEY, &TEST_MESSAGE);
+        data[4] = 1; // signature_instruction_index = 1
+        assert!(
+            !ed25519::verify_ed25519_instruction_data(
+                &data,
+                &TEST_SIGNATURE,
+                &TEST_PUBKEY,
+                &TEST_MESSAGE,
+            ),
+            "foreign instruction index должен отклоняться"
+        );
+    }
+
+    /// build_sysvar_data для layout web3.js (0xffff-индексы).
+    fn build_sysvar_data_web3js(
+        signature: &[u8; 64],
+        public_key: &[u8; 32],
+        message: &[u8],
+    ) -> Vec<u8> {
+        let ix_data = build_ed25519_data_web3js(signature, public_key, message);
+        let borrowed = solana_instruction::BorrowedInstruction {
+            program_id: &crate::constants::ED25519_PROGRAM_ID,
+            accounts: vec![],
+            data: &ix_data,
+        };
+        let mut sysvar_data =
+            solana_instructions_sysvar::construct_instructions_data(&[borrowed]);
+        solana_instructions_sysvar::store_current_index_checked(&mut sysvar_data, 0).unwrap();
+        sysvar_data
     }
 }

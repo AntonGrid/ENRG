@@ -215,14 +215,30 @@ pub mod enrg_mvp {
 
     pub fn register_device(
         ctx: Context<RegisterDevice>,
+        device_signature: [u8; 64],
+        register_timestamp: i64,
     ) -> Result<()> {
-        instructions::device_lifecycle::register_device(ctx)
+        instructions::device_lifecycle::register_device(ctx, device_signature, register_timestamp)
     }
 
     pub fn claim_device(
         ctx: Context<ClaimDevice>,
+        device_signature: [u8; 64],
+        claim_nonce: u64,
+        claim_timestamp: i64,
     ) -> Result<()> {
-        instructions::device_lifecycle::claim_device(ctx)
+        instructions::device_lifecycle::claim_device(
+            ctx,
+            device_signature,
+            claim_nonce,
+            claim_timestamp,
+        )
+    }
+
+    pub fn init_energy_profile(
+        ctx: Context<InitEnergyProfile>,
+    ) -> Result<()> {
+        instructions::device_lifecycle::init_energy_profile(ctx)
     }
 
     pub fn provision_device(
