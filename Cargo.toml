@@ -1,13 +1,16 @@
 [workspace]
 members = [
-    "programs/enrg-mvp"
+    "programs/enrg-mvp",
 ]
 exclude = [
-    "programs/enrg-profile"
+    "programs/enrg-profile",
 ]
 resolver = "2"
 
 [workspace.lints.rust]
+# cfg-значения (no-entrypoint, custom-heap, custom-panic, anchor-debug,
+# no-idl, no-log-ix-name) генерируются внутри макросов Anchor/Solana —
+# мы их не контролируем, поэтому разрешаем их на уровне воркспейса.
 unexpected_cfgs = { level = "allow", check-cfg = [
     "cfg(no_entrypoint)",
     "cfg(custom_heap)",
@@ -24,8 +27,7 @@ debug = false
 overflow-checks = true
 
 [workspace.dependencies]
-# Пинним proc-macro2 на версию, совместимую с anchor-syn 0.30.1
-proc-macro2 = "=1.0.66"
+# Фиксим crypto-common на версии без проблем с большими массивами.
 crypto-common = "=0.1.6"
 
 # Локальный патч anchor-spl: idl_build.rs корректно гейтит token_interface

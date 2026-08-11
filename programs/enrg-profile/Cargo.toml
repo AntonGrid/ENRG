@@ -9,8 +9,19 @@ rust-version = "1.75.0"
 crate-type = ["cdylib", "lib"]
 test = false
 
+[lints.rust]
+# Те же cfg-значения, что и в enrg-mvp, чтобы убрать warning'и unexpected_cfgs.
+unexpected_cfgs = { level = "allow", check-cfg = [
+    "cfg(no_entrypoint)",
+    "cfg(custom_heap)",
+    "cfg(custom_panic)",
+    "cfg(anchor_debug)",
+    "cfg(no_idl)",
+    "cfg(no_log_ix_name)",
+] }
+
 [dependencies]
-anchor-lang = { version = "0.30.1", features = ["init-if-needed"] }
+anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
 
 [features]
 cpi = []

@@ -24,10 +24,12 @@ unexpected_cfgs = { level = "allow", check-cfg = [
 
 [dependencies]
 anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
+
 # default-features = false: отключаем token_2022/token_2022_extensions,
 # которые тянут spl-token-2022 → solana-zk-sdk → crypto-common 0.1.7
 # с огромными массивами ([u16; 2048], [u32; 2048] и т.д.), ломающими лимит стека 4096.
 anchor-spl = { version = "0.32.1", default-features = false, features = ["token"] }
+
 hex = "0.4"
 
 [features]
