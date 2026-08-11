@@ -9,12 +9,25 @@ rust-version = "1.75.0"
 crate-type = ["cdylib", "lib"]
 test = false
 
-[lints]
-workspace = true
+[lints.rust]
+# cfg-значения (no-entrypoint, custom-heap, custom-panic, anchor-debug,
+# no-idl, no-log-ix-name) генерируются внутри макросов Anchor/Solana —
+# мы их не контролируем, поэтому глушим предупреждение на уровне крейта.
+unexpected_cfgs = { level = "allow", check-cfg = [
+    "cfg(no_entrypoint)",
+    "cfg(custom_heap)",
+    "cfg(custom_panic)",
+    "cfg(anchor_debug)",
+    "cfg(no_idl)",
+    "cfg(no_log_ix_name)",
+] }
 
 [dependencies]
 anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
-anchor-spl = { version = "0.32.1", features = ["token"] }
+# default-features = false: отключаем token_2022/token_2022_extensions,
+# которые тянут spl-token-2022 → solana-zk-sdk → crypto-common 0.1.7
+# с огромными массивами ([u16; 2048], [u32; 2048] и т.д.), ломающими лимит стека 4096.
+anchor-spl = { version = "0.32.1", default-features = false, features = ["token"] }
 hex = "0.4"
 
 [features]

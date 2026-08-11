@@ -287,18 +287,7 @@
       ]
     }
   ],
-  "errors": [
-    {
-      "code": 6000,
-      "name": "DeviceTypeTooLong",
-      "msg": "Device type string exceeds maximum length (32 bytes)"
-    },
-    {
-      "code": 6001,
-      "name": "LocationTooLong",
-      "msg": "Location string exceeds maximum length (64 bytes)"
-    }
-  ],
+  "errors": [],
   "types": [
     {
       "name": "EnergyProfile",
