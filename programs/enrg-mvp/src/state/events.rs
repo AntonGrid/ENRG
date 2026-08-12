@@ -82,3 +82,57 @@ pub struct DeviceClaimed {
     pub claim_nonce: u64,
     pub timestamp: i64,
 }
+
+/// Emitted when a device is provisioned
+/// (ADR-0005: CLAIMED → PROVISIONED; owner-gated).
+#[event]
+pub struct DeviceProvisioned {
+    pub device_id: Pubkey,
+    pub owner: Pubkey,
+    pub timestamp: i64,
+}
+
+/// Emitted when a device is activated
+/// (ADR-0005: PROVISIONED → ACTIVE; owner-gated).
+#[event]
+pub struct DeviceActivated {
+    pub device_id: Pubkey,
+    pub owner: Pubkey,
+    pub timestamp: i64,
+}
+
+/// Emitted when a device is quarantined
+/// (ADR-0005: ACTIVE → QUARANTINE; owner-gated).
+#[event]
+pub struct DeviceQuarantined {
+    pub device_id: Pubkey,
+    pub owner: Pubkey,
+    pub timestamp: i64,
+}
+
+/// Emitted when a device is moved to maintenance
+/// (ADR-0005: ACTIVE/QUARANTINE → MAINTENANCE; owner-gated).
+#[event]
+pub struct DeviceMaintenance {
+    pub device_id: Pubkey,
+    pub owner: Pubkey,
+    pub timestamp: i64,
+}
+
+/// Emitted when a device is revoked
+/// (ADR-0005: ACTIVE/QUARANTINE/MAINTENANCE → REVOKED; owner-gated, terminal state).
+#[event]
+pub struct DeviceRevoked {
+    pub device_id: Pubkey,
+    pub owner: Pubkey,
+    pub timestamp: i64,
+}
+
+/// Emitted when a device is released from quarantine
+/// (ADR-0005: QUARANTINE → ACTIVE; owner-gated).
+#[event]
+pub struct DeviceReleasedFromQuarantine {
+    pub device_id: Pubkey,
+    pub owner: Pubkey,
+    pub timestamp: i64,
+}

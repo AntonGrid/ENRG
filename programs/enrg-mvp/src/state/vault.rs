@@ -68,7 +68,7 @@ impl Default for Vault {
             authority: Pubkey::default(),
             protocol_version: 1,
             total_supply: 0,
-            max_supply: MAX_SUPPLY,
+            max_supply: MAX_SUPPLY_ATOMIC,
             emission_k: EMISSION_DIFFICULTY_K,
             total_energy_wh: 0,
             total_producers: 0,

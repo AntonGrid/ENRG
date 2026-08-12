@@ -1,19 +1,22 @@
 use crate::constants::*;
 
 /// Returns current emission progress [0.0 .. 1.0].
-pub fn emission_share(total_supply: u64) -> f64 {
-    total_supply as f64 / MAX_SUPPLY as f64
+///
+/// Supply is measured in ATOMIC units (1 SRC == 10^9 atomics).
+/// Progress is 1.0 when the full 1_000_000_000 SRC (== 10^18 atomics) is mined.
+pub fn emission_share(total_supply_atomic: u64) -> f64 {
+    total_supply_atomic as f64 / MAX_SUPPLY_ATOMIC as f64
 }
 
 /// Returns current asymptotic difficulty coefficient.
-pub fn emission_difficulty(total_supply: u64) -> f64 {
-    let share = emission_share(total_supply);
+pub fn emission_difficulty(total_supply_atomic: u64) -> f64 {
+    let share = emission_share(total_supply_atomic);
     (EMISSION_DIFFICULTY_K as f64).powf(share)
 }
 
 /// Returns Wh required for one SRC unit (in SRC_BASIS terms).
-pub fn energy_per_src(total_supply: u64) -> u128 {
-    (INITIAL_ENERGY_PER_SRC as f64 * emission_difficulty(total_supply)) as u128
+pub fn energy_per_src(total_supply_atomic: u64) -> u128 {
+    (INITIAL_ENERGY_PER_SRC as f64 * emission_difficulty(total_supply_atomic)) as u128
 }
 
 /// Returns the dynamic difficulty multiplier for a specific device.
@@ -33,16 +36,16 @@ pub fn device_difficulty_multiplier(device_energy_30d: u64, network_energy_30d: 
 
 /// Returns effective energy_per_src for a specific device (base × multiplier).
 pub fn effective_energy_per_src(
-    total_supply: u64,
+    total_supply_atomic: u64,
     device_energy_30d: u64,
     network_energy_30d: u128,
 ) -> u128 {
-    let base = energy_per_src(total_supply);
+    let base = energy_per_src(total_supply_atomic);
     let multiplier = device_difficulty_multiplier(device_energy_30d, network_energy_30d);
     (base as f64 * multiplier) as u128
 }
 
-/// Converts verified energy into SRC units (in SRC_BASIS).
+/// Converts verified energy into SRC units (in SRC_BASIS terms).
 pub fn reward_for_energy(energy_wh: u64, energy_per_src: u128) -> u64 {
     if energy_per_src == 0 {
         return 0;
@@ -51,18 +54,18 @@ pub fn reward_for_energy(energy_wh: u64, energy_per_src: u128) -> u64 {
 }
 
 /// Convenience wrapper — uses global difficulty only (original).
-pub fn calculate_reward(energy_wh: u64, total_supply: u64) -> u64 {
-    reward_for_energy(energy_wh, energy_per_src(total_supply))
+pub fn calculate_reward(energy_wh: u64, total_supply_atomic: u64) -> u64 {
+    reward_for_energy(energy_wh, energy_per_src(total_supply_atomic))
 }
 
 /// Reward calculation with dynamic difficulty per device.
 pub fn calculate_reward_dynamic(
     energy_wh: u64,
-    total_supply: u64,
+    total_supply_atomic: u64,
     device_energy_30d: u64,
     network_energy_30d: u128,
 ) -> u64 {
-    let eps = effective_energy_per_src(total_supply, device_energy_30d, network_energy_30d);
+    let eps = effective_energy_per_src(total_supply_atomic, device_energy_30d, network_energy_30d);
     reward_for_energy(energy_wh, eps)
 }
 
@@ -93,15 +96,16 @@ mod tests {
 
     #[test]
     fn base_math_works() {
+        // supply measured in ATOMICS: half cap == 0.5e18
         assert_eq!(emission_share(0), 0.0);
-        assert_eq!(emission_share(500_000_000), 0.5);
-        assert_eq!(emission_share(MAX_SUPPLY), 1.0);
+        assert_eq!(emission_share(MAX_SUPPLY_ATOMIC / 2), 0.5);
+        assert_eq!(emission_share(MAX_SUPPLY_ATOMIC), 1.0);
     }
 
     #[test]
     fn difficulty_increases() {
-        assert!(energy_per_src(500_000_000) > energy_per_src(0));
-        assert!(energy_per_src(900_000_000) > energy_per_src(500_000_000));
+        assert!(energy_per_src(MAX_SUPPLY_ATOMIC / 2) > energy_per_src(0));
+        assert!(energy_per_src(MAX_SUPPLY_ATOMIC * 9 / 10) > energy_per_src(MAX_SUPPLY_ATOMIC / 2));
     }
 
     #[test]

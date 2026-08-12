@@ -14,6 +14,17 @@ use crate::state::*;
 /// Device metadata (max_power_w) and sliding energy window
 /// are managed by enrg-profile via CPI — this instruction
 /// calls profile::record_production() after minting.
+///
+/// NOTE (ADR-0003 conformance): Axis spec separates the Verifier
+/// (cryptography + data transfer) from the Policy Engine (decisions on
+/// Proof admissibility, quarantine, minting). In this Solana MVP the
+/// verifier and policy checks are co-located on-chain: whitelist of
+/// trusted oracles (OracleRegistry), device state gating (can_mint),
+/// energy limits, timestamp freshness and supply cap are all enforced
+/// here. This is a documented simplification acceptable for MVP;
+/// a separate off-chain Policy Engine (or on-chain PolicyRegistry
+/// governed per ADR-0009) can be introduced later without changing
+/// the trust pipeline.
 pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
     let vault = &mut ctx.accounts.vault;
@@ -269,7 +280,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     let energy_per_token = crate::math::energy_per_src(vault.total_supply);
     let supply_fraction = (vault.total_supply as u128)
         .checked_mul(1_000_000_000_000_000_000u128)
-        .and_then(|v| v.checked_div(MAX_SUPPLY as u128))
+        .and_then(|v| v.checked_div(MAX_SUPPLY_ATOMIC as u128))
         .unwrap_or(0);
 
     emit!(EmissionDifficultyChanged {

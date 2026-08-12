@@ -108,7 +108,7 @@ pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
         vault.protocol_version = 1;
 
         vault.total_supply = 0;
-        vault.max_supply = MAX_SUPPLY;
+        vault.max_supply = MAX_SUPPLY_ATOMIC;
 
         vault.emission_k = EMISSION_DIFFICULTY_K;
 

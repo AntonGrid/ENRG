@@ -267,6 +267,13 @@ pub fn provision_device(ctx: Context<ProvisionDevice>) -> Result<()> {
         ErrorCode::InvalidStateTransition
     );
     producer.state = DeviceState::Provisioned;
+
+    let clock = Clock::get()?;
+    emit!(DeviceProvisioned {
+        device_id: producer.device_id,
+        owner: producer.authority,
+        timestamp: clock.unix_timestamp,
+    });
     msg!("Device provisioned: {}", producer.device_id);
     Ok(())
 }
@@ -291,6 +298,13 @@ pub fn activate_device(ctx: Context<ActivateDevice>) -> Result<()> {
         ErrorCode::InvalidStateTransition
     );
     producer.state = DeviceState::Active;
+
+    let clock = Clock::get()?;
+    emit!(DeviceActivated {
+        device_id: producer.device_id,
+        owner: producer.authority,
+        timestamp: clock.unix_timestamp,
+    });
     msg!("Device activated: {}", producer.device_id);
     Ok(())
 }
@@ -315,6 +329,13 @@ pub fn quarantine_device(ctx: Context<QuarantineDevice>) -> Result<()> {
         ErrorCode::InvalidStateTransition
     );
     producer.state = DeviceState::Quarantine;
+
+    let clock = Clock::get()?;
+    emit!(DeviceQuarantined {
+        device_id: producer.device_id,
+        owner: producer.authority,
+        timestamp: clock.unix_timestamp,
+    });
     msg!("Device quarantined: {}", producer.device_id);
     Ok(())
 }
@@ -339,6 +360,13 @@ pub fn maintenance_device(ctx: Context<MaintenanceDevice>) -> Result<()> {
         ErrorCode::InvalidStateTransition
     );
     producer.state = DeviceState::Maintenance;
+
+    let clock = Clock::get()?;
+    emit!(DeviceMaintenance {
+        device_id: producer.device_id,
+        owner: producer.authority,
+        timestamp: clock.unix_timestamp,
+    });
     msg!("Device moved to maintenance: {}", producer.device_id);
     Ok(())
 }
@@ -363,6 +391,13 @@ pub fn revoke_device(ctx: Context<RevokeDevice>) -> Result<()> {
         ErrorCode::InvalidStateTransition
     );
     producer.state = DeviceState::Revoked;
+
+    let clock = Clock::get()?;
+    emit!(DeviceRevoked {
+        device_id: producer.device_id,
+        owner: producer.authority,
+        timestamp: clock.unix_timestamp,
+    });
     msg!("Device revoked: {}", producer.device_id);
     Ok(())
 }
@@ -387,6 +422,13 @@ pub fn release_from_quarantine(ctx: Context<ReleaseFromQuarantine>) -> Result<()
         ErrorCode::InvalidStateTransition
     );
     producer.state = DeviceState::Active;
+
+    let clock = Clock::get()?;
+    emit!(DeviceReleasedFromQuarantine {
+        device_id: producer.device_id,
+        owner: producer.authority,
+        timestamp: clock.unix_timestamp,
+    });
     msg!("Device released from quarantine: {}", producer.device_id);
     Ok(())
 }
