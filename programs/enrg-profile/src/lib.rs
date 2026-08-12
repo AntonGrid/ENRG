@@ -4,7 +4,7 @@ pub mod state;
 
 use state::EnergyProfile;
 
-declare_id!("BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn");
+declare_id!("78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt");
 
 /// Re-export generated CPI module for external programs.
 pub use self::enrg_profile::*;

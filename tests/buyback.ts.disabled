@@ -118,7 +118,7 @@ describe("ENRG Protocol — Buyback & Burn", () => {
 
   // enrg-profile program ID (same as Anchor.toml localnet)
   const profileProgramId = new PublicKey(
-    "BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn"
+    "78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt"
   );
 
   before(async () => {

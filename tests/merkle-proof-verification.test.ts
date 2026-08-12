@@ -11,7 +11,7 @@ import { registryPda, verificationPda, proofPda } from "./helpers/pda";
 import { loadAuthority, ensureFunded, randomManifestId } from "./helpers/accounts";
 import { patchIdl } from "./helpers/patch-idl";
 
-const PROGRAM_ID = new PublicKey("5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin");
+const PROGRAM_ID = new PublicKey("9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF");
 
 const idl = patchIdl(rawIdl);
 

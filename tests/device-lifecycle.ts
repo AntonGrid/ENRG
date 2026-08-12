@@ -33,7 +33,7 @@ import rawIdl from "../target/idl/enrg_mvp.json";
 import { patchIdl } from "./helpers/patch-idl";
 import { loadAuthority, ensureFunded } from "./helpers/accounts";
 
-const PROGRAM_ID = new PublicKey("5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin");
+const PROGRAM_ID = new PublicKey("9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF");
 const ENDPOINT = "http://127.0.0.1:8899";
 
 const STATE = {

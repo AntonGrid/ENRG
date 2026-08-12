@@ -10,7 +10,7 @@ describe("probe8", () => {
     const connection = new Connection("http://127.0.0.1:8899", "confirmed");
     const provider = new AnchorProvider(connection, new anchor.Wallet(loadAuthority()), { commitment: "confirmed" });
     anchor.setProvider(provider);
-    const PROGRAM_ID = new PublicKey("5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin");
+    const PROGRAM_ID = new PublicKey("9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF");
     try {
       const program = new Program(idl, provider);
       console.log("new Program WITHOUT patch: OK");

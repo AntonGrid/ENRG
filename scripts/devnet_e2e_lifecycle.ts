@@ -19,7 +19,7 @@
  * Конфигурация (env):
  *   RPC_ENDPOINT             по умолчанию http://127.0.0.1:8899
  *   ENRG_PROGRAM_ID          program id enrg_mvp (по умолчанию из Anchor.toml [programs.<cluster>])
- *   ENRG_PROFILE_PROGRAM_ID  program id enrg-profile (по умолчанию BYB51SY2... из constants.rs)
+ *   ENRG_PROFILE_PROGRAM_ID  program id enrg-profile (по умолчанию 78FUdpHn... из constants.rs)
  *   WALLET_PATH              keypair оператора (по умолчанию ~/.config/solana/id.json)
  *   SKIP_BOOTSTRAP=1         не трогать уже созданные аккаунты
  *
@@ -65,7 +65,7 @@ import { loadAuthority } from "../tests/helpers/accounts";
 // ════════════════════════════════════════════════════════════════
 
 const DEFAULT_RPC = "http://127.0.0.1:8899";
-const DEFAULT_PROFILE_PROGRAM_ID = "BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn";
+const DEFAULT_PROFILE_PROGRAM_ID = "78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt";
 
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || DEFAULT_RPC;
 const WALLET_PATH =
@@ -85,15 +85,15 @@ const RATED_POWER = new BN(1_000_000_000);
 const DEVICE_TYPE = "e2e-solar-panel";
 const LOCATION = "devnet-e2e";
 
-function detectCluster(): "devnet" | "mainnet-beta" | "localnet" {
+function detectCluster(): "devnet" | "mainnet" | "localnet" {
   if (RPC_ENDPOINT.includes("devnet")) return "devnet";
-  if (RPC_ENDPOINT.includes("mainnet")) return "mainnet-beta";
+  if (RPC_ENDPOINT.includes("mainnet")) return "mainnet";
   return "localnet";
 }
 
 /** Читает enrg_mvp program id из секции [programs.<cluster>] Anchor.toml. */
 function readAnchorTomlProgramId(
-  cluster: "devnet" | "mainnet-beta" | "localnet"
+  cluster: "devnet" | "mainnet" | "localnet"
 ): string | null {
   const tomlPath = path.join(process.cwd(), "Anchor.toml");
   if (!fs.existsSync(tomlPath)) return null;
@@ -108,7 +108,7 @@ const CLUSTER = detectCluster();
 const PROGRAM_ID = new PublicKey(
   process.env.ENRG_PROGRAM_ID ||
     readAnchorTomlProgramId(CLUSTER) ||
-    "5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin"
+    "9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF"
 );
 
 
@@ -186,8 +186,12 @@ const device = nacl.sign.keyPair(); // Ed25519-ключ УСТРОЙСТВА (de
 const oracle = nacl.sign.keyPair(); // Ed25519-ключ ОРАКУЛА (подписывает OracleReport)
 
 
-/** Аирдроп доступен только на local; на devnet/mainnet — только проверка баланса. */
-async function ensureFunded(account: PublicKey, minLamports = 2 * LAMPORTS_PER_SOL) {
+/**
+ * Аирдроп доступен только на local; на devnet/mainnet — только проверка баланса.
+ * minLamports = 0.5 SOL: реально на bootstrap + lifecycle + mint уходит ~0.15 SOL,
+ * а жёсткое требование 2 SOL ломает прогон после двух деплоев программ.
+ */
+async function ensureFunded(account: PublicKey, minLamports = 0.5 * LAMPORTS_PER_SOL) {
   const bal = await connection.getBalance(account);
   if (bal >= minLamports) return;
   if (ENDPOINT_IS_LOCAL) {

@@ -7,13 +7,14 @@ skip-lint = false
 [programs.devnet]
 # ⚠️  program id ДОЛЖЕН совпадать с declare_id в programs/enrg-mvp/src/lib.rs
 # И с pubkey deploy-ключа (target/deploy/enrg_mvp-keypair.json).
-# Текущее значение приведено к актуальному declare_id бинарника.
-# Если для devnet/mainnet используется новый rekey-ключ — обновите declare_id,
-# эту секцию и [programs.mainnet-beta] ОДНОВРЕМЕННО (см. docs/deploy-plan).
-enrg_mvp = "5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin"
+enrg_mvp = "9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF"
 
 [programs.localnet]
-enrg_mvp = "5tTUFoRzB1Z7yjo1WC1LJ7AvRruhFn81nifZ5J564nin"
+enrg_mvp = "9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF"
+
+# Anchor 0.32 принимает кластер "mainnet" (не "mainnet-beta").
+[programs.mainnet]
+enrg_mvp = "9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF"
 
 [workspace]
 # anchor-cli берёт workspace из Anchor.toml, а не из корневого Cargo.toml.

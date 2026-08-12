@@ -17,7 +17,7 @@ pub const INSTRUCTIONS_SYSVAR_ID: Pubkey =
 /// register_device / mint_energy). Совпадает с declared ID в
 /// `programs/enrg-profile/src/lib.rs` и адресом в `idls/enrg_profile.json`.
 pub const ENRG_PROFILE_PROGRAM_ID: Pubkey =
-    pubkey!("BYB51SY2pcTHPrW53vYsqmuKvDeBpqnVZAHTPPNj4VRn");
+    pubkey!("78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt");
 
 /// Допустимое отклонение часов при проверке timestamp (сек).
 pub const MAX_CLOCK_SKEW: i64 = 300;
