@@ -206,16 +206,27 @@ describe("ENRG — Founder premine & vesting baseline (runtime)", () => {
     );
   });
 
-  // ── SNAPSHOT (документация, НЕ рантайм-тест) ──
-  // initialize_founder_vesting: поля cliff/release проверяются юнит-тестом
-  // (state/vesting.rs::vested_at + константы), потому что FounderVesting-аккаунт
-  // в коде создаётся генезисом (без init/seed), а anchor 0.32 не умеет записать
-  // дискриминатор при createInstruction. Автономный рантайм-вызов требует
-  // генезис-аккаунта (solana-test-validator --account) — это отдельная настройка
-  // валидатора, не входящая в скоп «один файл». claim_vested после клиффа
-  // покрыт юнит-инвариантом балансов и сработает по приходу Clock на мейннете.
-  it.skip("initialize_founder_vesting: поля cliff/release (требует генезис-аккаунт)", () => {
-    // Логика покрыта юнит-тестом; рантайм-вызов — после настройки генезис-аккаунта.
+  // initialize_founder_vesting: FounderVesting-аккаунт создаётся генезисом
+  // (без init/seed) — адрес = findProgramAddress([b"founder-vesting"]), файл
+  // tests/genesis/founder-vesting.json подкладывается валидатору через
+  // Anchor.toml [test.validator] (см. docs/STATE.md, раздел 4).
+  it("initialize_founder_vesting: поля cliff/release (генезис-аккаунт)", async () => {
+    const [vestingPda] = PublicKey.findProgramAddressSync(
+      [Buffer.from("founder-vesting")],
+      PROGRAM_ID,
+    );
+    await program.methods
+      .initializeFounderVesting()
+      .accounts({ vesting: vestingPda, authority: founder.publicKey })
+      .signers([founder])
+      .rpc();
+
+    const v = await program.account.founderVesting.fetch(vestingPda);
+    assert.strictEqual(v.founder.toBase58(), founder.publicKey.toBase58(), "founder");
+    assert.ok(v.totalAmount.eq(FOUNDER_ALLOCATION), "total_amount == 2e17");
+    assert.strictEqual(v.cliff.toNumber(), 365 * 24 * 60 * 60, "cliff == 1 год");
+    assert.strictEqual(v.release.toNumber(), 3 * 365 * 24 * 60 * 60, "release == 3 года");
+    assert.ok(v.startTime.toNumber() > 0, "start_time зафиксирован");
   });
 });
 
