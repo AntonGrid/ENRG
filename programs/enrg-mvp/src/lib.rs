@@ -9,6 +9,7 @@ pub mod security;
 pub mod state;
 
 use instructions::*;
+use state::producer::DeviceTier;
 
 declare_id!("9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF");
 
@@ -308,6 +309,14 @@ pub mod enrg_mvp {
         ctx: Context<RevokeDevice>,
     ) -> Result<()> {
         instructions::device_lifecycle::revoke_device(ctx)
+    }
+
+    /// Назначение/смена tier устройства (v7.0 §15 — Trust Levels).
+    pub fn set_device_tier(
+        ctx: Context<SetDeviceTier>,
+        tier: DeviceTier,
+    ) -> Result<()> {
+        instructions::tier::set_device_tier(ctx, tier)
     }
 
     // ═══════════════════════════════════════════

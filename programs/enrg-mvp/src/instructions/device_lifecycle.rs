@@ -82,6 +82,9 @@ pub fn register_device(
     producer.energy_wh = 0;
     producer.timestamp = 0;
     producer.state = DeviceState::Registered;
+    producer.tier = DeviceTier::Basic; // v7.0 §15: новый девайс — Basic
+    producer.month_energy_wh = 0;
+    producer.month_start_ts = 0;
     producer.claim_nonce = 0;
     producer.claimed_at = 0;
 

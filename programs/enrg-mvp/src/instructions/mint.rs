@@ -29,9 +29,14 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     let producer = &mut ctx.accounts.producer;
     let vault = &mut ctx.accounts.vault;
 
-    // ── Device State check (ADR-0005) ──
+    // ── Clock: используется для freshness и tier-окна ──
+    let clock = Clock::get()?;
+    let now = clock.unix_timestamp;
+
+    // ── Device State check (ADR-0005) + tier-лимит месяца (v7.0 §15) ──
+    producer.roll_month(now);
     require!(
-        producer.state.can_mint(),
+        producer.can_mint(now),
         ErrorCode::InvalidDeviceState
     );
 
@@ -78,11 +83,16 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     )?;
 
     // ── Proof validation: timestamp & nonce ──
-    let clock = Clock::get()?;
-    let now = clock.unix_timestamp;
-
     verify_timestamp(now, report.verified_at)?;
     verify_nonce(producer, report.nonce)?;
+
+    // ── Tier increment check (v7.0 §15): отчёт не должен выходить за лимит месяца ──
+    if let Some(limit) = producer.tier.monthly_limit_wh() {
+        require!(
+            producer.month_energy_wh.checked_add(report.energy_wh).map_or(false, |v| v <= limit),
+            ErrorCode::TierLimitExceeded
+        );
+    }
 
     // ── Energy validation ──
     let max_energy = ctx.accounts.profile.rated_power;
@@ -113,6 +123,10 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     producer.timestamp = report.verified_at;
     producer.energy_wh = producer
         .energy_wh
+        .checked_add(report.energy_wh)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+    producer.month_energy_wh = producer
+        .month_energy_wh
         .checked_add(report.energy_wh)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
 

@@ -97,4 +97,6 @@ pub enum ErrorCode {
     DuplicateMember,
     #[msg("Destination token account mint mismatch")]
     DestinationMintMismatch,
+    #[msg("Device tier monthly mining limit exceeded")]
+    TierLimitExceeded,
 }

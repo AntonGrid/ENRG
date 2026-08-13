@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub enum DeviceState {
     Unregistered,
     Registered,
@@ -42,6 +42,41 @@ impl Default for DeviceState {
     }
 }
 
+/// Уровень доверия устройства (v7.0 §15 — Device Trust Levels).
+///
+/// Влияет на лимиты майнинга: Basic ≤ 100 kWh/мес, Verified ≤ 10 MWh/мес,
+/// Industrial / Institutional — без ограничений. Тир назначается протокольным
+/// администратором (Vault authority) через `set_device_tier`.
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
+pub enum DeviceTier {
+    Basic,
+    Verified,
+    Industrial,
+    Institutional,
+}
+
+impl Default for DeviceTier {
+    fn default() -> Self {
+        DeviceTier::Basic
+    }
+}
+
+impl DeviceTier {
+    /// Лимит майнинга на месяц (Wh). `None` — без ограничений.
+    pub fn monthly_limit_wh(&self) -> Option<u64> {
+        match self {
+            DeviceTier::Basic => Some(crate::constants::BASIC_MONTHLY_LIMIT_WH),
+            DeviceTier::Verified => Some(crate::constants::VERIFIED_MONTHLY_LIMIT_WH),
+            DeviceTier::Industrial | DeviceTier::Institutional => None,
+        }
+    }
+
+    /// Признак премиум-тира (премиум-функции ENRG Market, v7.0 §30).
+    pub fn is_premium(&self) -> bool {
+        matches!(self, DeviceTier::Industrial | DeviceTier::Institutional)
+    }
+}
+
 /// Core device identity.
 ///
 /// Хранит только базовую on-chain логику протокола.
@@ -71,6 +106,15 @@ pub struct EnergyProducer {
     /// Текущее состояние устройства (Device Lifecycle, ADR-0005).
     pub state: DeviceState,
 
+    /// Уровень доверия устройства (v7.0 §15) — лимиты майнинга.
+    pub tier: DeviceTier,
+
+    /// Подтверждённая энергия за текущий месяц (Wh) — для tier-лимита.
+    pub month_energy_wh: u64,
+
+    /// Начало текущего месячного окна (unix ts) — для tier-лимита.
+    pub month_start_ts: i64,
+
     /// Монотонный nonce последнего claim-сообщения (защита от replay).
     /// Отдельно от `nonce` (proof-nonce отчётов): claim и proof не пересекаются.
     pub claim_nonce: u64,
@@ -78,3 +122,121 @@ pub struct EnergyProducer {
     /// Временная метка успешного claim (аудит, ADR-0002).
     pub claimed_at: i64,
 }
+
+impl EnergyProducer {
+    /// Разрешено ли устройству минтить в момент `now`:
+    /// состояние Active (ADR-0005) И tier-лимит месяца не исчерпан (v7.0 §15).
+    pub fn can_mint(&self, now: i64) -> bool {
+        if !self.state.can_mint() {
+            return false;
+        }
+        match self.tier.monthly_limit_wh() {
+            Some(limit) => self.effective_month_energy(now) < limit,
+            None => true,
+        }
+    }
+
+    /// Энергия месяца с учётом «прокрутки» окна к `now`.
+    /// Если окно истекло (>= TIER_MONTH_SECS) — новый месяц, энергия = 0.
+    pub fn effective_month_energy(&self, now: i64) -> u64 {
+        if self.month_start_ts == 0
+            || now.saturating_sub(self.month_start_ts) >= crate::constants::TIER_MONTH_SECS
+        {
+            0
+        } else {
+            self.month_energy_wh
+        }
+    }
+
+    /// Прокручивает месячное окно к `now` (вызывать перед записью энергии).
+    pub fn roll_month(&mut self, now: i64) {
+        if self.month_start_ts == 0
+            || now.saturating_sub(self.month_start_ts) >= crate::constants::TIER_MONTH_SECS
+        {
+            self.month_start_ts = now;
+            self.month_energy_wh = 0;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn producer_with(
+        state: DeviceState,
+        tier: DeviceTier,
+        month_energy: u64,
+        start: i64,
+    ) -> EnergyProducer {
+        EnergyProducer {
+            authority: Pubkey::new_unique(),
+            device_id: Pubkey::new_unique(),
+            nonce: 0,
+            energy_wh: 0,
+            timestamp: 0,
+            state,
+            tier,
+            month_energy_wh: month_energy,
+            month_start_ts: start,
+            claim_nonce: 0,
+            claimed_at: 0,
+        }
+    }
+
+    #[test]
+    fn tier_limits_match_spec() {
+        // v7.0 §15: Basic ≤ 100 kWh/мес, Verified ≤ 10 MWh/мес, остальные — без лимита.
+        assert_eq!(DeviceTier::Basic.monthly_limit_wh(), Some(100_000));
+        assert_eq!(DeviceTier::Verified.monthly_limit_wh(), Some(10_000_000));
+        assert_eq!(DeviceTier::Industrial.monthly_limit_wh(), None);
+        assert_eq!(DeviceTier::Institutional.monthly_limit_wh(), None);
+        assert!(DeviceTier::Industrial.is_premium());
+        assert!(!DeviceTier::Basic.is_premium());
+    }
+
+    #[test]
+    fn active_device_within_limit_can_mint() {
+        let p = producer_with(DeviceState::Active, DeviceTier::Basic, 50_000, 1_000);
+        assert!(p.can_mint(1_000));
+        let v = producer_with(DeviceState::Active, DeviceTier::Verified, 5_000_000, 1_000);
+        assert!(v.can_mint(1_000));
+    }
+
+    #[test]
+    fn non_active_device_cannot_mint() {
+        for st in [
+            DeviceState::Unregistered,
+            DeviceState::Registered,
+            DeviceState::Quarantine,
+            DeviceState::Revoked,
+        ] {
+            let p = producer_with(st, DeviceTier::Industrial, 0, 1_000);
+            assert!(!p.can_mint(1_000), "state {:?} must not mint", st);
+        }
+    }
+
+    #[test]
+    fn tier_limit_blocks_mint() {
+        let p = producer_with(DeviceState::Active, DeviceTier::Basic, 100_000, 1_000);
+        assert!(!p.can_mint(1_000));
+        let v = producer_with(DeviceState::Active, DeviceTier::Verified, 10_000_000, 1_000);
+        assert!(!v.can_mint(1_000));
+        let i = producer_with(DeviceState::Active, DeviceTier::Industrial, u64::MAX, 1_000);
+        assert!(i.can_mint(1_000));
+    }
+
+    #[test]
+    fn month_window_resets_limit() {
+        let mut p = producer_with(DeviceState::Active, DeviceTier::Basic, 100_000, 1_000);
+        assert!(!p.can_mint(1_000));
+        let later = 1_000 + crate::constants::TIER_MONTH_SECS + 1;
+        assert_eq!(p.effective_month_energy(later), 0);
+        p.roll_month(later);
+        assert!(p.can_mint(later));
+        assert_eq!(p.month_energy_wh, 0);
+        assert_eq!(p.month_start_ts, later);
+    }
+}
+
+

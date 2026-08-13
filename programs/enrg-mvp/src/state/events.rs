@@ -168,3 +168,11 @@ pub struct DeviceReleasedFromQuarantine {
     pub owner: Pubkey,
     pub timestamp: i64,
 }
+
+/// Emitted when a device tier changes (v7.0 §15 — Trust Levels).
+#[event]
+pub struct DeviceTierSet {
+    pub producer: Pubkey,
+    pub tier: crate::state::producer::DeviceTier,
+    pub changed_by: Pubkey,
+}

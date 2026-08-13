@@ -112,6 +112,28 @@ pub const PROPOSAL_AMOUNT_MAX_ATOMIC: u64 = 1_000_000_000_000_000; // 1e15
 /// Максимальная длина заголовка предложения (байт).
 pub const PROPOSAL_TITLE_MAX_LEN: usize = 64;
 
+// ══════════════════════════════════════════════════════════════
+//  Device Trust Levels (v7.0 §15)
+//  Лимиты майнинга на tier устройства (Wh за месяц).
+//  Basic ≤ 100 kWh/мес; Verified ≤ 10 MWh/мес;
+//  Industrial / Institutional — без ограничений.
+// ══════════════════════════════════════════════════════════════
+
+/// Базовый тир: до 100 kWh в месяц (100_000 Wh).
+pub const BASIC_MONTHLY_LIMIT_WH: u64 = 100_000;
+
+/// Verified: сертифицированный бытовой счётчик — до 10 MWh в месяц.
+pub const VERIFIED_MONTHLY_LIMIT_WH: u64 = 10_000_000;
+
+/// Окно «месяца» для tier-лимитов (30 дней, секунды).
+pub const TIER_MONTH_SECS: i64 = 30 * 24 * 60 * 60;
+
+/// Максимальный балл ERS (Energy Reputation Score, v7.0 §16).
+pub const ERS_MAX_SCORE: u32 = 1_000;
+
+/// Порог ERS для премиум-доступа к ENRG Market (v7.0 §16, §30).
+pub const ERS_PREMIUM_THRESHOLD: u32 = 700;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -125,6 +147,7 @@ mod tests {
 
     /// Атомарные единицы: 1 SRC = 1e9 атомар; MAX = 1e18 атомар = 1e9 SRC.
     #[test]
+    #[allow(deprecated)]
     fn max_supply_in_atomic_units() {
         assert_eq!(MAX_SUPPLY_ATOMIC, 1_000_000_000_000_000_000);
         assert_eq!(MAX_SUPPLY, MAX_SUPPLY_ATOMIC, "MAX_SUPPLY — deprecated alias");
