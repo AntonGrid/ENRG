@@ -22,6 +22,14 @@ The current reference implementation uses Solana.
 
 ---
 
+> **Актуальное состояние реализации** (адреса, константы, PDA-структура,
+> жизненный цикл, тест-статус, roadmap) см. в **`docs/STATE.md`** — единый
+> источник правды, сверенный с кодом. Настоящая спецификация — нормативное
+> описание протокола; при расхождении с фактическим кодом приоритет у
+> `docs/STATE.md` (код) до следующего релиза спецификации.
+
+---
+
 # Design Principles
 
 The protocol is based on the following immutable principles.

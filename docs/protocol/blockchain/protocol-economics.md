@@ -1,5 +1,11 @@
 # 16. Protocol Economics
 
+> **Актуальное состояние реализации** (адреса, константы, PDA-структура,
+> жизненный цикл, тест-статус, roadmap) см. в **`docs/STATE.md`** — единый
+> источник правды, сверенный с кодом (`programs/enrg-mvp/src`). Этот раздел —
+> нормативное описание экономики протокола; конкретные on-chain значения
+> (аллокации, vesting, governance-параметры) — в `docs/STATE.md`.
+
 ## 16.1 Overview
 
 The ENRG Protocol defines the economic rules governing the issuance and circulation of the native protocol token, SRC.
