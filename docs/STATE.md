@@ -100,3 +100,60 @@ PDA-адреса детерминированы (раздел 4) и в тест�
 создаваться процессом деплоя аналогичным способом (генезис/пре-сид).
 
 
+## 5. Жизненный цикл
+
+Последовательность релиза (одна и та же на localnet/Devnet; smoke-покрытие —
+`tests/zz-e2e-smoke.ts`):
+
+```
+initialize_token            → SRC mint (PDA [b"src-mint"]), mint-authority = PDA [b"mint-authority"]
+initialize_vault            → Vault (PDA [b"vault"]), max_supply = 1e18
+allocate_founder            → премайн 2e17 на founder ATA (одноразово), total_supply = 2e17
+initialize_founder_vesting  → FounderVesting (генезис-аккаунт; cliff 1y / release 3y)
+initialize_governance       → GovernanceState (PDA [b"governance"]; authority + 3..=5 members)
+create_proposal             → Proposal (PDA [b"proposal", id]); одно активное, amount ≤ 1e15
+vote                        → кворум: yes > no И yes+no > members/2 → Approved (+approved_at)
+governance_mint             → после TIMELOCK_DELAY (7 дней): mint_to через mint-authority PDA
+```
+
+Исполнение `governance_mint` возможно только после `Approved` + истёкшего
+timelock (иначе `TimelockNotElapsed`); `vault.total_supply` увеличивается,
+`Proposal.status → Executed`.
+
+## 6. Тест-статус
+
+- **Anchor TS (localnet):** `anchor test --skip-build` — зелёный прогон
+  (включая `tests/zz-e2e-smoke.ts`).
+- **Rust unit:** `cargo test --manifest-path programs/enrg-mvp/Cargo.toml --lib`
+  — зелёные (включая юнит-инварианты vesting и governance).
+- **Документированные skips:**
+  - `it.skip` в `tests/founder-vesting.ts` — `initialize_founder_vesting`
+    (раньше требовал генезис-аккаунт; теперь обеспечивается
+    `Anchor.toml [test.validator]` и покрывается smoke).
+  - `it.skip` в `tests/governance.ts` — полный проход `governance_mint` после
+    7 дней (Clock-warp невозможен; покрыт юнит-инвариантом
+    `approved_after_majority_and_timelock`).
+  - `describe.skip` в `tests/devnet-merkle-proof-verification.test.ts`
+    (devnet-зависимый).
+- **Известный тех-долг (НЕ блокирует релиз):**
+  - `8 × TS2339` в `tests/device-lifecycle.ts` (account namespace
+    `energyProducer` не типизирован в IDL).
+  - Доп. предсуществующие TS-ошибки: `tests/merkle-proof-verification.test.ts`
+    (4), `tests/devnet-merkle-proof-verification.test.ts` (3),
+    `tests/helpers/program.ts` (2), `tests/helpers/debug-program.ts` (2),
+    `tests/probe10.test.ts` (1). Итоговая база `npx tsc --noEmit` = **20 ошибок**,
+    smoke-тест новых не добавляет.
+  - `set_vault_authority` — одношаговая смена (TODO(audit): двухшаговая +
+    timelock/multisig).
+
+## 7. Roadmap (добавляется upgrade-ом, не блокирует релиз)
+
+- **Policy Engine (ADR-0003)** — отдельная on-chain PolicyRegistry / off-chain
+  engine поверх существующей trust-pipeline (сейчас verifier + policy
+  co-located в `mint_energy`; документированное упрощение MVP).
+- **Multisig + двухшаговая смена authority** для `set_vault_authority`
+  (изменение layout Vault требует миграции задеплоенного аккаунта).
+- **DAO** — расширение governance MVP: делегирование, голосование по весу,
+  исполнение произвольных инструкций (сейчас — только `governance_mint`).
+
+
