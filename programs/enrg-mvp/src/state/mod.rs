@@ -14,6 +14,7 @@ pub mod manifest_verification;
 pub mod merkle_proof_verification;
 pub mod events;
 pub mod config;
+pub mod reputation;
 
 pub use vault::*;
 pub use producer::*;
@@ -31,3 +32,4 @@ pub use manifest_verification::*;
 pub use merkle_proof_verification::*;
 pub use events::*;
 pub use config::*;
+pub use reputation::*;

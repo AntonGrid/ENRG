@@ -319,6 +319,28 @@ pub mod enrg_mvp {
         instructions::tier::set_device_tier(ctx, tier)
     }
 
+    /// Инициализация Reputation PDA (v7.0 §16 — Energy Reputation Score).
+    pub fn initialize_reputation(
+        ctx: Context<InitializeReputation>,
+    ) -> Result<()> {
+        instructions::reputation::initialize_reputation(ctx)
+    }
+
+    /// Фиксация аномалии профиля генерации доверенным оракулом (v7.0 §27).
+    pub fn report_anomaly(
+        ctx: Context<ReportAnomaly>,
+        severity: u8,
+    ) -> Result<()> {
+        instructions::reputation::report_anomaly(ctx, severity)
+    }
+
+    /// Премиум-доступ к ENRG Market по ERS (v7.0 §16, §30).
+    pub fn ers_premium_access(
+        ctx: Context<ErsPremiumAccess>,
+    ) -> Result<bool> {
+        instructions::reputation::ers_premium_access(ctx)
+    }
+
     // ═══════════════════════════════════════════
     //  PHASE 10 — Governance MVP (ADR-0009)
     // ═══════════════════════════════════════════

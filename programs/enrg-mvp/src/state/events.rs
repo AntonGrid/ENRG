@@ -176,3 +176,19 @@ pub struct DeviceTierSet {
     pub tier: crate::state::producer::DeviceTier,
     pub changed_by: Pubkey,
 }
+
+/// Emitted when a profile anomaly reduces ERS (v7.0 §27).
+#[event]
+pub struct AnomalyReported {
+    pub reputation: Pubkey,
+    pub score_after: u32,
+    pub severity: u8,
+}
+
+/// Emitted after ERS is refreshed by a mint (v7.0 §16).
+#[event]
+pub struct ReputationUpdated {
+    pub reputation: Pubkey,
+    pub score: u32,
+    pub total_energy_wh: u64,
+}

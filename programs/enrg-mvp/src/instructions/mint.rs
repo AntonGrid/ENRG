@@ -313,6 +313,20 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         emergency_amount
     );
 
+    // ── ERS (v7.0 §16): обновляем репутацию, если аккаунт передан ──
+    if let Some(reputation) = &mut ctx.accounts.reputation {
+        crate::instructions::reputation::update_reputation_after_mint(
+            reputation,
+            report.energy_wh,
+            now,
+        )?;
+        emit!(ReputationUpdated {
+            reputation: reputation.key(),
+            score: reputation.score,
+            total_energy_wh: reputation.total_energy_wh,
+        });
+    }
+
     Ok(())
 }
 
@@ -416,4 +430,12 @@ pub struct MintEnergy<'info> {
         seeds::program = profile_program.key()
     )]
     pub profile: Account<'info, crate::enrg_profile::accounts::EnergyProfile>,
+
+    /// ERS (v7.0 §16) — опционально: если передан, обновляется после минта.
+    #[account(
+        mut,
+        seeds = [b"reputation", authority.key().as_ref()],
+        bump = reputation.bump
+    )]
+    pub reputation: Option<Account<'info, Reputation>>,
 }
