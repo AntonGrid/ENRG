@@ -203,9 +203,8 @@ pub mod enrg_mvp {
 
     pub fn initialize_founder_vesting(
         ctx: Context<InitializeFounderVesting>,
-        total_amount: u64,
     ) -> Result<()> {
-        instructions::vesting::initialize_founder_vesting(ctx, total_amount)
+        instructions::vesting::initialize_founder_vesting(ctx)
     }
 
     pub fn claim_vested(
