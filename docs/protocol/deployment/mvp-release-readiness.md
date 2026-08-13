@@ -27,6 +27,8 @@ tests that require a configured localnet/devnet environment.
 | Tests | Rust `cargo test --workspace` | 9 + 1 passed | 0 failed |
 | Tests | Python `test_tokenomics_extended.py` | All passed | incl. 3 Merkle tests |
 | Tests | TypeScript integration (`tests/*.ts`) | Pending | requires localnet/devnet; no `test` script in `package.json` |
+| Tests | `anchor test --skip-build` (localnet) | OK | 44 passing / 5 pending (см. STATE.md, раздел 6) |
+| Verify | Devnet verify-only (`scripts/devnet_verify_governance.ts`) | **Divergent** | задеплоена старая ревизия: `vault.max_supply=1e9`, governance/vesting/премайн отсутствуют — см. `docs/DEVNET_VERIFICATION.md` |
 | Repo | Working tree clean / pushed | Clean | `HEAD` synced with `origin/main` |
 
 ---
