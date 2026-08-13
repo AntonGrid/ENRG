@@ -154,5 +154,7 @@ Fixed economic model (single variant, no alternatives):
   - full cycle = CLIFF + RELEASE = 4 years; after 4 years everything is unlocked.
 - **claim_vested** performs a REAL `token::transfer` from the founder ATA to the founder's destination ATA. The source is strictly the founder ATA (controlled by the program), so tokens cannot be withdrawn early. The claimable amount is bounded by the vested schedule minus already withdrawn amounts.
 
+> **Runtime-testing note:** `claim_vested` after the cliff is covered at the LOGIC level by the unit invariant test `claim_transfer_moves_claimable_only` (`state/vesting.rs`). The runtime TS baseline (`tests/founder-vesting.ts`) covers `initialize_token`, `allocate_founder`, `initialize_founder_vesting` and will fire `claim_vested` once the on-chain Clock passes the cliff — a standard Solana practice (TS tests cannot warp the Clock on localnet; trust in Clock on mainnet).
+
 After the premine `vault.total_supply = 2e17`; it is used by `energy_per_src` / `supply_fraction`, so the starting emission difficulty already accounts for the occupied supply share.
 

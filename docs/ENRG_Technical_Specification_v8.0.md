@@ -924,3 +924,5 @@ Vesting on the same founder ATA blocks withdrawal until the cliff:
 - The claimable amount is bounded by the vested schedule minus already withdrawn amounts.
 - No alternative withdrawal path exists for the founder allocation.
 
+> **Runtime-testing note:** `claim_vested` after the cliff is covered at the LOGIC level by the unit invariant test `claim_transfer_moves_claimable_only` (`state/vesting.rs`). The runtime TS baseline (`tests/founder-vesting.ts`) covers `initialize_token`, `allocate_founder`, `initialize_founder_vesting`; `claim_vested` fires once the on-chain Clock passes the cliff — a standard Solana practice (TS tests cannot warp the Clock on localnet; trust in Clock on mainnet).
+

@@ -32,8 +32,9 @@ pub struct AllocateFounder<'info> {
     )]
     pub token_mint: Box<Account<'info, TokenMint>>,
 
-    /// SRC Mint.
+    /// SRC Mint (writable — CPI token::mint_to увеличивает supply).
     #[account(
+        mut,
         seeds = [b"src-mint"],
         bump = token_mint.mint_bump,
         constraint = mint.key() == token_mint.mint @ ErrorCode::InvalidParameter
