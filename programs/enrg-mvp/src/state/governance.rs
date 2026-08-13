@@ -288,5 +288,22 @@ mod tests {
         assert_eq!(GOVERNANCE_MIN_MEMBERS, 3);
         assert_eq!(GOVERNANCE_MEMBER_MAX, 5);
     }
+
+    #[test]
+    fn emission_paths_are_capped_and_gated() {
+        // Пути эмиссии SRC: mint_energy (PoP) + governance_mint. Governance-эмиссия
+        // за один проход ограничена капом предложения; вместе с founder-премайном
+        // не может исчерпать MAX_SUPPLY_ATOMIC.
+        assert!(
+            PROPOSAL_AMOUNT_MAX_ATOMIC
+                <= crate::constants::MAX_SUPPLY_ATOMIC
+                    - crate::constants::FOUNDER_ALLOCATION_ATOMIC
+        );
+        // Non-approved предложение не исполняется никогда (timelock не помогает).
+        let pending = proposal_with(ProposalStatus::Pending, 0, 0, 5, 0);
+        let rejected = proposal_with(ProposalStatus::Rejected, 0, 0, 5, 0);
+        assert!(!pending.executable(TIMELOCK_DELAY as i64 + 1));
+        assert!(!rejected.executable(TIMELOCK_DELAY as i64 + 1));
+    }
 }
 

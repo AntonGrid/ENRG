@@ -108,3 +108,19 @@ outsider/double-vote отклоняются, minority→Rejected), `collision`
 2. **Multisig + timelock**: authority → мультиподпись, настраиваемый timelock.
 3. **Полный Policy Engine (ADR-0003) / DAO**: роль-маппинг, кворумы по типам
    решений, treasury-перераспределение.
+
+## Tightening (v7.0 §22 конформность)
+
+- **Пути эмиссии SRC (зафиксировано):** только `mint_energy` (Proof-of-Production,
+  PoP-майнинг через mint-authority PDA) и `governance_mint` (ADR-0009). Любого
+  иного пути минта нет — «non-governor mint» невозможен: founder-премайн —
+  одноразовое исключение (`founder_minted`), `set_vault_authority` не меняет
+  mint-authority (PDA `[b"mint-authority"]` неизменен).
+- **Реестр голосований (governable params):** параметры экономики (`k`,
+  комиссия 15%, лимиты тиров, `PROPOSAL_AMOUNT_MAX_ATOMIC`, казна фондов) пока
+  являются **константами кода**, а не предметом голосования. План: добавить в
+  `GovernanceState` реестр параметров (layout-миграция при upgrade) и
+  голосовать за их изменение отдельным типом предложения — в scope full DAO.
+- **Полный DAO-путь:** делегирование, голосование по весу, исполнение
+  произвольных инструкций — за пределами MVP (см. STATE.md, раздел 7).
+
