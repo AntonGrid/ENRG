@@ -7,13 +7,31 @@ use crate::constants::{
 use crate::error::ErrorCode;
 use crate::state::*;
 
+/// Bootstrap-путь для FounderVesting.
+///
+/// Аккаунт можно получить двумя способами (обратно совместимо):
+/// 1. **Генезис/пре-сид** (localnet `solana-test-validator --account`,
+///    файл `tests/genesis/founder-vesting.json`): аккаунт уже существует по
+///    адресу `findProgramAddress([b"founder-vesting"])` и принадлежит программе —
+///    `init_if_needed` пропускает инициализацию, поля перезаписываются.
+/// 2. **On-chain bootstrap** (Devnet/mainnet): аккаунт отсутствует — `init_if_needed`
+///    создаёт его программой по тому же seed (payer = founder), далее обработчик
+///    заполняет поля. Никакой внешней genesis-инъекции не требуется.
 #[derive(Accounts)]
 pub struct InitializeFounderVesting<'info> {
-    #[account(mut)]
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = 8 + FounderVesting::LEN,
+        seeds = [b"founder-vesting"],
+        bump,
+    )]
     pub vesting: Account<'info, FounderVesting>,
 
     #[account(mut)]
     pub authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 #[derive(Accounts)]

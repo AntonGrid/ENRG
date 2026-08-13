@@ -218,7 +218,11 @@ describe("ENRG — E2E full-lifecycle smoke (pre-devnet)", () => {
       const founder = loadKeypair(FOUNDER_KEYPAIR_PATH, "founder");
       await program.methods
         .initializeFounderVesting()
-        .accounts({ vesting: vestingPda, authority: founder.publicKey })
+        .accounts({
+          vesting: vestingPda,
+          authority: founder.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
         .signers([founder])
         .rpc();
 

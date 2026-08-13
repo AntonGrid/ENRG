@@ -211,6 +211,23 @@ mod tests {
     }
 
     #[test]
+    fn discriminator_and_len_lock_genesis_layout() {
+        // Генезис-аккаунт (tests/genesis/founder-vesting.json) хранит данные
+        // 88 байт = 8 (дискриминатор) + 80 (LEN). Любое изменение структуры
+        // FounderVesting или имени аккаунта сломает локальную генезис-инъекцию
+        // и bootstrap-путь — тест фиксирует layout.
+        use anchor_lang::Discriminator;
+        assert_eq!(
+            FounderVesting::DISCRIMINATOR,
+            [0x5e, 0x95, 0x78, 0x1f, 0x24, 0x17, 0x0e, 0xa4],
+            "FounderVesting дискриминатор должен совпадать с genesis-файлом"
+        );
+        assert_eq!(FounderVesting::DISCRIMINATOR.len(), 8);
+        assert_eq!(FounderVesting::LEN, 80);
+        assert_eq!(8 + FounderVesting::LEN, 88);
+    }
+
+    #[test]
     fn claim_transfer_moves_claimable_only() {
         // 8. Симуляция двух claim'ов: founder ATA уменьшается ровно на claimable,
         // destination ATA увеличивается на claimable; суммарно всё разблокировано.

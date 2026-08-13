@@ -217,7 +217,11 @@ describe("ENRG — Founder premine & vesting baseline (runtime)", () => {
     );
     await program.methods
       .initializeFounderVesting()
-      .accounts({ vesting: vestingPda, authority: founder.publicKey })
+      .accounts({
+        vesting: vestingPda,
+        authority: founder.publicKey,
+        systemProgram: SystemProgram.programId,
+      })
       .signers([founder])
       .rpc();
 
