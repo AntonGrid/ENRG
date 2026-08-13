@@ -1,5 +1,6 @@
 pub mod buyback;
 pub mod device_lifecycle;
+pub mod funds;
 pub mod init_config;
 pub mod initialize;
 pub mod initialize_token;
@@ -13,6 +14,7 @@ pub mod staking;
 pub mod vesting;
 pub use buyback::*;
 pub use device_lifecycle::*;
+pub use funds::*;
 pub use init_config::*;
 pub use initialize::*;
 pub use initialize_token::*;

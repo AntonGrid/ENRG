@@ -64,6 +64,20 @@ pub struct TokensBurned {
     pub total_supply: u64,
 }
 
+/// Emitted after SRC are withdrawn from a protocol fund
+/// (buyback / staking / dao / emergency) by the governor.
+#[event]
+pub struct FundsWithdrawn {
+    /// Fund tag: 0=buyback, 1=staking, 2=dao, 3=emergency.
+    pub fund_tag: u8,
+    /// Amount of SRC transferred out of the fund.
+    pub amount: u64,
+    /// Destination token account.
+    pub to: Pubkey,
+    /// Initiator (Vault.authority as temporary governor).
+    pub by: Pubkey,
+}
+
 /// Emitted when a device is registered
 /// (ADR-0005: UNREGISTERED → REGISTERED; требует Ed25519-подпись устройства).
 #[event]

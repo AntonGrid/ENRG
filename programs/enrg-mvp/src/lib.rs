@@ -209,6 +209,16 @@ pub mod enrg_mvp {
         instructions::buyback::buyback_and_burn(ctx, amount)
     }
 
+    /// Вывод SRC из протокольного фонда (buyback/staking/dao/emergency)
+    /// на ATA получателя. Только Vault.authority (временный governor).
+    pub fn withdraw_fund(
+        ctx: Context<WithdrawFund>,
+        fund_tag: u8,
+        amount: u64,
+    ) -> Result<()> {
+        instructions::funds::withdraw_fund(ctx, fund_tag, amount)
+    }
+
     // ═══════════════════════════════════════════
     //  PHASE 9 — Device Lifecycle (ADR-0005)
     // ═══════════════════════════════════════════
