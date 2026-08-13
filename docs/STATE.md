@@ -145,6 +145,22 @@ timelock (иначе `TimelockNotElapsed`); `vault.total_supply` увеличи�
     smoke-тест новых не добавляет.
   - `set_vault_authority` — одношаговая смена (TODO(audit): двухшаговая +
     timelock/multisig).
+- **Devnet — фактическое состояние (verify-only прогон, `scripts/devnet_verify_governance.ts`):**
+  Проверка от 2026-08-13 показала, что **задеплоенная на Devnet ревизия НЕ
+  соответствует текущему коду** (ProgramData slot `483215633`, authority
+  `GkdhQQ…` совпадает, но):
+  - `deployed binary != local build` (SHA-256 расходятся) — деплой старше кода;
+  - `vault.max_supply = 1e9` (старая модель «сырых» SRC), не `MAX_SUPPLY_ATOMIC=1e18`;
+    `vault.total_supply = 10000`, `src-mint.supply = 10000` (согласованы между собой);
+  - `token-mint` не декодируется текущим IDL (layout 205 байт вместо ~238) —
+    старая ревизия программы;
+  - **governance PDA не инициализирован**, **founder-премайн/ATA отсутствует**,
+    **vesting-аккаунт не задеплоен**, proposal-истории нет;
+  - Расхождения НЕ «чинились» — verify-only (exit 1, 8 расхождений).
+  **Что требуется:** отдельный деплой/upgrade актуальной ревизии
+  (`cargo build-sbf` → deploy) и повторная инициализация цепочки
+  (`initialize_token → initialize_vault → allocate_founder →
+  initialize_founder_vesting → initialize_governance`) по разделу 5.
 
 ## 7. Roadmap (добавляется upgrade-ом, не блокирует релиз)
 
