@@ -18,7 +18,7 @@ const LN10_FP: u128 = 2_302_585_092_994_045_684;
 const LN2_FP: u128 = 693_147_180_559_945_309;
 
 /// Fixed-point умножение: (a * b) / FP_SCALE, checked.
-fn fp_mul(a: u128, b: u128) -> u128 {
+pub(crate) fn fp_mul(a: u128, b: u128) -> u128 {
     a.checked_mul(b)
         .map(|v| v / FP_SCALE)
         .unwrap_or(0)

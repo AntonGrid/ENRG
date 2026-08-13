@@ -174,6 +174,13 @@ pub mod enrg_mvp {
         instructions::pool::join_pool(ctx)
     }
 
+    /// Пропорциональное распределение пула при достижении порога (v7.0 §14).
+    pub fn distribute_pool<'info>(
+        ctx: Context<'_, '_, 'info, 'info, DistributePool<'info>>,
+    ) -> Result<()> {
+        instructions::pool::distribute_pool(ctx)
+    }
+
     // ═══════════════════════════════════════════
     //  PHASE 6 — Staking & Rewards
     // ═══════════════════════════════════════════

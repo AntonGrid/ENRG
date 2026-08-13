@@ -99,4 +99,8 @@ pub enum ErrorCode {
     DestinationMintMismatch,
     #[msg("Device tier monthly mining limit exceeded")]
     TierLimitExceeded,
+    #[msg("Producer is not a pool member")]
+    NotInPool,
+    #[msg("Pool distribution threshold not reached")]
+    PoolThresholdNotReached,
 }

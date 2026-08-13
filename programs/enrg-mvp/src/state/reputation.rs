@@ -100,6 +100,14 @@ pub fn ers_premium_eligible(score: u32) -> bool {
     score >= ERS_PREMIUM_THRESHOLD
 }
 
+/// ERS-бонус для распределения в пуле (v7.0 §16): 0%..=20% в фиксированной
+/// точке. Линейно растёт от 0 при score=0 до +20% при ERS_MAX_SCORE.
+pub fn ers_pool_bonus_fp(score: u32) -> u128 {
+    let score = score.min(ERS_MAX_SCORE) as u128;
+    // (score / ERS_MAX_SCORE) * 20%  = score * (FP/5) / ERS_MAX_SCORE
+    (score.saturating_mul(crate::math::FP_SCALE / 5)) / (ERS_MAX_SCORE as u128)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

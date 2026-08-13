@@ -134,6 +134,13 @@ pub const ERS_MAX_SCORE: u32 = 1_000;
 /// Порог ERS для премиум-доступа к ENRG Market (v7.0 §16, §30).
 pub const ERS_PREMIUM_THRESHOLD: u32 = 700;
 
+/// Порог пула для распределения (v7.0 §14): 1 МВт·ч = 1_000_000 Wh.
+pub const POOL_THRESHOLD_MWH: u64 = 1;
+
+/// Масштаб фиксированной точки для долей пула (1.0 == 1e18).
+/// Переиспользуем масштаб из math.rs (FP_SCALE) через алиас.
+pub const POOL_FP_SCALE: u128 = crate::math::FP_SCALE;
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,5 +1,7 @@
 use anchor_lang::prelude::*;
 
+use crate::constants::POOL_FP_SCALE;
+
 #[account]
 pub struct Pool {
     /// Pool authority.
@@ -32,3 +34,103 @@ impl Pool {
         1 +                     // is_active
         8;                      // created_at
 }
+
+/// Вклад участника пула (v7.0 §14) — накопленная энергия для пропорционального
+/// распределения при достижении порога.
+///
+/// Seeds: [b"pool-share", pool.key().as_ref(), producer.key().as_ref()]
+#[account]
+pub struct PoolContribution {
+    /// Pool, к которому относится вклад.
+    pub pool: Pubkey,
+
+    /// Producer (устройство) — участник пула.
+    pub producer: Pubkey,
+
+    /// Накопленная верифицированная энергия (Wh) с момента последнего распределения.
+    pub energy_wh: u128,
+
+    /// Время последнего обновления.
+    pub updated_at: i64,
+
+    /// Bump seed для PDA.
+    pub bump: u8,
+}
+
+impl PoolContribution {
+    pub const LEN: usize =
+        32 +  // pool
+        32 +  // producer
+        16 +  // energy_wh
+        8 +   // updated_at
+        1;    // bump
+}
+
+/// Доля участника пула как фиксированная точка (1.0 == POOL_FP_SCALE).
+/// `contribution / total`; если total == 0 — 0.0.
+pub fn pool_share_fp(contribution: u128, total: u128) -> u128 {
+    if total == 0 {
+        return 0;
+    }
+    contribution
+        .checked_mul(POOL_FP_SCALE)
+        .map(|v| v / total)
+        .unwrap_or(0)
+}
+
+/// Награда участника по доле: `total_reward * share_fp / POOL_FP_SCALE`.
+pub fn pool_reward_for_share(total_reward: u64, share_fp: u128) -> u64 {
+    (total_reward as u128)
+        .checked_mul(share_fp)
+        .map(|v| v / POOL_FP_SCALE)
+        .unwrap_or(0)
+        .min(total_reward as u128) as u64
+}
+
+/// Порог достигнут? (v7.0 §14: 1 МВт·ч по умолчанию).
+pub fn pool_threshold_reached(total_energy: u128, threshold: u128) -> bool {
+    total_energy >= threshold
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn shares_sum_to_100_percent() {
+        // Три участника: 400k, 350k, 250k из 1_000k Wh.
+        let total = 1_000_000u128;
+        let contribs = [400_000u128, 350_000u128, 250_000u128];
+        let mut shares = contribs.map(|c| pool_share_fp(c, total));
+        // Последняя доля забирает остаток (сумма == 1.0).
+        let sum_others = shares[0] + shares[1];
+        shares[2] = POOL_FP_SCALE.saturating_sub(sum_others);
+        let sum: u128 = shares.iter().sum();
+        assert_eq!(sum, POOL_FP_SCALE, "сумма долей = 100%");
+        assert!(shares[0] > shares[2]);
+    }
+
+    #[test]
+    fn reward_is_proportional_to_share() {
+        let total_reward = 1_000_000u64;
+        // 40% доля → 40% награды.
+        let half = pool_share_fp(400_000, 1_000_000);
+        let r = pool_reward_for_share(total_reward, half);
+        assert_eq!(r, 400_000);
+        // Нулевой вклад → 0 награды.
+        assert_eq!(pool_reward_for_share(total_reward, 0), 0);
+    }
+
+    #[test]
+    fn threshold_fires_on_time() {
+        assert!(!pool_threshold_reached(999_999, 1_000_000));
+        assert!(pool_threshold_reached(1_000_000, 1_000_000));
+        assert!(pool_threshold_reached(1_000_001, 1_000_000));
+    }
+
+    #[test]
+    fn zero_total_gives_zero_share() {
+        assert_eq!(pool_share_fp(100, 0), 0);
+    }
+}
+

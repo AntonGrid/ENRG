@@ -192,3 +192,29 @@ pub struct ReputationUpdated {
     pub score: u32,
     pub total_energy_wh: u64,
 }
+
+/// Emitted when a pool member's verified energy is recorded (v7.0 §14).
+#[event]
+pub struct PoolEnergyRecorded {
+    pub pool: Pubkey,
+    pub producer: Pubkey,
+    pub energy_wh: u128,
+    pub total_energy: u128,
+}
+
+/// Emitted when the pool crosses the distribution threshold (v7.0 §14).
+#[event]
+pub struct PoolThresholdReached {
+    pub pool: Pubkey,
+    pub total_energy: u128,
+    pub threshold: u128,
+}
+
+/// Emitted after proportional pool distribution.
+#[event]
+pub struct PoolDistributed {
+    pub pool: Pubkey,
+    pub total_energy: u128,
+    pub total_reward: u64,
+    pub members: u32,
+}

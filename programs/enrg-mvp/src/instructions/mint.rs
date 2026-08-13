@@ -327,6 +327,48 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         });
     }
 
+    // ── Pool contribution (v7.0 §14): вклад в пул, если producer — участник ──
+    match (&mut ctx.accounts.pool, &mut ctx.accounts.pool_share) {
+        (Some(pool), Some(pool_share)) => {
+            require!(pool_share.pool == pool.key(), ErrorCode::InvalidParameter);
+            require!(pool_share.producer == producer.key(), ErrorCode::InvalidParameter);
+            require!(pool.producers.contains(&producer.key()), ErrorCode::NotInPool);
+            let (canonical, _) = Pubkey::find_program_address(
+                &[b"pool-share", pool.key().as_ref(), producer.key().as_ref()],
+                ctx.program_id,
+            );
+            require!(pool_share.key() == canonical, ErrorCode::InvalidParameter);
+
+            let energy = report.energy_wh as u128;
+            pool.total_energy = pool
+                .total_energy
+                .checked_add(energy)
+                .ok_or(ErrorCode::ArithmeticOverflow)?;
+            pool_share.energy_wh = pool_share
+                .energy_wh
+                .checked_add(energy)
+                .ok_or(ErrorCode::ArithmeticOverflow)?;
+            pool_share.updated_at = now;
+
+            emit!(PoolEnergyRecorded {
+                pool: pool.key(),
+                producer: producer.key(),
+                energy_wh: energy,
+                total_energy: pool.total_energy,
+            });
+
+            if crate::state::pool::pool_threshold_reached(pool.total_energy, pool.threshold) {
+                emit!(PoolThresholdReached {
+                    pool: pool.key(),
+                    total_energy: pool.total_energy,
+                    threshold: pool.threshold,
+                });
+            }
+        }
+        (None, None) => {}
+        _ => return Err(ErrorCode::InvalidParameter.into()),
+    }
+
     Ok(())
 }
 
@@ -438,4 +480,13 @@ pub struct MintEnergy<'info> {
         bump = reputation.bump
     )]
     pub reputation: Option<Account<'info, Reputation>>,
+
+    /// Pool (v7.0 §14) — опционально: если producer является участником,
+    /// вклад записывается в pool.total_energy и pool_share.energy_wh.
+    #[account(mut)]
+    pub pool: Option<Account<'info, Pool>>,
+
+    /// Вклад участника пула (PDA [b"pool-share", pool, producer]).
+    #[account(mut)]
+    pub pool_share: Option<Account<'info, PoolContribution>>,
 }
