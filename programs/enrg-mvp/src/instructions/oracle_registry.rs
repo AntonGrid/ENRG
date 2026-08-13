@@ -26,7 +26,7 @@ pub struct AddOracle<'info> {
         mut,
         seeds = [b"oracle-registry"],
         bump,
-        has_one = authority @ ErrorCode::Unauthorized
+        constraint = registry.oracle_admin == authority.key() @ ErrorCode::Unauthorized
     )]
     pub registry: Account<'info, OracleRegistry>,
 
@@ -40,11 +40,27 @@ pub struct RemoveOracle<'info> {
         mut,
         seeds = [b"oracle-registry"],
         bump,
-        has_one = authority @ ErrorCode::Unauthorized
+        constraint = registry.oracle_admin == authority.key() @ ErrorCode::Unauthorized
     )]
     pub registry: Account<'info, OracleRegistry>,
 
     #[account(mut)]
+    pub authority: Signer<'info>,
+}
+
+/// Смена oracle_admin. Доступно только protocol admin (registry.authority).
+/// NOTE: отдельного timelock/двухшагового паттерна пока нет — роль меняется
+/// мгновенно с событием; multisig-план зафиксирован в комментариях (BLOCK 2).
+#[derive(Accounts)]
+pub struct SetOracleAdmin<'info> {
+    #[account(
+        mut,
+        seeds = [b"oracle-registry"],
+        bump,
+        constraint = registry.authority == authority.key() @ ErrorCode::Unauthorized
+    )]
+    pub registry: Account<'info, OracleRegistry>,
+
     pub authority: Signer<'info>,
 }
 
@@ -55,7 +71,32 @@ pub fn initialize_oracle_registry(
     let registry = &mut ctx.accounts.registry;
 
     registry.authority = ctx.accounts.authority.key();
+    // По умолчанию oracle_admin = authority (обратная совместимость bootstrap).
+    registry.oracle_admin = ctx.accounts.authority.key();
     registry.oracles = Vec::new();
+
+    Ok(())
+}
+
+pub fn set_oracle_admin(
+    ctx: Context<SetOracleAdmin>,
+    new_oracle_admin: Pubkey,
+) -> Result<()> {
+
+    require!(
+        new_oracle_admin != Pubkey::default(),
+        ErrorCode::InvalidParameter
+    );
+
+    let registry = &mut ctx.accounts.registry;
+    let old_oracle_admin = registry.oracle_admin;
+    registry.oracle_admin = new_oracle_admin;
+
+    emit!(OracleAdminChanged {
+        old_oracle_admin,
+        new_oracle_admin,
+        changed_by: ctx.accounts.authority.key(),
+    });
 
     Ok(())
 }

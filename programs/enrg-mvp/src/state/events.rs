@@ -40,6 +40,22 @@ pub struct OracleRemoved {
     pub oracle: Pubkey,
 }
 
+/// Emitted when the oracle admin role changes (BLOCK 2 — разделение ролей).
+#[event]
+pub struct OracleAdminChanged {
+    pub old_oracle_admin: Pubkey,
+    pub new_oracle_admin: Pubkey,
+    pub changed_by: Pubkey,
+}
+
+/// Emitted when the vault authority changes (single-step; multisig/timelock planned).
+#[event]
+pub struct VaultAuthorityChanged {
+    pub old_authority: Pubkey,
+    pub new_authority: Pubkey,
+    pub changed_by: Pubkey,
+}
+
 /// Emitted whenever the emission curve changes.
 #[event]
 pub struct EmissionDifficultyChanged {

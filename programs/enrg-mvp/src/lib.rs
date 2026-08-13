@@ -42,6 +42,14 @@ pub mod enrg_mvp {
         instructions::initialize::initialize_funds(ctx)
     }
 
+    /// Смена Vault.authority (protocol admin / временный governor).
+    pub fn set_vault_authority(
+        ctx: Context<SetVaultAuthority>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::initialize::set_vault_authority(ctx, new_authority)
+    }
+
     pub fn init_config(
         ctx: Context<InitConfig>,
         oracle: Pubkey,
@@ -127,6 +135,14 @@ pub mod enrg_mvp {
         oracle: Pubkey,
     ) -> Result<()> {
         instructions::oracle_registry::remove_oracle(ctx, oracle)
+    }
+
+    /// Смена oracle_admin (управление списком оракулов). Только protocol admin.
+    pub fn set_oracle_admin(
+        ctx: Context<SetOracleAdmin>,
+        new_oracle_admin: Pubkey,
+    ) -> Result<()> {
+        instructions::oracle_registry::set_oracle_admin(ctx, new_oracle_admin)
     }
 
     // ═══════════════════════════════════════════

@@ -149,3 +149,55 @@ pub fn initialize_funds(ctx: Context<InitializeFunds>) -> Result<()> {
 
     Ok(())
 }
+
+/// Смена Vault.authority (protocol admin / временный governor).
+///
+/// РАЗДЕЛЕНИЕ РОЛЕЙ (BLOCK 2 аудита): Vault.authority — protocol admin,
+/// управляет vault/funds/безопасностью; список оракулов — отдельная роль
+/// (oracle_admin в OracleRegistry). mint-authority PDA механизм не затрагивается.
+///
+/// TODO(audit): внедрить двухшаговую смену (pending_authority + accept) и/или
+/// timelock/multisig. Сейчас смена одношаговая и фиксируется событием
+/// VaultAuthorityChanged. Изменение layout Vault (добавление pending_authority)
+/// требует миграции задеплоенного аккаунта, поэтому сознательно отложено.
+#[derive(Accounts)]
+pub struct SetVaultAuthority<'info> {
+    #[account(
+        mut,
+        seeds = [b"vault"],
+        bump,
+        constraint = vault.authority == authority.key() @ ErrorCode::Unauthorized
+    )]
+    pub vault: Box<Account<'info, Vault>>,
+
+    pub authority: Signer<'info>,
+}
+
+pub fn set_vault_authority(
+    ctx: Context<SetVaultAuthority>,
+    new_authority: Pubkey,
+) -> Result<()> {
+
+    require!(
+        new_authority != Pubkey::default(),
+        ErrorCode::InvalidParameter
+    );
+
+    let vault = &mut ctx.accounts.vault;
+    let old_authority = vault.authority;
+    vault.authority = new_authority;
+
+    emit!(VaultAuthorityChanged {
+        old_authority,
+        new_authority,
+        changed_by: ctx.accounts.authority.key(),
+    });
+
+    msg!(
+        "Vault authority changed: {} -> {}",
+        old_authority,
+        new_authority
+    );
+
+    Ok(())
+}
