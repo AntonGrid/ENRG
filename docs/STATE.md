@@ -31,9 +31,10 @@
 
 | Роль | Адрес | Где хранится ключ |
 |---|---|---|
-| Program ID (enrg_mvp) | `9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF` | `declare_id!` в `lib.rs`; `Anchor.toml [programs.*]` |
+| Program ID (enrg_mvp) | `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb` | `declare_id!` в `lib.rs`; `Anchor.toml [programs.*]` |
 | **Authority (Devnet/mainnet, оператор)** | `GkdhQQgUBi2Q422nTBP27LADkejijRwJEAnfhPYsUJSV` | **Локально**: `~/.config/solana/id.json` — НЕ в репозитории |
 | **Founder wallet** (премайн, vesting) | `6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8` | **Локально**: `~/.config/solana/founder-wallet.json` — НЕ в репозитории |
+| **Governance member (генезис)** | `6YW9kjHu8B79F1utcK6N4Bi1wBaTsTvBei49znDQjKH2` | **Локально**: `~/.config/solana/governance-member.json` — НЕ в репозитории |
 | enrg-profile (CPI-цель) | `78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt` | `constants.rs::ENRG_PROFILE_PROGRAM_ID` |
 
 PDA-адреса детерминированы (раздел 4) и в тестах/скриптах выводятся через
@@ -69,7 +70,7 @@ PDA-адреса детерминированы (раздел 4) и в тест�
 
 ## 4. PDA-структура
 
-Все PDA — владелец **enrg_mvp** (`9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF`),
+Все PDA — владелец **enrg_mvp** (`HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb`),
 если не указано иное.
 
 | Аккаунт | Seed | Инициализация | Где в коде |
@@ -92,12 +93,16 @@ PDA-адреса детерминированы (раздел 4) и в тест�
 | `OwnerDevices` | `[b"owner-devices", owner]` | claim/register | `state/owner_devices.rs` |
 | `EnergyProfile` | `[b"profile", authority]` — **владелец enrg-profile** | CPI `init_energy_profile` | `ENRG_PROFILE_PROGRAM_ID` |
 
-**Особый случай — `FounderVesting`** (`state/vesting.rs`): **не PDA и не `init`** —
-аккаунт обязан существовать заранее (**генезис-аккаунт**). Для localnet он
+**Особый случай — `FounderVesting`** (`state/vesting.rs`): с `e455cb7` аккаунт
+создаётся **bootstrap-инструкцией** `initialize_founder_vesting`
+(`init_if_needed` + seed `[b"founder-vesting"]`, payer = founder) — это
+единственный путь на Devnet/mainnet (генезис-инъекция существует только у
+`solana-test-validator`). Для localnet сохранён и прежний путь: аккаунт
 подкладывается валидатору через `Anchor.toml [test.validator] account`
-(`tests/genesis/founder-vesting.json`, адрес `24K1e3yE4VvCaGBxMhWyyTWcRU8WqZcGCuRxnu4CgfNJ`
-= `findProgramAddress([b"founder-vesting"])`). На Devnet этот аккаунт должен
-создаваться процессом деплоя аналогичным способом (генезис/пре-сид).
+(`tests/genesis/founder-vesting.json`, адрес
+`B5uSLeaX2keRGbkxZA1Tyb7dFwNpY7DUbVu8TgvdiMAh` =
+`findProgramAddress([b"founder-vesting"])` программы). `init_if_needed` пропускает
+инициализацию существующего аккаунта — оба пути обратно совместимы.
 
 
 ## 5. Жизненный цикл
@@ -109,7 +114,7 @@ PDA-адреса детерминированы (раздел 4) и в тест�
 initialize_token            → SRC mint (PDA [b"src-mint"]), mint-authority = PDA [b"mint-authority"]
 initialize_vault            → Vault (PDA [b"vault"]), max_supply = 1e18
 allocate_founder            → премайн 2e17 на founder ATA (одноразово), total_supply = 2e17
-initialize_founder_vesting  → FounderVesting (генезис-аккаунт; cliff 1y / release 3y)
+initialize_founder_vesting  → FounderVesting (bootstrap/init_if_needed; cliff 1y / release 3y)
 initialize_governance       → GovernanceState (PDA [b"governance"]; authority + 3..=5 members)
 create_proposal             → Proposal (PDA [b"proposal", id]); одно активное, amount ≤ 1e15
 vote                        → кворум: yes > no И yes+no > members/2 → Approved (+approved_at)
@@ -153,23 +158,22 @@ timelock (иначе `TimelockNotElapsed`); `vault.total_supply` увеличи�
   - `set_vault_authority` — одношаговая смена (TODO(audit): двухшаговая +
     timelock/multisig).
 - **Devnet — фактическое состояние (verify-only прогон, `scripts/devnet_verify_governance.ts`):**
-  Проверка от 2026-08-13 показала, что **задеплоенная на Devnet ревизия НЕ
-  соответствует текущему коду** (ProgramData slot `483215633`, authority
-  `GkdhQQ…` совпадает, но):
-  - `deployed binary != local build` (SHA-256 расходятся) — деплой старше кода;
-  - `vault.max_supply = 1e9` (старая модель «сырых» SRC), не `MAX_SUPPLY_ATOMIC=1e18`;
-    `vault.total_supply = 10000`, `src-mint.supply = 10000` (согласованы между собой);
-  - `token-mint` не декодируется текущим IDL (layout 205 байт вместо ~238) —
-    старая ревизия программы;
-  - **governance PDA не инициализирован**, **founder-премайн/ATA отсутствует**,
-    **vesting-аккаунт не задеплоен**, proposal-истории нет;
-  - Расхождения НЕ «чинились» — verify-only (exit 1, 8 расхождений).
-  **Что требуется:** отдельный деплой/upgrade актуальной ревизии
-  (`cargo build-sbf` → deploy) и повторная инициализация цепочки
-  (`initialize_token → initialize_vault → allocate_founder →
-  initialize_founder_vesting → initialize_governance`) по разделу 5.
-  После синхронизации кода (tiers/ERS/pool/governance-tighten, этот документ)
-  актуальна только эта операция; код больше не менялся.
+  Проверка от 2026-08-13 (после деплоя стратегии A): **Devnet полностью соответствует
+  текущему коду**, verify → **exit 0, все инварианты ✔**:
+  - Новый program id `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb`, ProgramData
+    `ARg2GmnWHMPXaMwv5RYNVhTw4F2NZSoEFUkyT1pBLX8M`, slot `483455693`, authority `GkdhQQ…`;
+  - `deployed binary == local build` (SHA-256 `6db33ae…`);
+  - `vault.max_supply == MAX_SUPPLY_ATOMIC (1e18)`, `vault.total_supply = 2e17`;
+  - `token-mint` декодируется текущим IDL (238 байт), `decimals == 9`;
+  - `src-mint.supply == vault.total_supply == 2e17`;
+  - founder-премайн/ATA на месте (баланс 2e17), vesting-аккаунт создан
+    bootstrap-инструкцией `initialize_founder_vesting` (init_if_needed),
+    governance PDA инициализирован (authority `GkdhQQ…`, members=3).
+  **История:** старый program id `9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF`
+  (старая ревизия: `vault.max_supply=1e9`, `token-mint` 205 байт, без governance/vesting)
+  архивирован как legacy и не используется. Причина смены id: старые PDA-аккаунты
+  (детерминированные) невозможно переинициализировать при том же id (нет close/migrate),
+  а vesting-генезис невозможно создать на devnet (решение — код-фикс `e455cb7`).
 
 ## 7. Roadmap (добавляется upgrade-ом, не блокирует релиз)
 

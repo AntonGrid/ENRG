@@ -48,7 +48,7 @@ import { ensureFunded } from "./helpers/accounts";
 import rawIdl from "../target/idl/enrg_mvp.json";
 
 const PROGRAM_ID = new PublicKey(
-  "9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF",
+  "HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb",
 );
 const FOUNDER_WALLET = new PublicKey(
   "6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8",

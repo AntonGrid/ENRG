@@ -249,7 +249,14 @@ mod tests {
     fn governance_mint_respects_pda_authority() {
         // Mint-authority остаётся PDA [b"mint-authority"] — эмиссия только через него.
         let (pda, bump) = Pubkey::find_program_address(&[b"mint-authority".as_ref()], &crate::id());
-        assert!(bump < 255);
+        // find_program_address гарантирует off-curve адрес; bump может быть любым
+        // (для HkuC3… он равен 255 — это валидно). Проверяем реальный инвариант:
+        // возвращённый bump деривирует тот же PDA.
+        assert_eq!(
+            Pubkey::create_program_address(&[b"mint-authority".as_ref(), &[bump]], &crate::id()).unwrap(),
+            pda,
+            "bump должен быть валидным seed для mint-authority PDA"
+        );
         let (pda2, _) = Pubkey::find_program_address(&[b"mint-authority".as_ref()], &crate::id());
         assert_eq!(pda, pda2, "PDA детерминирован");
         // Пока статус не Approved — исполнение невозможно (ProposalNotApproved путь).

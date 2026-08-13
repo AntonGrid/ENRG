@@ -4,16 +4,21 @@
 > на Devnet (`scripts/devnet_verify_governance.ts`).
 >
 > Значения сверены с `programs/enrg-mvp/src/` и `docs/STATE.md`
-> на момент фиксации (BLOCK 0). Источник истины — код.
+> на момент деплоя v7.1 (новый program id `HkuC3…`, block 8+). Источник истины — код.
+>
+> **Старый program id `9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF` архивирован**
+> как legacy devnet-эксперимент (старая ревизия: `vault.max_supply=1e9`, без
+> governance/vesting). Канонических ссылок на него нет.
 
 ## Адреса
 
 | Роль | Адрес | Комментарий |
 |---|---|---|
-| Program ID (enrg_mvp) | `9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF` | `declare_id!` в `lib.rs` |
-| ProgramData | `BPrCXiGkQiYCkNgFfsj1KgqfV1WMymKRAdtoyKM2hzkZ` | upgradeable loader |
+| Program ID (enrg_mvp) | `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb` | `declare_id!` в `lib.rs` |
+| ProgramData | `ARg2GmnWHMPXaMwv5RYNVhTw4F2NZSoEFUkyT1pBLX8M` | = `findProgramAddress([program_id], BPFLoaderUpgradeable)`; slot `483455693` |
 | Authority (devnet) | `GkdhQQgUBi2Q422nTBP27LADkejijRwJEAnfhPYsUJSV` | `~/.config/solana/id.json` (локально) |
 | Founder wallet | `6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8` | `~/.config/solana/founder-wallet.json` (локально) |
+| Governance member | `6YW9kjHu8B79F1utcK6N4Bi1wBaTsTvBei49znDQjKH2` | `~/.config/solana/governance-member.json` (локально) |
 
 ## Константы (сверено с `constants.rs`)
 
@@ -40,8 +45,8 @@
 | Fund: buyback/staking/dao/emergency | `[b"fund-*"]` | — | адреса детерминированы (опционально) |
 | `GovernanceState` | `[b"governance"]` | enrg_mvp | существует; `authority == GkdhQQ…`; members 3..=5 |
 | `Proposal` | `[b"proposal", id.to_le_bytes()]` | enrg_mvp | для id 1..proposal_count: статус/amount ≤ 1e15/destination; timelock-поля |
-| `FounderVesting` | генезис-аккаунт `24K1e3yE4VvCaGBxMhWyyTWcRU8WqZcGCuRxnu4CgfNJ` (= `findProgramAddress([b"founder-vesting"])`) | enrg_mvp | существует; `founder == FOUNDER_WALLET`; `total_amount == 2e17`; `cliff == 1y`; `release == 3y` |
-| Founder ATA | `getAssociatedTokenAddress(src-mint, FOUNDER_WALLET)` | SPL Token | баланс ≥ 2e17 (после премайна) |
+| `FounderVesting` | генезис-аккаунт `B5uSLeaX2keRGbkxZA1Tyb7dFwNpY7DUbVu8TgvdiMAh` (= `findProgramAddress([b"founder-vesting"])`) | enrg_mvp | существует; `founder == FOUNDER_WALLET`; `total_amount == 2e17`; `cliff == 1y`; `release == 3y`. На Devnet создаётся bootstrap-инструкцией `initialize_founder_vesting` (init_if_needed), а не genesis-инъекцией |
+| Founder ATA | `getAssociatedTokenAddress(src-mint, FOUNDER_WALLET)` | SPL Token | баланс == 2e17 (после премайна) |
 
 ## Инварианты (итоговые)
 
@@ -56,3 +61,4 @@
 `sendTransaction`. Любое фактическое расхождение с baseline фиксируется в
 отчёте (`docs/DEVNET_VERIFICATION.md`) и в `docs/STATE.md` — без «починки»
 через мутирующие транзакции.
+

@@ -7,7 +7,7 @@ import { loadAuthority } from "./accounts.ts";
 import { patchIdl } from "./patch-idl.ts";
 
 export const PROGRAM_ID = new PublicKey(
-  "9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF",
+  "HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb",
 );
 
 export const LOCAL_ENDPOINT = "http://127.0.0.1:8899";

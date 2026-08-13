@@ -8,7 +8,7 @@ import { patchIdl } from "./patch-idl.ts";
 const IDL_PATH = rawPath.resolve(__dirname, "../../", "target", "idl", "enrg_mvp.json");
 const idl = patchIdl(JSON.parse(fs.readFileSync(IDL_PATH, "utf8")));
 
-const PROGRAM_ID = new PublicKey("9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF");
+const PROGRAM_ID = new PublicKey("HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb");
 const connection = new Connection("http://127.0.0.1:8899", "confirmed");
 
 function probe(step: string, fn: () => void) {

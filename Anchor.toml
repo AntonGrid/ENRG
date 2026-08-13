@@ -7,14 +7,14 @@ skip-lint = false
 [programs.devnet]
 # ⚠️  program id ДОЛЖЕН совпадать с declare_id в programs/enrg-mvp/src/lib.rs
 # И с pubkey deploy-ключа (target/deploy/enrg_mvp-keypair.json).
-enrg_mvp = "9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF"
+enrg_mvp = "HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb"
 
 [programs.localnet]
-enrg_mvp = "9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF"
+enrg_mvp = "HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb"
 
 # Anchor 0.32 принимает кластер "mainnet" (не "mainnet-beta").
 [programs.mainnet]
-enrg_mvp = "9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF"
+enrg_mvp = "HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb"
 
 [workspace]
 # anchor-cli берёт workspace из Anchor.toml, а не из корневого Cargo.toml.
@@ -44,9 +44,11 @@ bind_address = "127.0.0.1"
 # Генезис-аккаунт FounderVesting для initialize_founder_vesting.
 # Аккаунт НЕ является PDA с init (state/vesting.rs) — он обязан существовать
 # заранее (генезис). Адрес = findProgramAddress([b"founder-vesting"]) программы.
+# Начиная с v7.1/block-8 программа умеет САМА создавать аккаунт (init_if_needed),
+# генезис сохраняется для обратной совместимости localnet-тестов.
 # См. docs/STATE.md, раздел 4. Smoke: tests/zz-e2e-smoke.ts.
 account = [
-  { address = "24K1e3yE4VvCaGBxMhWyyTWcRU8WqZcGCuRxnu4CgfNJ", filename = "tests/genesis/founder-vesting.json" },
+  { address = "B5uSLeaX2keRGbkxZA1Tyb7dFwNpY7DUbVu8TgvdiMAh", filename = "tests/genesis/founder-vesting.json" },
 ]
 
 [hooks]

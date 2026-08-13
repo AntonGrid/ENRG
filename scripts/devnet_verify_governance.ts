@@ -28,8 +28,8 @@ import { patchIdl } from "../tests/helpers/patch-idl";
 
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "https://api.devnet.solana.com";
 
-const PROGRAM_ID = new PublicKey("9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF");
-const PROGRAM_DATA = new PublicKey("BPrCXiGkQiYCkNgFfsj1KgqfV1WMymKRAdtoyKM2hzkZ");
+const PROGRAM_ID = new PublicKey("HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb");
+const PROGRAM_DATA = new PublicKey("ARg2GmnWHMPXaMwv5RYNVhTw4F2NZSoEFUkyT1pBLX8M");
 const EXPECTED_AUTHORITY = new PublicKey("GkdhQQgUBi2Q422nTBP27LADkejijRwJEAnfhPYsUJSV");
 const FOUNDER_WALLET = new PublicKey("6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8");
 const BPF_UPGRADEABLE = new PublicKey("BPFLoaderUpgradeab1e11111111111111111111111");

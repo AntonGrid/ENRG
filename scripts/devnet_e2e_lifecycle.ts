@@ -108,7 +108,7 @@ const CLUSTER = detectCluster();
 const PROGRAM_ID = new PublicKey(
   process.env.ENRG_PROGRAM_ID ||
     readAnchorTomlProgramId(CLUSTER) ||
-    "9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF"
+    "HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb"
 );
 
 

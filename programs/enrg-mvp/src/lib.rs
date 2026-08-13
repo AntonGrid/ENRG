@@ -11,7 +11,7 @@ pub mod state;
 use instructions::*;
 use state::producer::DeviceTier;
 
-declare_id!("9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF");
+declare_id!("HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb");
 
 // Declare enrg-profile program for CPI access.
 // IDL is loaded from <workspace-root>/idls/enrg_profile.json

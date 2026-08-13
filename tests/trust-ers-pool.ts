@@ -36,7 +36,7 @@ import nacl from 'tweetnacl';
 import { patchIdl } from './helpers/patch-idl';
 import rawIdl from '../target/idl/enrg_mvp.json';
 
-const PROGRAM_ID = new PublicKey('9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF');
+const PROGRAM_ID = new PublicKey('HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb');
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || 'http://127.0.0.1:8899';
 
 const findPda = (seed: string): PublicKey =>

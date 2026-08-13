@@ -10,7 +10,7 @@ describe("probe9", () => {
     const connection = new Connection("http://127.0.0.1:8899", "confirmed");
     const provider = new AnchorProvider(connection, new anchor.Wallet(loadAuthority()), { commitment: "confirmed" });
     anchor.setProvider(provider);
-    const PROGRAM_ID = new PublicKey("9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF");
+    const PROGRAM_ID = new PublicKey("HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb");
     // создаём BorshCoder явно и прогоняем size для ВСЕХ, как это делает AccountFactory.
     // Program внутри camelCase'ит IDL, поэтому coder должен строиться из
     // camelCase-версии, иначе имена аккаунтов (Config vs config) не совпадут.

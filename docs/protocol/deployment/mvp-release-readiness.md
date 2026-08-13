@@ -1,7 +1,7 @@
 ENRG — MVP Release Readiness Status
 
-**Date:** 2026-08-04
-**Status:** ready for localnet/devnet deployment (mainnet deferred)
+**Date:** 2026-08-13 (devnet verified; mainnet deferred)
+**Status:** ready for devnet deployment — **devnet deployed & verified (Converged)**
 
 ---
 
@@ -33,7 +33,7 @@ tests that require a configured localnet/devnet environment.
 | Spec | v7.0 §14 Pool distribution | Implemented | 1 МВт·ч порог, пропорциональные доли, ERS-взвешивание |
 | Spec | v7.0 §22 Governance | Implemented (MVP) | пути эмиссии зафиксированы (ADR-0009 tighten) |
 | Conformance | Supported Protocol Version / Spec Revision | Declared | `docs/specifications/ENRG_Conformance.md` §6 |
-| Verify | Devnet verify-only (`scripts/devnet_verify_governance.ts`) | **Divergent** | задеплоена старая ревизия: `vault.max_supply=1e9`, governance/vesting/премайн отсутствуют — см. `docs/DEVNET_VERIFICATION.md` |
+| Verify | Devnet verify-only (`scripts/devnet_verify_governance.ts`) | **Converged** | exit 0, все ✔; новый program id `HkuC3…`, slot `483455693`, sha `6db33ae…` — см. `docs/DEVNET_VERIFICATION.md` |
 | Repo | Working tree clean / pushed | Clean | `HEAD` synced with `origin/main` |
 
 ---
