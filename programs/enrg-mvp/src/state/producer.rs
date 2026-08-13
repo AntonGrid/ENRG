@@ -71,6 +71,18 @@ impl DeviceTier {
         }
     }
 
+    /// Разрешён ли отчёт `report_energy` с учётом уже накопленной месячной
+    /// энергии (v7.0 §15): `month_energy + report_energy <= limit`.
+    /// Используется в mint_energy перед записью вклада.
+    pub fn allows_increment(&self, month_energy: u64, report_energy: u64) -> bool {
+        match self.monthly_limit_wh() {
+            Some(limit) => month_energy
+                .checked_add(report_energy)
+                .map_or(false, |v| v <= limit),
+            None => true,
+        }
+    }
+
     /// Признак премиум-тира (премиум-функции ENRG Market, v7.0 §30).
     pub fn is_premium(&self) -> bool {
         matches!(self, DeviceTier::Industrial | DeviceTier::Institutional)
@@ -236,6 +248,20 @@ mod tests {
         assert!(p.can_mint(later));
         assert_eq!(p.month_energy_wh, 0);
         assert_eq!(p.month_start_ts, later);
+    }
+
+    #[test]
+    fn tier_allows_increment_respects_limit() {
+        // Basic: 60_000 + 50_000 = 110_000 > 100_000 → запрещено (mint-путь).
+        assert!(DeviceTier::Basic.allows_increment(60_000, 40_000));
+        assert!(!DeviceTier::Basic.allows_increment(60_000, 50_000));
+        // Verified: в пределах 10 МВт·ч.
+        assert!(DeviceTier::Verified.allows_increment(5_000_000, 5_000_000));
+        assert!(!DeviceTier::Verified.allows_increment(5_000_000, 6_000_000));
+        // Industrial/Institutional — без лимита.
+        assert!(DeviceTier::Industrial.allows_increment(u64::MAX, u64::MAX));
+        // Переполнение month_energy + report не «протаскивает» лимит.
+        assert!(!DeviceTier::Basic.allows_increment(u64::MAX, 1));
     }
 }
 

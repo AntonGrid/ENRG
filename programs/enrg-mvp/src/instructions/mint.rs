@@ -87,12 +87,10 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     verify_nonce(producer, report.nonce)?;
 
     // ── Tier increment check (v7.0 §15): отчёт не должен выходить за лимит месяца ──
-    if let Some(limit) = producer.tier.monthly_limit_wh() {
-        require!(
-            producer.month_energy_wh.checked_add(report.energy_wh).map_or(false, |v| v <= limit),
-            ErrorCode::TierLimitExceeded
-        );
-    }
+    require!(
+        producer.tier.allows_increment(producer.month_energy_wh, report.energy_wh),
+        ErrorCode::TierLimitExceeded
+    );
 
     // ── Energy validation ──
     let max_energy = ctx.accounts.profile.rated_power;

@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount};
+use anchor_spl::token::{self, Mint, Token};
 
 use crate::constants::*;
 use crate::error::ErrorCode;
@@ -33,13 +33,26 @@ pub struct JoinPool<'info> {
 
     #[account(
         mut,
-        seeds = [b"producer", authority.key().as_ref()],
+        seeds = [b"producer", producer.device_id.as_ref()],
         bump
     )]
     pub producer: Account<'info, EnergyProducer>,
 
+    /// Вклад участника пула (PDA [b"pool-share", pool, producer]) —
+    /// создаётся при первом join (v7.0 §14).
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = 8 + PoolContribution::LEN,
+        seeds = [b"pool-share", pool.key().as_ref(), producer.key().as_ref()],
+        bump
+    )]
+    pub pool_share: Account<'info, PoolContribution>,
+
     #[account(mut)]
     pub authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 pub fn create_pool(
@@ -84,6 +97,17 @@ pub fn join_pool(
     );
 
     pool.producers.push(producer);
+
+    // Первый join: инициализируем вклад участника (v7.0 §14).
+    let now = Clock::get()?.unix_timestamp;
+    let pool_share = &mut ctx.accounts.pool_share;
+    if pool_share.pool == Pubkey::default() {
+        pool_share.pool = pool.key();
+        pool_share.producer = producer;
+        pool_share.energy_wh = 0;
+        pool_share.updated_at = now;
+        pool_share.bump = ctx.bumps.pool_share;
+    }
 
     emit!(PoolJoined {
         pool: pool.key(),
