@@ -66,3 +66,10 @@ pub const DEFAULT_POOL_THRESHOLD: u128 = 1_000_000;
 /// Founder vesting duration (4 years).
 pub const FOUNDER_VESTING_DURATION: i64 =
     4 * 365 * 24 * 60 * 60;
+
+/// Founder wallet (prod) — единый бенефициар founder-вестинга и источник
+/// всех founder-ролей. Адрес зашит в программу: вестинг-аккаунт можно
+/// инициализировать и получать средства только этим кошельком.
+/// (Devnet продолжает использовать текущий program authority.)
+pub const FOUNDER_WALLET: Pubkey =
+    pubkey!("6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8");

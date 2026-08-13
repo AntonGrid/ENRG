@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::FOUNDER_VESTING_DURATION;
+use crate::constants::{FOUNDER_VESTING_DURATION, FOUNDER_WALLET};
 use crate::error::ErrorCode;
 use crate::state::*;
 
@@ -27,11 +27,18 @@ pub fn initialize_founder_vesting(
     total_amount: u64,
 ) -> Result<()> {
 
+    // Единый бенефициар founder-вестинга зашит в программу:
+    // инициализировать вестинг может только FOUNDER_WALLET.
+    require!(
+        ctx.accounts.authority.key() == FOUNDER_WALLET,
+        ErrorCode::Unauthorized
+    );
+
     let vesting = &mut ctx.accounts.vesting;
 
     let now = Clock::get()?.unix_timestamp;
 
-    vesting.founder = ctx.accounts.authority.key();
+    vesting.founder = FOUNDER_WALLET;
     vesting.total_amount = total_amount;
     vesting.start_time = now;
     vesting.duration = FOUNDER_VESTING_DURATION;
