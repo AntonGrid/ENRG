@@ -68,4 +68,8 @@ pub enum ErrorCode {
     FutureTimestamp,
     #[msg("Device limit per owner reached")]
     DeviceLimitReached,
+    #[msg("Supply limit exceeded")]
+    SupplyLimitExceeded,
+    #[msg("Founder premine already minted")]
+    FounderPremineAlreadyMinted,
 }

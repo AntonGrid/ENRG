@@ -24,6 +24,12 @@ pub struct TokenMint {
     /// Emergency reserve ATA.
     pub emergency_account: Pubkey,
 
+    /// Founder ATA — куда минтятся founder-токены при launch (премайн).
+    pub founder_account: Pubkey,
+
+    /// Одноразовый флаг: 1 после founder-премайна (повторный запрещён).
+    pub founder_minted: u8,
+
     /// Token decimals.
     pub decimals: u8,
 
@@ -48,9 +54,17 @@ impl TokenMint {
         32 + // staking_account
         32 + // dao_account
         32 + // emergency_account
+        32 + // founder_account
+        1  + // founder_minted
         1  + // decimals
         1  + // mint_bump
         1  + // mint_authority_bump
         1  + // buyback_authority_bump
         1;   // bump
+}
+
+/// Возвращает true, если founder-премайн ещё не производился.
+/// (Вынесено для юнит-теста одноразовости.)
+pub fn founder_premine_not_minted(founder_minted: u8) -> bool {
+    founder_minted == 0
 }

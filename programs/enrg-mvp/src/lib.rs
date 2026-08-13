@@ -224,6 +224,14 @@ pub mod enrg_mvp {
         instructions::buyback::buyback_and_burn(ctx, amount)
     }
 
+    /// Одноразовый founder-премайн при launch: mint 2e17 на founder ATA,
+    /// засчёт в vault.total_supply с проверкой MAX_SUPPLY_ATOMIC.
+    pub fn allocate_founder(
+        ctx: Context<AllocateFounder>,
+    ) -> Result<()> {
+        instructions::init_founder::allocate_founder(ctx)
+    }
+
     /// Вывод SRC из протокольного фонда (buyback/staking/dao/emergency)
     /// на ATA получателя. Только Vault.authority (временный governor).
     pub fn withdraw_fund(
