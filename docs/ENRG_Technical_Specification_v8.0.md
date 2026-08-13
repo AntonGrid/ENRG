@@ -926,3 +926,27 @@ Vesting on the same founder ATA blocks withdrawal until the cliff:
 
 > **Runtime-testing note:** `claim_vested` after the cliff is covered at the LOGIC level by the unit invariant test `claim_transfer_moves_claimable_only` (`state/vesting.rs`). The runtime TS baseline (`tests/founder-vesting.ts`) covers `initialize_token`, `allocate_founder`, `initialize_founder_vesting`; `claim_vested` fires once the on-chain Clock passes the cliff — a standard Solana practice (TS tests cannot warp the Clock on localnet; trust in Clock on mainnet).
 
+## 5.5 Post-premine issuance — Governance (`governance_mint`, ADR-0009)
+
+After the founder premine, **all** new issuance goes through governance (ADR-0009).
+The mint authority is **permanently** the PDA `[b"mint-authority"]` and is never changed.
+
+Governance MVP model:
+
+- **Roles**: `authority` (contract owner — creates proposals, manages the member list) and `members` (3..=5 addresses with voting rights).
+- **Proposal** (`Proposal`, PDA `[b"proposal", id]`): `proposer`, `title` (≤ 64 B), `amount_atomic`, `destination` ATA (owner == proposer, mint == SRC mint), status (Pending/Approved/Rejected/Cancelled/Executed), `approved_at`, `yes_votes`, `no_votes`, `member_snapshot_count`.
+- **Single active proposal** at any time; creating a new one with an active predecessor cancels it (client passes `prev_proposal`).
+- **Quorum**: `yes > no` AND `yes + no > member_snapshot_count / 2` → `Approved`; all members voted without quorum → `Rejected`.
+- **Timelock**: `TIMELOCK_DELAY = 7 days` between `approved_at` and execution.
+- **Emission cap**: `PROPOSAL_AMOUNT_MAX_ATOMIC = 1e15` per proposal (0.1% of `MAX_SUPPLY_ATOMIC`); `vault.total_supply + amount <= vault.max_supply` enforced.
+
+Flow: `create_proposal (authority)` → `vote (members)` → wait `TIMELOCK_DELAY`
+→ `governance_mint` → CPI `token::mint_to` (signed by the mint-authority PDA)
+directly to the destination ATA; `vault.total_supply` incremented; proposal `Executed`.
+
+> **Runtime-testing note:** the full pass «Approved → 7 days → Executed»
+> cannot be run in TS (no Clock warp). It is covered by the unit invariant
+> `approved_after_majority_and_timelock` (`state/governance.rs`); the TS baseline
+> (`tests/governance.ts`) verifies `governance_mint` fails with
+> `TimelockNotElapsed` when called immediately after approval.
+

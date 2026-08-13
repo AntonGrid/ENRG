@@ -158,3 +158,37 @@ Fixed economic model (single variant, no alternatives):
 
 After the premine `vault.total_supply = 2e17`; it is used by `energy_per_src` / `supply_fraction`, so the starting emission difficulty already accounts for the occupied supply share.
 
+## 16.13 Governance Emission (`governance_mint`, ADR-0009)
+
+Post-premine issuance is **only** possible through governance (ADR-0009). Mint
+authority remains the PDA `[b"mint-authority"]` — it is **never** changed.
+
+Governance model (MVP):
+
+- **Roles**: `authority` (owner; creates proposals, manages `members`) and
+  `members` (3..=5 addresses with voting rights).
+- **Proposal**: `id`, `proposer`, `title` (≤ 64 bytes), `amount_atomic`,
+  `destination` (ATA, owner == proposer, mint == SRC mint), status
+  (Pending/Approved/Rejected/Cancelled/Executed), `created_at`,
+  `approved_at`, `executed_at`, `yes_votes`, `no_votes`,
+  `member_snapshot_count`, `voted_members`.
+- **Quorum**: `yes > no` AND `yes + no > member_snapshot_count / 2` →
+  `Approved` (+ `approved_at`). All members voted without quorum → `Rejected`.
+- **Timelock**: `TIMELOCK_DELAY = 604_800 s` (7 days) between `approved_at`
+  and execution.
+- **Emission cap**: `PROPOSAL_AMOUNT_MAX_ATOMIC = 1e15` per proposal
+  (0.1% of `MAX_SUPPLY_ATOMIC`); total checked against
+  `vault.max_supply` (`total_supply + amount <= max_supply`).
+
+Flow: `create_proposal (authority)` → `vote (members)` → wait `TIMELOCK_DELAY`
+→ `governance_mint` → CPI `token::mint_to` (signed by mint-authority PDA)
+directly to the destination ATA, `vault.total_supply` incremented, proposal
+`Executed`.
+
+> **Runtime-testing note:** the full pass «Approved → 7 days → Executed»
+> cannot be run in TS (no Clock warp). It is covered by the unit invariant
+> `approved_after_majority_and_timelock` (`state/governance.rs`); the TS
+> baseline (`tests/governance.ts`) verifies `governance_mint` fails with
+> `TimelockNotElapsed` when called immediately after approval.
+
+
