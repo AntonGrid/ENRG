@@ -63,9 +63,20 @@ pub const INITIAL_ENERGY_PER_SRC: u64 = 1_000_000;
 /// Default energy pool threshold (Wh).
 pub const DEFAULT_POOL_THRESHOLD: u128 = 1_000_000;
 
-/// Founder vesting duration (4 years).
+/// Founder vesting: cliff 1 year (no tokens), then linear release over 3 years.
+/// Full cycle = CLIFF + RELEASE = 4 years.
+pub const FOUNDER_VESTING_CLIFF: i64 =
+    365 * 24 * 60 * 60; // 1 year, fully locked
+pub const FOUNDER_VESTING_RELEASE: i64 =
+    3 * 365 * 24 * 60 * 60; // 3 years, linear (1/36 per month)
+
+/// Founder allocation: 20% of MAX_SUPPLY_ATOMIC (1e18) = 2e17 atomic = 200M SRC.
+pub const FOUNDER_ALLOCATION_ATOMIC: u64 =
+    200_000_000_000_000_000; // 2e17
+
+/// Backward-compatible total duration (kept for references).
 pub const FOUNDER_VESTING_DURATION: i64 =
-    4 * 365 * 24 * 60 * 60;
+    FOUNDER_VESTING_CLIFF + FOUNDER_VESTING_RELEASE;
 
 /// Максимум активных устройств на одного владельца (BLOCK 4 аудита —
 /// защита от «дробления» устройств).
