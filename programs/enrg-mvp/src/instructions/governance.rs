@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
-use crate::constants::{PROPOSAL_AMOUNT_MAX_ATOMIC, PROPOSAL_TITLE_MAX_LEN};
+use crate::constants::PROPOSAL_TITLE_MAX_LEN;
 use crate::error::ErrorCode;
 use crate::state::*;
 
@@ -112,23 +112,22 @@ pub fn create_proposal(
     let governance = &mut ctx.accounts.governance;
 
     // id обязан быть следующим (монотонный счётчик).
-    let expected_id = governance
-        .proposal_count
-        .checked_add(1)
+    let expected_id = next_proposal_id(governance.proposal_count)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
     require!(id == expected_id, ErrorCode::InvalidParameter);
 
     // Лимит эмиссии (атомарные единицы).
-    require!(
-        amount_atomic <= PROPOSAL_AMOUNT_MAX_ATOMIC,
-        ErrorCode::AmountCapExceeded
-    );
+    validate_amount_atomic(amount_atomic)?;
     require!(
         title.len() <= PROPOSAL_TITLE_MAX_LEN,
         ErrorCode::InvalidParameter
     );
 
-    // Одно активное предложение: старое активное отклоняется (cancel/expire).
+    // Одно активное предложение: при наличии активного клиент обязан передать
+    // prev_proposal (cancel). Иначе — коллизия.
+    let prev_provided = ctx.accounts.prev_proposal.is_some();
+    require_no_collision(governance.active_proposal_id, prev_provided)?;
+
     if governance.active_proposal_id != 0 {
         let prev = ctx
             .accounts
