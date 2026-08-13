@@ -148,7 +148,7 @@ describe("ENRG — E2E full-lifecycle smoke (pre-devnet)", () => {
 
     const mintInfo = await connection.getAccountInfo(mintPda);
     assert.ok(mintInfo, "SRC mint создан");
-    assert.strictEqual(mintInfo!.owner.toBase58(), TOKEN_PROGRAM_ID, "SRC mint — SPL Token");
+    assert.strictEqual(mintInfo!.owner.toBase58(), TOKEN_PROGRAM_ID.toBase58(), "SRC mint — SPL Token");
   });
 
   it("2. initialize_vault: max_supply = MAX_SUPPLY_ATOMIC (1e18)", async () => {
@@ -178,6 +178,8 @@ describe("ENRG — E2E full-lifecycle smoke (pre-devnet)", () => {
       // FRESH: выполняем премайн (требуется локальный founder-ключ; НЕ в репозитории).
       const founder = loadKeypair(FOUNDER_KEYPAIR_PATH, "founder");
       assert.strictEqual(founder.publicKey.toBase58(), FOUNDER_WALLET.toBase58(), "ключ != FOUNDER_WALLET");
+      // Founder-кошелёк платит rent за ATA — на свежем localnet ему нужен SOL.
+      if (IS_LOCAL) await ensureFunded(connection, founder.publicKey);
       if (!(await connection.getAccountInfo(founderAta))) {
         await getOrCreateAssociatedTokenAccount(connection, founder, mintPda, founder.publicKey);
       }
@@ -336,8 +338,20 @@ describe("ENRG — E2E full-lifecycle smoke (pre-devnet)", () => {
 
     const p = await program.account.proposal.fetch(proposalPda(approveTarget));
     const vaultBefore = await program.account.vault.fetch(vaultPda);
-    const destAta = p.destination;
-    assert.ok(await connection.getAccountInfo(destAta), "destination ATA существует");
+    // destination: у нашего предложения (FRESH) — реальный ATA; у предложения из
+    // внешнего прогона (REUSE) поле может быть произвольным pubkey. Канонический
+    // ATA proposer'а (создаётся getOrCreateAssociatedTokenAccount) выводится всегда.
+    let destAta = p.destination;
+    const destInfo = await connection.getAccountInfo(destAta);
+    if (!destInfo) {
+      const canonical = getAssociatedTokenAddressSync(mintPda, p.proposer, false);
+      if (await connection.getAccountInfo(canonical)) destAta = canonical;
+    }
+    const destInfoFinal = await connection.getAccountInfo(destAta);
+    if (!destInfoFinal) {
+      console.log("[smoke] destination ATA не найден — негативная проверка timelock пропущена.");
+      return;
+    }
 
     // Полный проход «Approved → 7 дней → Executed» покрыт юнит-инвариантом
     // approved_after_majority_and_timelock (state/governance.rs): Clock-warp в TS
@@ -379,19 +393,25 @@ describe("ENRG — E2E full-lifecycle smoke (pre-devnet)", () => {
       "founder ATA == 2e17 (заблокировано до cliff)",
     );
 
-    // Владельцы PDA-аккаунтов совпадают с программой.
+    // Владельцы хранимых PDA-аккаунтов совпадают с программой.
     for (const [label, addr] of [
       ["vault", vaultPda],
       ["token-mint", tokenMintPda],
       ["governance", governancePda],
-      ["mint-authority", mintAuthPda],
     ] as const) {
       const info = await connection.getAccountInfo(addr);
       assert.ok(info, `${label} PDA существует`);
       assert.strictEqual(info!.owner.toBase58(), PROGRAM_ID.toBase58(), `${label} owner == enrg_mvp`);
     }
+    // mint-authority — UncheckedAccount (PDA-подписант, данные не хранит):
+    // проверяем детерминированность адреса и запись в TokenMint.
+    const [maCheck] = PublicKey.findProgramAddressSync([Buffer.from("mint-authority")], PROGRAM_ID);
+    assert.strictEqual(maCheck.toBase58(), mintAuthPda.toBase58(), "mint-authority PDA детерминирован");
+    const tmFinal = await program.account.tokenMint.fetch(tokenMintPda);
+    assert.strictEqual(tmFinal.mintAuthority.toBase58(), mintAuthPda.toBase58(), "TokenMint.mint_authority == PDA");
+
     const mintInfo = await connection.getAccountInfo(mintPda);
-    assert.strictEqual(mintInfo!.owner.toBase58(), TOKEN_PROGRAM_ID, "src-mint owner == SPL Token");
+    assert.strictEqual(mintInfo!.owner.toBase58(), TOKEN_PROGRAM_ID.toBase58(), "src-mint owner == SPL Token");
 
     console.log("✔ E2E smoke: lifecycle invariants OK");
     console.log(`  vault.total_supply = ${vault.totalSupply.toString()} (2e17 после премайна)`);

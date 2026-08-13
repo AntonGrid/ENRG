@@ -33,7 +33,14 @@ wallet = "~/.config/solana/id.json"
 # В кавычках шаблон уходит в mocha, который сам делает рекурсивный glob.
 test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 'tests/**/*.ts'"
 
+[test]
+# Валидатор на этой машине стартует медленно (~1.5-2 мин); дефолт 5s мал.
+startup_wait = 180000
+shutdown_wait = 5000
+
 [test.validator]
+# RPC-адрес, к которому anchor подключается (дефолт 0.0.0.0 → явно 127.0.0.1).
+bind_address = "127.0.0.1"
 # Генезис-аккаунт FounderVesting для initialize_founder_vesting.
 # Аккаунт НЕ является PDA с init (state/vesting.rs) — он обязан существовать
 # заранее (генезис). Адрес = findProgramAddress([b"founder-vesting"]) программы.
