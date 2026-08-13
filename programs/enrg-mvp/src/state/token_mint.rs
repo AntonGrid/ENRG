@@ -68,3 +68,16 @@ impl TokenMint {
 pub fn founder_premine_not_minted(founder_minted: u8) -> bool {
     founder_minted == 0
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn founder_premine_is_one_shot() {
+        // 7. Одноразовость: премайн разрешён только при founder_minted == 0.
+        assert!(founder_premine_not_minted(0));
+        assert!(!founder_premine_not_minted(1));
+        assert!(!founder_premine_not_minted(255));
+    }
+}
