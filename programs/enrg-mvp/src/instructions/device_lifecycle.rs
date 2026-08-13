@@ -1,6 +1,8 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::{ENRG_PROFILE_PROGRAM_ID, INSTRUCTIONS_SYSVAR_ID, MAX_CLOCK_SKEW};
+use crate::constants::{
+    ENRG_PROFILE_PROGRAM_ID, INSTRUCTIONS_SYSVAR_ID, MAX_CLOCK_SKEW, MAX_DEVICES_PER_OWNER,
+};
 use crate::error::ErrorCode;
 use crate::security::lifecycle::{device_claim_message, device_register_message};
 use crate::security::verify_ed25519_signature;
@@ -120,12 +122,25 @@ pub struct ClaimDevice<'info> {
     )]
     pub producer: Account<'info, EnergyProducer>,
 
+    /// Per-owner registry — создаётся при первом claim (BLOCK 4:
+    /// лимит устройств на владельца).
+    #[account(
+        init_if_needed,
+        payer = authority,
+        space = 8 + OwnerDevices::INIT_SPACE,
+        seeds = [b"owner-devices", authority.key().as_ref()],
+        bump
+    )]
+    pub owner_devices: Account<'info, OwnerDevices>,
+
     /// CHECK: sysvar Instructions — ed25519-precompile-инструкция с подписью
     /// устройства ДОЛЖНА быть в транзакции перед этой инструкцией.
     #[account(
         constraint = instructions.key() == INSTRUCTIONS_SYSVAR_ID @ ErrorCode::InvalidInstructionsAccount
     )]
     pub instructions: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
 }
 
 pub fn claim_device(
@@ -160,6 +175,23 @@ pub fn claim_device(
         &message,
         &ctx.accounts.instructions.to_account_info(),
     )?;
+
+    // ── Лимит устройств на владельца (BLOCK 4 — антидробление) ──
+    let owner_devices = &mut ctx.accounts.owner_devices;
+    if owner_devices.owner == Pubkey::default() {
+        owner_devices.owner = owner;
+        owner_devices.total_claimed = 0;
+        owner_devices.active_count = 0;
+    }
+    require!(owner_devices.owner == owner, ErrorCode::Unauthorized);
+    require!(
+        owner_devices.total_claimed < MAX_DEVICES_PER_OWNER,
+        ErrorCode::DeviceLimitReached
+    );
+    owner_devices.total_claimed = owner_devices
+        .total_claimed
+        .checked_add(1)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
 
     producer.authority = owner;
     producer.state = DeviceState::Claimed;
@@ -289,6 +321,15 @@ pub struct ActivateDevice<'info> {
         constraint = producer.device_id != Pubkey::default() @ ErrorCode::InvalidParameter
     )]
     pub producer: Account<'info, EnergyProducer>,
+
+    /// Per-owner registry — лимит активных устройств (BLOCK 4).
+    #[account(
+        mut,
+        seeds = [b"owner-devices", authority.key().as_ref()],
+        bump,
+        constraint = owner_devices.owner == authority.key() @ ErrorCode::Unauthorized
+    )]
+    pub owner_devices: Account<'info, OwnerDevices>,
 }
 
 pub fn activate_device(ctx: Context<ActivateDevice>) -> Result<()> {
@@ -297,6 +338,18 @@ pub fn activate_device(ctx: Context<ActivateDevice>) -> Result<()> {
         producer.state.can_transition_to(DeviceState::Active),
         ErrorCode::InvalidStateTransition
     );
+
+    // Лимит активных устройств на владельца (BLOCK 4 — антидробление).
+    let owner_devices = &mut ctx.accounts.owner_devices;
+    require!(
+        owner_devices.active_count < MAX_DEVICES_PER_OWNER,
+        ErrorCode::DeviceLimitReached
+    );
+    owner_devices.active_count = owner_devices
+        .active_count
+        .checked_add(1)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
+
     producer.state = DeviceState::Active;
 
     let clock = Clock::get()?;
@@ -320,6 +373,15 @@ pub struct QuarantineDevice<'info> {
         constraint = producer.device_id != Pubkey::default() @ ErrorCode::InvalidParameter
     )]
     pub producer: Account<'info, EnergyProducer>,
+
+    /// Per-owner registry — счётчик активных устройств (BLOCK 4).
+    #[account(
+        mut,
+        seeds = [b"owner-devices", authority.key().as_ref()],
+        bump,
+        constraint = owner_devices.owner == authority.key() @ ErrorCode::Unauthorized
+    )]
+    pub owner_devices: Account<'info, OwnerDevices>,
 }
 
 pub fn quarantine_device(ctx: Context<QuarantineDevice>) -> Result<()> {
@@ -328,6 +390,9 @@ pub fn quarantine_device(ctx: Context<QuarantineDevice>) -> Result<()> {
         producer.state.can_transition_to(DeviceState::Quarantine),
         ErrorCode::InvalidStateTransition
     );
+    // Из Active уходит ровно один активный счётчик (Quarantine достижим только из Active).
+    let owner_devices = &mut ctx.accounts.owner_devices;
+    owner_devices.active_count = owner_devices.active_count.saturating_sub(1);
     producer.state = DeviceState::Quarantine;
 
     let clock = Clock::get()?;
@@ -351,6 +416,15 @@ pub struct MaintenanceDevice<'info> {
         constraint = producer.device_id != Pubkey::default() @ ErrorCode::InvalidParameter
     )]
     pub producer: Account<'info, EnergyProducer>,
+
+    /// Per-owner registry — счётчик активных устройств (BLOCK 4).
+    #[account(
+        mut,
+        seeds = [b"owner-devices", authority.key().as_ref()],
+        bump,
+        constraint = owner_devices.owner == authority.key() @ ErrorCode::Unauthorized
+    )]
+    pub owner_devices: Account<'info, OwnerDevices>,
 }
 
 pub fn maintenance_device(ctx: Context<MaintenanceDevice>) -> Result<()> {
@@ -359,6 +433,12 @@ pub fn maintenance_device(ctx: Context<MaintenanceDevice>) -> Result<()> {
         producer.state.can_transition_to(DeviceState::Maintenance),
         ErrorCode::InvalidStateTransition
     );
+    // Уменьшаем счётчик только если устройство уходит из Active
+    // (из Quarantine счётчик уже был уменьшен при карантине).
+    if producer.state == DeviceState::Active {
+        let owner_devices = &mut ctx.accounts.owner_devices;
+        owner_devices.active_count = owner_devices.active_count.saturating_sub(1);
+    }
     producer.state = DeviceState::Maintenance;
 
     let clock = Clock::get()?;
@@ -382,6 +462,15 @@ pub struct RevokeDevice<'info> {
         constraint = producer.device_id != Pubkey::default() @ ErrorCode::InvalidParameter
     )]
     pub producer: Account<'info, EnergyProducer>,
+
+    /// Per-owner registry — счётчик активных устройств (BLOCK 4).
+    #[account(
+        mut,
+        seeds = [b"owner-devices", authority.key().as_ref()],
+        bump,
+        constraint = owner_devices.owner == authority.key() @ ErrorCode::Unauthorized
+    )]
+    pub owner_devices: Account<'info, OwnerDevices>,
 }
 
 pub fn revoke_device(ctx: Context<RevokeDevice>) -> Result<()> {
@@ -390,6 +479,12 @@ pub fn revoke_device(ctx: Context<RevokeDevice>) -> Result<()> {
         producer.state.can_transition_to(DeviceState::Revoked),
         ErrorCode::InvalidStateTransition
     );
+    // Уменьшаем счётчик только если устройство уходит из Active
+    // (из Quarantine/Maintenance счётчик уже уменьшен ранее).
+    if producer.state == DeviceState::Active {
+        let owner_devices = &mut ctx.accounts.owner_devices;
+        owner_devices.active_count = owner_devices.active_count.saturating_sub(1);
+    }
     producer.state = DeviceState::Revoked;
 
     let clock = Clock::get()?;
@@ -413,6 +508,15 @@ pub struct ReleaseFromQuarantine<'info> {
         constraint = producer.device_id != Pubkey::default() @ ErrorCode::InvalidParameter
     )]
     pub producer: Account<'info, EnergyProducer>,
+
+    /// Per-owner registry — счётчик активных устройств (BLOCK 4).
+    #[account(
+        mut,
+        seeds = [b"owner-devices", authority.key().as_ref()],
+        bump,
+        constraint = owner_devices.owner == authority.key() @ ErrorCode::Unauthorized
+    )]
+    pub owner_devices: Account<'info, OwnerDevices>,
 }
 
 pub fn release_from_quarantine(ctx: Context<ReleaseFromQuarantine>) -> Result<()> {
@@ -421,6 +525,16 @@ pub fn release_from_quarantine(ctx: Context<ReleaseFromQuarantine>) -> Result<()
         producer.state.can_transition_to(DeviceState::Active),
         ErrorCode::InvalidStateTransition
     );
+    // Возврат в Active — инкремент счётчика (лимит проверяется).
+    let owner_devices = &mut ctx.accounts.owner_devices;
+    require!(
+        owner_devices.active_count < MAX_DEVICES_PER_OWNER,
+        ErrorCode::DeviceLimitReached
+    );
+    owner_devices.active_count = owner_devices
+        .active_count
+        .checked_add(1)
+        .ok_or(ErrorCode::ArithmeticOverflow)?;
     producer.state = DeviceState::Active;
 
     let clock = Clock::get()?;

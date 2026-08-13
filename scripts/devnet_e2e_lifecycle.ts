@@ -166,6 +166,11 @@ function pdas(programId: PublicKey) {
         [Buffer.from("producer"), deviceId.toBytes()],
         programId
       )[0],
+    ownerDevices: (owner: PublicKey) =>
+      PublicKey.findProgramAddressSync(
+        [Buffer.from("owner-devices"), owner.toBytes()],
+        programId
+      )[0],
     profile: (authority: PublicKey) =>
       PublicKey.findProgramAddressSync(
         [Buffer.from("profile"), authority.toBytes()],
@@ -690,6 +695,7 @@ async function deviceLifecycle() {
     .accounts({
       authority: operator.publicKey,
       producer: producerPda,
+      ownerDevices: P.ownerDevices(operator.publicKey),
       instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
     })
     .instruction();
@@ -708,7 +714,11 @@ async function deviceLifecycle() {
 
   await program.methods
     .activateDevice()
-    .accounts({ authority: operator.publicKey, producer: producerPda })
+    .accounts({
+      authority: operator.publicKey,
+      producer: producerPda,
+      ownerDevices: P.ownerDevices(operator.publicKey),
+    })
     .rpc();
   stepLog("activate_device", true);
 

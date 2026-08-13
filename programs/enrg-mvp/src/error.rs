@@ -66,4 +66,6 @@ pub enum ErrorCode {
     InvalidInstructionsAccount,
     #[msg("Timestamp is in the future")]
     FutureTimestamp,
+    #[msg("Device limit per owner reached")]
+    DeviceLimitReached,
 }

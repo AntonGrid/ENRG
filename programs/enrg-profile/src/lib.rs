@@ -9,6 +9,14 @@ declare_id!("78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt");
 /// Re-export generated CPI module for external programs.
 pub use self::enrg_profile::*;
 
+/// Максимальная номинальная мощность устройства (Вт).
+///
+/// Верхняя граница rated_power — защита от манипуляций (BLOCK 4 аудита):
+/// без неё владелец мог бы выставить произвольно большую мощность и тем
+/// самым завысить потолок mint (enrg-mvp::mint_energy сверяет
+/// `report.energy_wh <= profile.rated_power`).
+pub const MAX_RATED_POWER: u64 = 100_000_000_000; // 100 GW
+
 /// Обновляет скользящее окно энергии устройства (30-дневное окно).
 /// Вычитает энергию, которая вышла за пределы окна, и добавляет новую.
 fn update_energy_window_u128(
@@ -62,6 +70,10 @@ pub mod enrg_profile {
             location.len() <= EnergyProfile::MAX_LOCATION_LEN,
             ErrorCode::LocationTooLong
         );
+        require!(
+            rated_power <= MAX_RATED_POWER,
+            ErrorCode::RatedPowerTooHigh
+        );
 
         let profile = &mut ctx.accounts.profile;
         profile.authority = ctx.accounts.authority.key();
@@ -91,6 +103,10 @@ pub mod enrg_profile {
         require!(
             location.len() <= EnergyProfile::MAX_LOCATION_LEN,
             ErrorCode::LocationTooLong
+        );
+        require!(
+            rated_power <= MAX_RATED_POWER,
+            ErrorCode::RatedPowerTooHigh
         );
 
         let profile = &mut ctx.accounts.profile;
@@ -218,4 +234,6 @@ pub enum ErrorCode {
     DeviceTypeTooLong,
     #[msg("Location string exceeds maximum length (64 bytes)")]
     LocationTooLong,
+    #[msg("Rated power exceeds the maximum allowed (100 GW)")]
+    RatedPowerTooHigh,
 }

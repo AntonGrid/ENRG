@@ -1,5 +1,6 @@
 pub mod vault;
 pub mod producer;
+pub mod owner_devices;
 pub mod pool;
 pub mod stake;
 pub mod vesting;
@@ -15,6 +16,7 @@ pub mod config;
 
 pub use vault::*;
 pub use producer::*;
+pub use owner_devices::*;
 pub use pool::*;
 pub use stake::*;
 pub use vesting::*;

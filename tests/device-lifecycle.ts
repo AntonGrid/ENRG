@@ -86,6 +86,14 @@ function producerPda(deviceId: PublicKey): PublicKey {
   return pda;
 }
 
+function ownerDevicesPda(owner: PublicKey): PublicKey {
+  const [pda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("owner-devices"), owner.toBytes()],
+    PROGRAM_ID
+  );
+  return pda;
+}
+
 describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-подпись устройства", () => {
   const connection = new Connection(ENDPOINT, "confirmed");
   const provider = new AnchorProvider(
@@ -220,6 +228,7 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
       .accounts({
         authority: authority.publicKey,
         producer: devicePda,
+        ownerDevices: ownerDevicesPda(authority.publicKey),
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .instruction();
@@ -250,6 +259,7 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
         .accounts({
           authority: otherWallet.publicKey,
           producer: pda5,
+          ownerDevices: ownerDevicesPda(otherWallet.publicKey),
           instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
         })
         .signers([otherWallet])
@@ -276,6 +286,7 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
       .accounts({
         authority: attacker.publicKey,
         producer: pda6,
+        ownerDevices: ownerDevicesPda(attacker.publicKey),
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .instruction();
@@ -306,6 +317,7 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
       .accounts({
         authority: otherWallet.publicKey,
         producer: pda7,
+        ownerDevices: ownerDevicesPda(otherWallet.publicKey),
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .instruction();
@@ -328,6 +340,7 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
       .accounts({
         authority: otherWallet.publicKey,
         producer: devicePda,
+        ownerDevices: ownerDevicesPda(otherWallet.publicKey),
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
       })
       .instruction();
@@ -362,7 +375,11 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
 
     await program.methods
       .activateDevice()
-      .accounts({ authority: authority.publicKey, producer: devicePda })
+      .accounts({
+        authority: authority.publicKey,
+        producer: devicePda,
+        ownerDevices: ownerDevicesPda(authority.publicKey),
+      })
       .signers([authority])
       .rpc();
     p = await program.account.energyProducer.fetch(devicePda);
@@ -370,7 +387,11 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
 
     await program.methods
       .quarantineDevice()
-      .accounts({ authority: authority.publicKey, producer: devicePda })
+      .accounts({
+        authority: authority.publicKey,
+        producer: devicePda,
+        ownerDevices: ownerDevicesPda(authority.publicKey),
+      })
       .signers([authority])
       .rpc();
     p = await program.account.energyProducer.fetch(devicePda);
@@ -378,7 +399,11 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
 
     await program.methods
       .releaseFromQuarantine()
-      .accounts({ authority: authority.publicKey, producer: devicePda })
+      .accounts({
+        authority: authority.publicKey,
+        producer: devicePda,
+        ownerDevices: ownerDevicesPda(authority.publicKey),
+      })
       .signers([authority])
       .rpc();
     p = await program.account.energyProducer.fetch(devicePda);
@@ -386,7 +411,11 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
 
     await program.methods
       .revokeDevice()
-      .accounts({ authority: authority.publicKey, producer: devicePda })
+      .accounts({
+        authority: authority.publicKey,
+        producer: devicePda,
+        ownerDevices: ownerDevicesPda(authority.publicKey),
+      })
       .signers([authority])
       .rpc();
     p = await program.account.energyProducer.fetch(devicePda);
@@ -397,7 +426,11 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
     await assert.rejects(
       program.methods
         .activateDevice()
-        .accounts({ authority: authority.publicKey, producer: devicePda })
+        .accounts({
+          authority: authority.publicKey,
+          producer: devicePda,
+          ownerDevices: ownerDevicesPda(authority.publicKey),
+        })
         .signers([authority])
         .rpc(),
       /state transition is not allowed/
