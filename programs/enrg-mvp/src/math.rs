@@ -294,4 +294,24 @@ mod tests {
     fn window_starts_fresh() {
         assert_eq!(update_energy_window(0, 0, 1_000_000, 500), 500);
     }
+
+    /// v7.0 §17: E(S) = 1 МВт·ч × k^S, k = 10.
+    /// На старте (S=0): 1_000_000 Wh (1 МВт·ч); при полном supply (S=1): 10_000_000 Wh.
+    #[test]
+    fn emission_formula_is_1mwh_times_10_to_s() {
+        assert_eq!(INITIAL_ENERGY_PER_SRC, 1_000_000); // 1 МВт·ч
+        assert_eq!(EMISSION_DIFFICULTY_K, 10);
+
+        // E(0) = 1 МВт·ч × 10^0 = 1_000_000 Wh
+        assert_eq!(energy_per_src(0), 1_000_000);
+        // E(MAX) = 1 МВт·ч × 10^1 = 10_000_000 Wh.
+        // Fixed-point floor ряда Тейлора даёт 9_999_999 — допуск ±1.
+        let e_max = energy_per_src(MAX_SUPPLY_ATOMIC);
+        assert!(e_max >= 9_999_999 && e_max <= 10_000_000, "e_max={e_max}");
+        // E(MAX/2) = 1 МВт·ч × 10^0.5 ≈ 3_162_277 Wh (floor)
+        assert_eq!(energy_per_src(MAX_SUPPLY_ATOMIC / 2), 3_162_277);
+        // Монотонность: сложность растёт с supply.
+        assert!(energy_per_src(MAX_SUPPLY_ATOMIC / 4) > energy_per_src(0));
+        assert!(energy_per_src(MAX_SUPPLY_ATOMIC) > energy_per_src(MAX_SUPPLY_ATOMIC / 2));
+    }
 }

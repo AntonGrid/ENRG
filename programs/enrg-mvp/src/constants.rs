@@ -36,7 +36,9 @@ pub const BUYBACK_PERCENT: u64 = 20;
 pub const STAKING_PERCENT: u64 = 40;
 /// DAO fund share (per cent) of the commission.
 pub const DAO_PERCENT: u64 = 30;
-// Emergency fund receives the remainder of the commission.
+/// Emergency fund share (per cent) of the commission.
+/// Остаток комиссии после buyback/staking/dao достаётся emergency-фонду.
+pub const EMERGENCY_PERCENT: u64 = 10;
 
 /// --- SRC total supply ---
 /// The product intends a total of 1_000_000_000 (1 billion) SRC tokens.
@@ -109,3 +111,68 @@ pub const PROPOSAL_AMOUNT_MAX_ATOMIC: u64 = 1_000_000_000_000_000; // 1e15
 
 /// Максимальная длина заголовка предложения (байт).
 pub const PROPOSAL_TITLE_MAX_LEN: usize = 64;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// v7.0 §17: токен с 9 десятичными знаками.
+    #[test]
+    fn decimals_is_nine() {
+        assert_eq!(SRC_DECIMALS, 9);
+        assert_eq!(10u64.pow(SRC_DECIMALS as u32), 1_000_000_000);
+    }
+
+    /// Атомарные единицы: 1 SRC = 1e9 атомар; MAX = 1e18 атомар = 1e9 SRC.
+    #[test]
+    fn max_supply_in_atomic_units() {
+        assert_eq!(MAX_SUPPLY_ATOMIC, 1_000_000_000_000_000_000);
+        assert_eq!(MAX_SUPPLY, MAX_SUPPLY_ATOMIC, "MAX_SUPPLY — deprecated alias");
+        assert_eq!(MAX_SUPPLY_ATOMIC / (10u64.pow(SRC_DECIMALS as u32)), 1_000_000_000);
+    }
+
+    /// Founder allocation = 20% от MAX_SUPPLY_ATOMIC = 2e17 атомар.
+    #[test]
+    fn founder_allocation_is_twenty_percent() {
+        assert_eq!(FOUNDER_ALLOCATION_ATOMIC, 200_000_000_000_000_000); // 2e17
+        assert_eq!(FOUNDER_ALLOCATION_ATOMIC * 5, MAX_SUPPLY_ATOMIC);
+    }
+
+    /// v7.0 §18: комиссия 15% распределяется 20/40/30/10 — в сумме 100%.
+    #[test]
+    fn commission_percentages_sum_to_100() {
+        assert_eq!(COMMISSION_PERCENT, 15);
+        assert_eq!(
+            BUYBACK_PERCENT + STAKING_PERCENT + DAO_PERCENT + EMERGENCY_PERCENT,
+            100
+        );
+    }
+
+    /// Проверка: награда = 85% пользователю + 15% комиссия, и доли фондов
+    /// в сумме равны комиссии (emergency — остаток).
+    #[test]
+    fn distribution_applies_to_15_percent_commission() {
+        let reward: u64 = 10_000_000;
+        let user = reward * 85 / 100;
+        let fee = reward - user;
+        assert_eq!(fee, reward * COMMISSION_PERCENT / 100);
+        assert_eq!(user + fee, reward);
+
+        let buyback = fee * BUYBACK_PERCENT / 100;
+        let staking = fee * STAKING_PERCENT / 100;
+        let dao = fee * DAO_PERCENT / 100;
+        let emergency = fee - buyback - staking - dao; // остаток
+        assert_eq!(buyback + staking + dao + emergency, fee);
+        assert!(emergency >= fee * EMERGENCY_PERCENT / 100 - 1);
+        assert!(emergency <= fee * EMERGENCY_PERCENT / 100 + 1);
+    }
+
+    /// v7.0 §17: 1e18 атомар ≈ 1e9 ENRG (SRC), 1 SRC = 1e9 атомар.
+    #[test]
+    fn atomic_scale_matches_spec() {
+        let src_in_atomics = 10u64.pow(SRC_DECIMALS as u32);
+        assert_eq!(src_in_atomics, 1_000_000_000);
+        assert_eq!(MAX_SUPPLY_ATOMIC / src_in_atomics, 1_000_000_000);
+    }
+}
+
