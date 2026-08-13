@@ -24,10 +24,15 @@ tests that require a configured localnet/devnet environment.
 | Security | C-3 Dummy Merkle verification | Resolved | real `compute_merkle_root` + `position: u8`, `InvalidProof`, in-house SHA-256 |
 | Security | C-4 Weak seed invariant | Resolved | seed keyed on `device_id` |
 | Security | Security Review Report | Done | `docs/SECURITY_REVIEW_REPORT.md` committed |
-| Tests | Rust `cargo test --workspace` | 9 + 1 passed | 0 failed |
+| Tests | Rust `cargo test --workspace` | 61 + 1 passed | 0 failed (incl. tiers/ERS/pool/governance/vesting/decimals invariants) |
 | Tests | Python `test_tokenomics_extended.py` | All passed | incl. 3 Merkle tests |
-| Tests | TypeScript integration (`tests/*.ts`) | Pending | requires localnet/devnet; no `test` script in `package.json` |
-| Tests | `anchor test --skip-build` (localnet) | OK | 44 passing / 5 pending (см. STATE.md, раздел 6) |
+| Tests | TypeScript integration (`tests/*.ts`) | OK | `anchor test --skip-build`: 48 passing / 4 pending (см. STATE.md, раздел 6) |
+| Tests | `anchor test --skip-build` (localnet) | OK | 48 passing / 4 pending; новые: trust-ers-pool.ts, founder-vesting vesting-init |
+| Spec | v7.0 §15 Trust Levels | Implemented | tier + месячные лимиты, `set_device_tier`, `allows_increment` |
+| Spec | v7.0 §16/§27 ERS | Implemented | Reputation PDA, штрафы аномалий, премиум-заглушка |
+| Spec | v7.0 §14 Pool distribution | Implemented | 1 МВт·ч порог, пропорциональные доли, ERS-взвешивание |
+| Spec | v7.0 §22 Governance | Implemented (MVP) | пути эмиссии зафиксированы (ADR-0009 tighten) |
+| Conformance | Supported Protocol Version / Spec Revision | Declared | `docs/specifications/ENRG_Conformance.md` §6 |
 | Verify | Devnet verify-only (`scripts/devnet_verify_governance.ts`) | **Divergent** | задеплоена старая ревизия: `vault.max_supply=1e9`, governance/vesting/премайн отсутствуют — см. `docs/DEVNET_VERIFICATION.md` |
 | Repo | Working tree clean / pushed | Clean | `HEAD` synced with `origin/main` |
 

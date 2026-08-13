@@ -72,6 +72,26 @@ Implementations claiming compatibility SHALL declare:
 
 Unsupported protocol versions SHALL be rejected.
 
+## Declaration (reference implementation — `enrg_mvp`)
+
+| Field                     | Value                                                            |
+|---------------------------|------------------------------------------------------------------|
+| Implementation            | `enrg_mvp` (Solana/Anchor, program `9rVoq…XF`)                   |
+| Supported Protocol Version| **v7.0** (ENRG Technical Specification v7.0)                     |
+| Specification Revision    | **v8.0** (ENRG Technical Specification v8.0, decimals=9/atomic)  |
+| Decimals                  | 9 (`SRC_DECIMALS = 9`; 1 SRC = 1e9 atomics)                      |
+| Max Supply                | 1e18 atomics = 1,000,000,000 SRC (`MAX_SUPPLY_ATOMIC`)           |
+| Emission Formula          | `E(S) = 1 MWh × 10^S` (`INITIAL_ENERGY_PER_SRC`, `k = 10`)       |
+| Commission                | 15%: buyback 20 / staking 40 / dao 30 / emergency 10             |
+| Trust Levels              | Basic / Verified / Industrial / Institutional (v7.0 §15)         |
+| ERS                       | Energy Reputation Score (v7.0 §16/§27)                           |
+| Pool distribution         | 1 MWh threshold, proportional + ERS-weighted (v7.0 §14/§16)      |
+| Governance                | MVP: roles + timelock + quorum (v7.0 §22, ADR-0009)              |
+
+Conformance deviations from Axis Core (ADR-0002/0003/0006) are documented in
+`adr/ADR-00X-enrg-core-vs-energy-profile.md` §7.
+
+
 ---
 
 # 7. Compliance Statement

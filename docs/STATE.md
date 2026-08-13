@@ -123,18 +123,25 @@ timelock (иначе `TimelockNotElapsed`); `vault.total_supply` увеличи�
 ## 6. Тест-статус
 
 - **Anchor TS (localnet):** `anchor test --skip-build` — зелёный прогон
-  (включая `tests/zz-e2e-smoke.ts`).
+  (включая `tests/zz-e2e-smoke.ts`, `tests/trust-ers-pool.ts` — Trust
+  Levels/ERS/Pool, `tests/founder-vesting.ts` — теперь с рантайм-тестом
+  `initialize_founder_vesting`).
 - **Rust unit:** `cargo test --manifest-path programs/enrg-mvp/Cargo.toml --lib`
-  — зелёные (включая юнит-инварианты vesting и governance).
+  — зелёные (61; включая юнит-инварианты vesting, governance,
+  tier-лимиты/`allows_increment`, ERS-математику, доли пула, формулу
+  эмиссии `E(S)=1 МВт·ч×10^S`, decimals/комиссию 15%).
 - **Документированные skips:**
-  - `it.skip` в `tests/founder-vesting.ts` — `initialize_founder_vesting`
-    (раньше требовал генезис-аккаунт; теперь обеспечивается
-    `Anchor.toml [test.validator]` и покрывается smoke).
   - `it.skip` в `tests/governance.ts` — полный проход `governance_mint` после
     7 дней (Clock-warp невозможен; покрыт юнит-инвариантом
     `approved_after_majority_and_timelock`).
   - `describe.skip` в `tests/devnet-merkle-proof-verification.test.ts`
     (devnet-зависимый).
+- **Mint-интеграция (tier-лимит в mint_energy, ERS-обновление, pool-вклад):**
+  рантайм-минт требует 2× Ed25519 + v0/LUT-транзакцию, которая на localnet
+  `anchor test` нестабильна (web3.js 1.98 + solana 3.1.8, ложный
+  «invalid index»); mint-логика покрыта Rust unit-тестами чистых функций
+  (`can_mint`, `allows_increment`, `compute_ers_score`, `pool_share_fp`,
+  `ers_pool_bonus_fp`), а полный on-chain минт — `scripts/devnet_e2e_lifecycle.ts`.
 - **Известный тех-долг (НЕ блокирует релиз):**
   - `8 × TS2339` в `tests/device-lifecycle.ts` (account namespace
     `energyProducer` не типизирован в IDL).
@@ -142,7 +149,7 @@ timelock (иначе `TimelockNotElapsed`); `vault.total_supply` увеличи�
     (4), `tests/devnet-merkle-proof-verification.test.ts` (3),
     `tests/helpers/program.ts` (2), `tests/helpers/debug-program.ts` (2),
     `tests/probe10.test.ts` (1). Итоговая база `npx tsc --noEmit` = **20 ошибок**,
-    smoke-тест новых не добавляет.
+    новые тесты новых не добавляют.
   - `set_vault_authority` — одношаговая смена (TODO(audit): двухшаговая +
     timelock/multisig).
 - **Devnet — фактическое состояние (verify-only прогон, `scripts/devnet_verify_governance.ts`):**
@@ -161,6 +168,8 @@ timelock (иначе `TimelockNotElapsed`); `vault.total_supply` увеличи�
   (`cargo build-sbf` → deploy) и повторная инициализация цепочки
   (`initialize_token → initialize_vault → allocate_founder →
   initialize_founder_vesting → initialize_governance`) по разделу 5.
+  После синхронизации кода (tiers/ERS/pool/governance-tighten, этот документ)
+  актуальна только эта операция; код больше не менялся.
 
 ## 7. Roadmap (добавляется upgrade-ом, не блокирует релиз)
 

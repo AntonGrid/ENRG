@@ -247,3 +247,71 @@ ENRG‑Core определяет:
   - должны явно указывать, относятся ли они:
     - к ENRG‑Core,
     - к конкретному deployment profile (и какому именно).
+
+---
+
+## 7. Осознанные MVP‑отклонения от Axis Core (ADR‑0002/0003/0006)
+
+Статус ревизии: **v7.0‑совместимая**. В реализации `enrg_mvp` (Solana/Anchor)
+приняты три осознанных компромисса ради стоимости и сложности MVP. Каждый
+компромисс зафиксирован с причиной и планом выноса.
+
+### 7.1. Verifier и Policy Engine совмещены on‑chain (ADR‑0003)
+
+- **Спека Axis Core (ADR‑0003):** Verifier отвечает только за криптографию и
+  передачу данных; решения о допустимости Proof, quarantine/state принимает
+  Policy Engine — отдельный компонент.
+- **MVP:** обе роли находятся в одной программе `enrg_mvp`:
+  - *Verifier‑часть:* Ed25519‑проверка подписи устройства и оракула
+    (`security::verify_ed25519_signature`), freshness/nonce
+    (`security::validation`), проверка канонических сообщений
+    (`security::lifecycle`).
+  - *Policy‑часть:* whitelist оракулов (`OracleRegistry`), гейтинг состояния
+    устройства (`can_mint`, ADR‑0005), лимиты tier (v7.0 §15), supply‑cap,
+    распределение фондов.
+- **Причина:** Solana‑MVP — одна программа, детерминизм, минимум деплоев.
+- **План выноса:** Policy Engine как отдельная on‑chain программа (или
+  PolicyRegistry под governance, ADR‑0009) с вызовом через CPI; trust‑конвейер
+  не меняется.
+
+### 7.2. Core и Domain Profile в одном контракте
+
+- **Спека:** ENRG‑Core (идентичность, proofs, экономика) и ENRG‑Energy Profile
+  (доменная метрика Wh/kWh/MWh) — отдельные слои.
+- **MVP:** `enrg_mvp` содержит и ядро, и экономику энергетического профиля;
+  `enrg-profile` (EnergyProfile PDA: rated_power, device_type, 30‑дневное окно)
+  уже вынесен в отдельную программу с CPI `record_production`.
+- **Причина:** разделение слоёв на Solana требует CPI и отдельных деплоев —
+  для MVP ядро + энергетическая экономика в одной программе дешевле.
+- **План:** полный вынос доменной логики в `enrg-profile` (и будущие профили
+  IoT/др.) через CPI; Core остаётся доменно‑нейтральным.
+
+### 7.3. Device Registry — источник истины (ADR‑0002)
+
+- `EnergyProducer` PDA (`[b"producer", device_id]`) — on‑chain источник истины
+  по состоянию устройства: lifecycle (ADR‑0005), tier (v7.0 §15), nonce/anti‑
+  replay. Метаданные (мощность, тип, локация) и скользящее окно — в
+  `enrg-profile` (EnergyProfile PDA), связанном по authority. Изменение
+  состояния устройства происходит только через registry‑инструкции
+  (`provision/activate/quarantine/revoke`), что соответствует ADR‑0002.
+
+### 7.4. Quarantine решает Policy Engine, а не Verifier
+
+- В MVP решение о quarantine/maintenance/revoke принимается явными
+  owner‑gated инструкциями (`device_lifecycle.rs`), а не Verifier'ом.
+  Аномалии профиля (v7.0 §27) фиксируются доверенным оракулом
+  (`report_anomaly`) и снижают ERS (v7.0 §16) — но не переводят устройство
+  в quarantine автоматически; прямое решение о state остаётся за Policy Engine
+  (будущая выделенная программа, см. 7.1).
+
+### 7.5. RFC 2119 — краткая сводка обязательности
+
+- MUST: доказательство владения ключом устройства при register/claim;
+  Ed25519‑подпись отчёта оракулом; nonce/timestamp anti‑replay;
+  supply‑cap ≤ MAX_SUPPLY_ATOMIC; одноразовый founder‑премайн;
+  эмиссия только через mint_energy/governance_mint.
+- SHOULD: ERS‑взвешивание пула; tier‑лимиты месяца.
+- MAY: premium‑доступ ENRG Market (`ers_premium_access` — интерфейс‑заглушка).
+
+---
+
