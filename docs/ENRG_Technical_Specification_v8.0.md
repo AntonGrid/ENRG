@@ -885,3 +885,42 @@ A compliant implementation SHALL satisfy the following requirements.
 - Every authenticated message MUST be signed.
 - Identity MUST remain stable throughout the device lifecycle.
 - Ownership MAY change independently from identity.
+
+---
+
+# 5. Founder Allocation & Vesting
+
+Fixed economic model (single variant, no alternatives).
+
+## 5.1 Allocation
+
+- Founder allocation = **20% of `MAX_SUPPLY_ATOMIC` (1e18)** = **2e17 atomic = 200,000,000 SRC** (`FOUNDER_ALLOCATION_ATOMIC`).
+- Beneficiary / owner of the ATA: `FOUNDER_WALLET` = `6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8`.
+
+## 5.2 Premine at launch
+
+Tokens are minted to the founder ATA (owner = `FOUNDER_WALLET`) **at contract initialization** (deploy), once, via `allocate_founder`.
+
+- The mint is counted in `vault.total_supply`.
+- The premine MUST NOT exceed `MAX_SUPPLY_ATOMIC` — guarded by `SupplyLimitExceeded`.
+- The premine is strictly **one-shot** — guarded by `TokenMint.founder_minted` (`FounderPremineAlreadyMinted`).
+- Only `FOUNDER_WALLET` may initiate it; tokens land only on an ATA owned by `FOUNDER_WALLET`.
+
+After the premine `vault.total_supply = 2e17`; it feeds `energy_per_src` / `supply_fraction`, so the starting emission difficulty accounts for the occupied supply share.
+
+## 5.3 Vesting schedule
+
+Vesting on the same founder ATA blocks withdrawal until the cliff:
+
+- `FOUNDER_VESTING_CLIFF` = **1 year** (`365*24*60*60`) — fully locked, zero tokens.
+- `FOUNDER_VESTING_RELEASE` = **3 years** (`3*365*24*60*60`) — linear release (≈1/36 per month).
+- Full cycle = CLIFF + RELEASE = **4 years**. After 4 years everything is unlocked.
+
+## 5.4 Claim
+
+`claim_vested` performs a REAL `token::transfer` from the founder ATA to the founder's destination ATA.
+
+- The source is strictly the founder ATA (controlled by the program) — tokens cannot be withdrawn early.
+- The claimable amount is bounded by the vested schedule minus already withdrawn amounts.
+- No alternative withdrawal path exists for the founder allocation.
+
