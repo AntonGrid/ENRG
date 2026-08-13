@@ -72,4 +72,27 @@ pub enum ErrorCode {
     SupplyLimitExceeded,
     #[msg("Founder premine already minted")]
     FounderPremineAlreadyMinted,
+    // ── Governance MVP (ADR-0009) ──
+    #[msg("Not governance authority")]
+    NotGovernanceAuthority,
+    #[msg("Not a governance member")]
+    NotGovernanceMember,
+    #[msg("Member already voted")]
+    MemberAlreadyVoted,
+    #[msg("No active proposal")]
+    NoActiveProposal,
+    #[msg("Proposal is not active")]
+    ProposalNotActive,
+    #[msg("Proposal is not approved")]
+    ProposalNotApproved,
+    #[msg("Timelock not elapsed yet")]
+    TimelockNotElapsed,
+    #[msg("Proposal amount exceeds the cap")]
+    AmountCapExceeded,
+    #[msg("Invalid member list (must be 3..=5 unique members)")]
+    InvalidMemberList,
+    #[msg("Duplicate member in list")]
+    DuplicateMember,
+    #[msg("Destination token account mint mismatch")]
+    DestinationMintMismatch,
 }

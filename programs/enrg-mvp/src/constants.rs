@@ -88,3 +88,24 @@ pub const MAX_DEVICES_PER_OWNER: u64 = 100;
 /// (Devnet продолжает использовать текущий program authority.)
 pub const FOUNDER_WALLET: Pubkey =
     pubkey!("6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8");
+
+// ══════════════════════════════════════════════════════════════
+//  Governance MVP (ADR-0009)
+//  Числа — атомарные единицы (1 SRC = 1e9 атомар; MAX_SUPPLY_ATOMIC = 1e18).
+// ══════════════════════════════════════════════════════════════
+
+/// Timelock: предложение исполняется не раньше, чем через 7 дней после одобрения.
+pub const TIMELOCK_DELAY: u64 = 7 * 24 * 60 * 60; // 604_800 s
+
+/// Максимум членов governance-списка.
+pub const GOVERNANCE_MEMBER_MAX: usize = 5;
+
+/// Минимум членов governance-списка.
+pub const GOVERNANCE_MIN_MEMBERS: usize = 3;
+
+/// Лимит эмиссии на одно governance-предложение (атомарные единицы).
+/// 1e15 атомар = 1_000_000 SRC = 0.1% от MAX_SUPPLY_ATOMIC.
+pub const PROPOSAL_AMOUNT_MAX_ATOMIC: u64 = 1_000_000_000_000_000; // 1e15
+
+/// Максимальная длина заголовка предложения (байт).
+pub const PROPOSAL_TITLE_MAX_LEN: usize = 64;
