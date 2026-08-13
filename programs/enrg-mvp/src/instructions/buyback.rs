@@ -6,11 +6,21 @@ use crate::state::*;
 
 /// Burns SRC tokens from the buyback fund.
 ///
-/// Anyone can trigger buyback & burn. Tokens are burned
+/// Только Vault.authority (protocol admin / временный governor) может
+/// инициировать buyback & burn. Tokens are burned
 /// from the protocol-owned buyback account, reducing total supply.
 /// Buyback PDA (fund-buyback) signs for burn because it is the owner of buyback_account.
+///
+/// TODO(audit, BLOCK 3): authority-only сейчас; при внедрении governance
+/// заменить на governor/мультисиг + (опционально) rate-limit.
 pub fn buyback_and_burn(ctx: Context<BuybackAndBurn>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::ZeroAmountMint);
+
+    // Авторизация: только Vault.authority (убирает "Anyone can burn").
+    require!(
+        ctx.accounts.vault.authority == ctx.accounts.authority.key(),
+        ErrorCode::Unauthorized
+    );
 
     // Check buyback balance
     let buyback_balance = ctx.accounts.buyback_account.amount;
@@ -54,6 +64,7 @@ pub fn buyback_and_burn(ctx: Context<BuybackAndBurn>, amount: u64) -> Result<()>
         amount,
         remaining: buyback_balance - amount,
         total_supply: vault.total_supply,
+        initiator: ctx.accounts.authority.key(),
     });
 
     msg!(
@@ -71,9 +82,13 @@ pub struct BuybackAndBurn<'info> {
     #[account(
         mut,
         seeds = [b"vault"],
-        bump
+        bump,
+        constraint = vault.authority == authority.key() @ ErrorCode::Unauthorized
     )]
     pub vault: Box<Account<'info, Vault>>,
+
+    /// Временный governor — Vault.authority (BLOCK 3: убрали "Anyone can burn").
+    pub authority: Signer<'info>,
 
     #[account(
         mut,

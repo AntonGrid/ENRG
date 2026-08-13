@@ -78,6 +78,8 @@ pub struct TokensBurned {
     pub remaining: u64,
     /// New total supply after burn.
     pub total_supply: u64,
+    /// Initiator of the burn (Vault.authority — governor).
+    pub initiator: Pubkey,
 }
 
 /// Emitted after SRC are withdrawn from a protocol fund
