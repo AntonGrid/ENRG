@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::{FOUNDER_VESTING_DURATION, FOUNDER_WALLET};
+use crate::constants::{FOUNDER_VESTING_CLIFF, FOUNDER_VESTING_RELEASE, FOUNDER_WALLET};
 use crate::error::ErrorCode;
 use crate::state::*;
 
@@ -41,7 +41,8 @@ pub fn initialize_founder_vesting(
     vesting.founder = FOUNDER_WALLET;
     vesting.total_amount = total_amount;
     vesting.start_time = now;
-    vesting.duration = FOUNDER_VESTING_DURATION;
+    vesting.cliff = FOUNDER_VESTING_CLIFF;
+    vesting.release = FOUNDER_VESTING_RELEASE;
     vesting.withdrawn = 0;
     vesting.last_claim = now;
 
@@ -61,14 +62,7 @@ pub fn claim_vested(
 
     let now = Clock::get()?.unix_timestamp;
 
-    let elapsed = (now - vesting.start_time)
-        .max(0)
-        .min(vesting.duration);
-
-    let vested =
-        ((vesting.total_amount as u128)
-            * (elapsed as u128)
-            / (vesting.duration as u128)) as u64;
+    let vested = vesting.vested_at(now);
 
     require!(
         vested >= vesting.withdrawn,
