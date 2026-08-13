@@ -309,4 +309,47 @@ pub mod enrg_mvp {
     ) -> Result<()> {
         instructions::device_lifecycle::revoke_device(ctx)
     }
+
+    // ═══════════════════════════════════════════
+    //  PHASE 10 — Governance MVP (ADR-0009)
+    // ═══════════════════════════════════════════
+
+    pub fn initialize_governance(
+        ctx: Context<InitializeGovernance>,
+        members: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::governance::initialize_governance(ctx, members)
+    }
+
+    pub fn update_members(
+        ctx: Context<UpdateMembers>,
+        members: Vec<Pubkey>,
+    ) -> Result<()> {
+        instructions::governance::update_members(ctx, members)
+    }
+
+    pub fn create_proposal(
+        ctx: Context<CreateProposal>,
+        id: u64,
+        title: String,
+        amount_atomic: u64,
+        destination: Pubkey,
+    ) -> Result<()> {
+        instructions::governance::create_proposal(ctx, id, title, amount_atomic, destination)
+    }
+
+    pub fn vote(
+        ctx: Context<Vote>,
+        proposal_id: u64,
+        yes: bool,
+    ) -> Result<()> {
+        instructions::governance::vote(ctx, proposal_id, yes)
+    }
+
+    pub fn governance_mint(
+        ctx: Context<GovernanceMint>,
+        proposal_id: u64,
+    ) -> Result<()> {
+        instructions::governance::governance_mint(ctx, proposal_id)
+    }
 }

@@ -89,6 +89,8 @@ pub enum ErrorCode {
     TimelockNotElapsed,
     #[msg("Proposal amount exceeds the cap")]
     AmountCapExceeded,
+    #[msg("Proposal not found")]
+    ProposalNotFound,
     #[msg("Invalid member list (must be 3..=5 unique members)")]
     InvalidMemberList,
     #[msg("Duplicate member in list")]
