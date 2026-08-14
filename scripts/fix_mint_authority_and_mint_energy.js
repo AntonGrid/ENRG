@@ -15,8 +15,8 @@ const crypto = require('crypto');
   console.log('Signer:', founder.publicKey.toBase58());
 
   const connection = new Connection('https://api.devnet.solana.com', 'confirmed');
-  const programId = new PublicKey('8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a');
-  const mint = new PublicKey('HzAWLdrMZiS2wEsnZc6hHmg4CdAZM4CaYMYv53BYqw6G');
+  const programId = new PublicKey('HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb');
+  const mint = new PublicKey('3PDsZUDQwgx1SV4dSTtyKDEoL9HYCdt4GN63UBYpLvwB');
   const [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from('vault')], programId);
   const [producerPda] = PublicKey.findProgramAddressSync([Buffer.from('producer'), founder.publicKey.toBuffer()], programId);
   const destination = getAssociatedTokenAddressSync(mint, founder.publicKey, false);

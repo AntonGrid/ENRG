@@ -12,7 +12,7 @@ const crypto = require("crypto");
   const programId = new PublicKey("934VCuafJTsGvJ43u2sqAv7VaxNGf8Egtk8wYAXh5crn");
 
   // USE THE EXISTING MINT (from the previous successful run)
-  const mint = new PublicKey("HzAWLdrMZiS2wEsnZc6hHmg4CdAZM4CaYMYv53BYqw6G");
+  const mint = new PublicKey("3PDsZUDQwgx1SV4dSTtyKDEoL9HYCdt4GN63UBYpLvwB");
   console.log("Using existing mint:", mint.toBase58());
 
   // PDAs (they already exist, but verify)

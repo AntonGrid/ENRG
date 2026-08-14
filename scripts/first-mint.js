@@ -9,9 +9,9 @@ const crypto = require("crypto");
   );
   const connection = new (require("@solana/web3.js").Connection)("https://api.devnet.solana.com");
 
-  const programId = new PublicKey("8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a");
+  const programId = new PublicKey("HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb");
 
-  const mint = new PublicKey("HzAWLdrMZiS2wEsnZc6hHmg4CdAZM4CaYMYv53BYqw6G");
+  const mint = new PublicKey("3PDsZUDQwgx1SV4dSTtyKDEoL9HYCdt4GN63UBYpLvwB");
   console.log("Using existing mint (SRC):", mint.toBase58());
 
   const [vaultPda] = await PublicKey.findProgramAddress([Buffer.from("vault")], programId);

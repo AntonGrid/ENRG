@@ -7,7 +7,7 @@ const crypto = require('crypto');
     Uint8Array.from(JSON.parse(fs.readFileSync('/home/enrg/founder-keypair.json', 'utf8')))
   );
   const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
-  const programId = new PublicKey('8JEw3eD7NgboNYcQQwoSsTG7UF8RrQpRnJzouDr6XQ8a');
+  const programId = new PublicKey('HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb');
   const deviceId = 'device-001';
 
   // PDA based on device_id (this is what the oracle uses)
