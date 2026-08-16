@@ -79,9 +79,11 @@ const SKIP_BOOTSTRAP = process.env.SKIP_BOOTSTRAP === "1";
 const ENDPOINT_IS_LOCAL =
   RPC_ENDPOINT.includes("127.0.0.1") || RPC_ENDPOINT.includes("localhost");
 
-// Параметры демо-минта: 10 kWh при rated_power 1 GW (energy_wh <= rated_power).
-const ENERGY_WH = new BN(10_000_000);
-const RATED_POWER = new BN(1_000_000_000);
+// Параметры демо-минта: 90 kWh при rated_power 1 MW.
+// M-4: MAX_RATED_POWER=1_000_000 Вт; тир Basic (v7.0 §15) лимит = 100_000 Wh/мес,
+// поэтому ENERGY_WH=90_000 < 100_000 (иначе mint падает с TierLimitExceeded).
+const ENERGY_WH = new BN(90_000);
+const RATED_POWER = new BN(1_000_000);
 const DEVICE_TYPE = "e2e-solar-panel";
 const LOCATION = "devnet-e2e";
 
@@ -827,6 +829,10 @@ async function oracleMint() {
       profileProgram: PROFILE_PROGRAM_ID,
       authority: operator.publicKey,
       profile: profilePda,
+      // Опциональные аккаунты (Anchor 0.32 требует явный null).
+      reputation: null,
+      pool: null,
+      poolShare: null,
     })
     .instruction();
 
