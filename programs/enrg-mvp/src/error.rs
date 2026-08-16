@@ -110,4 +110,9 @@ pub enum ErrorCode {
     NotInPool,
     #[msg("Pool distribution threshold not reached")]
     PoolThresholdNotReached,
+    // ── Policy Engine (ADR-0003) ──
+    #[msg("Mint is paused by the Policy Engine")]
+    MintPaused,
+    #[msg("Signer is not the policy authority")]
+    NotPolicyAuthority,
 }

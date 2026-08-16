@@ -234,3 +234,35 @@ pub struct PoolDistributed {
     pub total_reward: u64,
     pub members: u32,
 }
+
+/// Emitted when the Policy Registry is initialized (ADR-0003).
+#[event]
+pub struct PolicyRegistryInitialized {
+    pub authority: Pubkey,
+    pub version: u64,
+}
+
+/// Emitted when the policy set is updated (ADR-0003).
+#[event]
+pub struct PolicyUpdated {
+    pub policy_registry: Pubkey,
+    pub mint_enabled: bool,
+    pub enforce_oracle_whitelist: bool,
+    pub enforce_device_state: bool,
+    pub enforce_tier_limits: bool,
+    pub enforce_energy_caps: bool,
+    pub enforce_supply_cap: bool,
+    pub max_energy_bps: u64,
+    pub max_clock_skew_sec: i64,
+    pub version: u64,
+    pub updated_by: Pubkey,
+}
+
+/// Emitted when the policy authority role changes (ADR-0003 / ADR-0009).
+#[event]
+pub struct PolicyAuthorityChanged {
+    pub old_authority: Pubkey,
+    pub new_authority: Pubkey,
+    pub changed_by: Pubkey,
+}
+

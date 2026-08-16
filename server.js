@@ -85,6 +85,28 @@ if (!founderKeypair) {
     logger.warn('⚠️ Founder keypair not found. Minting will not work.');
 }
 
+// ХОЛОДНЫЙ ключ подписи прошивок (ADR-0008, D-5): ОТДЕЛЬНЫЙ от founder.
+// Образы OTA подписываются ЭТИМ ключом; приватный ключ хранится в
+// офлайн-хранилище (HSM/холодный кошелёк). Публичный ключ вшит в прошивку
+// как ENRG_FIRMWARE_PUBKEY_HEX. Dev-копия: firmware/firmware-signing-keypair.json.
+let firmwareSigningKeypair = null;
+function loadFirmwareSigningKeypair() {
+    const p = process.env.FIRMWARE_SIGNING_KEY_PATH ||
+        path.join(__dirname, 'firmware', 'firmware-signing-keypair.json');
+    const raw = fs.readFileSync(p, 'utf8');
+    return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw)));
+}
+try {
+    firmwareSigningKeypair = loadFirmwareSigningKeypair();
+    if (firmwareSigningKeypair) {
+        logger.info('✅ Loaded firmware-signing keypair (cold key): ' + firmwareSigningKeypair.publicKey.toBase58());
+    }
+} catch (e) {
+    firmwareSigningKeypair = null;
+    logger.warn('⚠️ Firmware-signing keypair not found (' +
+        'set FIRMWARE_SIGNING_KEY_PATH) — FALLBACK to founder key for OTA signing.');
+}
+
 // Мульти-владельческий mint (ADR-0003): для подписи OracleReport используется
 // ОТДЕЛЬНЫЙ ключ оракула (ORACLE_KEY / ORACLE_KEY_PATH), а не founder.
 // Публичный ключ оракула обязан быть в on-chain OracleRegistry (addOracle).
@@ -433,6 +455,7 @@ async function mintEnergy(proof) {
         const fundDaoPda = find('fund-dao');
         const fundEmergencyPda = find('fund-emergency');
         const oracleRegistryPda = find('oracle-registry');
+        const policyRegistryPda = find('policy-registry');
         const [producerPda] = PublicKey.findProgramAddressSync(
             [Buffer.from('producer'), deviceIdPubkey.toBuffer()], PROGRAM_ID
         );
@@ -469,6 +492,13 @@ async function mintEnergy(proof) {
             return { success: false, error: 'energy_profile_missing_on_chain' };
         }
 
+        // ADR-0003: Policy Registry (PDA [b"policy-registry"]). Если реестр
+        // не инициализирован — передаём null (дефолтные политики протокола,
+        // полная обратная совместимость). После инициализации политики
+        // управляются через update_policy (authority реестра).
+        const policyRegistryExists = await accountExists(connection, policyRegistryPda);
+        const policyRegistry = policyRegistryExists ? policyRegistryPda : null;
+
         // ── mint_energy через Anchor-клиент ──
         const mintIx = await program.methods.mintEnergy(report).accounts({
             producer: producerPda,
@@ -490,6 +520,7 @@ async function mintEnergy(proof) {
             reputation: reputationPda,
             pool: null,
             poolShare: null,
+            policyRegistry,
         }).instruction();
 
         // ── Две ed25519-precompile-инструкции ПЕРЕД mint_energy ──
@@ -510,6 +541,8 @@ async function mintEnergy(proof) {
             fundAtas.buyback, fundAtas.staking, fundAtas.dao, fundAtas.emergency,
             SYSVAR_INSTRUCTIONS_PUBKEY, oracleRegistryPda, TOKEN_PROGRAM_ID, PROFILE_PROGRAM_ID,
             oracleKeypair.publicKey, profilePda, Ed25519Program.programId,
+            // Policy Registry — только если инициализирован (ADR-0003).
+            ...(policyRegistry ? [policyRegistry] : []),
         ];
         const lut = await ensureLookupTable(connection, oracleKeypair, lutAddresses);
         const sig = await sendVersioned(connection, oracleKeypair, [edDeviceIx, edOracleIx, mintIx], lut);
@@ -724,7 +757,7 @@ app.post('/api/v1/firmware/update', express.raw({
         await fs.promises.writeFile(binPath, buf);
 
         const firmware = { version, image_hash, image_size };
-        const signature = policy.signFirmware(firmware, founderKeypair.secretKey);
+        const signature = policy.signFirmware(firmware, (firmwareSigningKeypair || founderKeypair).secretKey);
         const meta = {
             ...firmware,
             model,

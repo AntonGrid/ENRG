@@ -88,6 +88,7 @@ describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
 
     let server;
     let founderKp;
+    let fwKp;   // ХОЛОДНЫЙ firmware-signing ключ (ADR-0008, D-5) — отдельный от founder.
     let tmpDir;
     const PORT = 4030;
     const BASE = `http://127.0.0.1:${PORT}`;
@@ -109,6 +110,10 @@ describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
         founderKp = nacl.sign.keyPair();
         const keyFile = path.join(tmpDir, 'founder.json');
         fs.writeFileSync(keyFile, JSON.stringify(Array.from(founderKp.secretKey)));
+        // ADR-0008 (D-5): образы подписываются ОТДЕЛЬНЫМ firmware-ключом.
+        fwKp = nacl.sign.keyPair();
+        const fwKeyFile = path.join(tmpDir, 'fw-signing.json');
+        fs.writeFileSync(fwKeyFile, JSON.stringify(Array.from(fwKp.secretKey)));
         const updatesDir = path.join(tmpDir, 'updates');
 
         server = spawn('node', ['server.js'], {
@@ -117,6 +122,7 @@ describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
                 ...process.env,
                 PORT: String(PORT),
                 FOUNDER_KEY_PATH: keyFile,
+                FIRMWARE_SIGNING_KEY_PATH: fwKeyFile,
                 ENRG_SQLITE_PATH: path.join(tmpDir, 'enrg.db'),
                 ORACLE_URL: BASE,
                 FIRMWARE_ADMIN_KEY: ADMIN_KEY,
@@ -160,11 +166,12 @@ describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
         assert.strictEqual(res.status, 200);
         const meta = await res.json();
 
-        // Проверка подписи ключом основателя (как verifyFirmwareSignature в прошивке).
+        // Проверка подписи firmware-КЛЮЧОМ (D-5: холодный ключ, не founder),
+        // как verifyFirmwareSignature в прошивке (ENRG_FIRMWARE_PUBKEY_HEX).
         const v = policy.verifyFirmware(
             { version: meta.version, image_hash: meta.image_hash, image_size: meta.image_size },
             meta.signature,
-            founderKp.publicKey
+            fwKp.publicKey
         );
         assert.strictEqual(v.ok, true, JSON.stringify(v));
         assert.strictEqual(meta.version, '1.2.0');

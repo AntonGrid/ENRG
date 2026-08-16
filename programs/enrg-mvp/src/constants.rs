@@ -150,6 +150,10 @@ pub const POOL_THRESHOLD_MWH: u64 = 1;
 /// Переиспользуем масштаб из math.rs (FP_SCALE) через алиас.
 pub const POOL_FP_SCALE: u128 = crate::math::FP_SCALE;
 
+/// Дефолтный `max_energy_bps` Policy Registry: 10_000 == 100 % от rated_power
+/// (поведение протокола до введения Policy Engine, ADR-0003).
+pub const DEFAULT_MAX_ENERGY_BPS: u64 = 10_000;
+
 #[cfg(test)]
 mod tests {
     use super::*;

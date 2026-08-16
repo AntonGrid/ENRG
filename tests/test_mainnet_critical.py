@@ -57,13 +57,13 @@ def test_deploy_simulation():
         }
 
     required = {
-        "buybackAndBurn",
-        "mintEnergy",
+        "buyback_and_burn",
+        "mint_energy",
         "stake",
         "unstake",
-        "claimRewards",
-        "initializeToken",
-        "initConfig",
+        "claim_rewards",
+        "initialize_token",
+        "init_config",
     }
     missing = required - instruction_names
     assert not missing, f"Missing critical instructions: {missing}"

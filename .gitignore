@@ -80,3 +80,5 @@ enrg-wallet.json
 deploy/
 # OTA-образы прошивки, публикуемые оракулом (ADR-0008)
 firmware/updates/
+# Legacy-прошивки v1/v2 (заархивированы, НЕ трекать — D-1, ADR-0001/0007)
+firmware/legacy/

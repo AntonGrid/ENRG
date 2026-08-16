@@ -833,6 +833,8 @@ async function oracleMint() {
       reputation: null,
       pool: null,
       poolShare: null,
+      // ADR-0003: Policy Registry — опционален (null = дефолтные политики).
+      policyRegistry: null,
     })
     .instruction();
 

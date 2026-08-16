@@ -147,6 +147,34 @@ pub mod enrg_mvp {
     }
 
     // ═══════════════════════════════════════════
+    //  PHASE 3 — Policy Engine (ADR-0003)
+    // ═══════════════════════════════════════════
+
+    /// Инициализация Policy Registry (PDA [b"policy-registry"]).
+    /// Только EXPECTED_DEPLOYER. Дефолты = поведение протокола до Policy Engine.
+    pub fn initialize_policy_registry(
+        ctx: Context<InitializePolicyRegistry>,
+    ) -> Result<()> {
+        instructions::policy_engine::initialize_policy_registry(ctx)
+    }
+
+    /// Обновление набора политик (authority реестра).
+    pub fn update_policy(
+        ctx: Context<UpdatePolicy>,
+        update: PolicyUpdate,
+    ) -> Result<()> {
+        instructions::policy_engine::update_policy(ctx, update)
+    }
+
+    /// Смена администратора политик (далее — передача роли под Governance ADR-0009).
+    pub fn set_policy_authority(
+        ctx: Context<SetPolicyAuthority>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::policy_engine::set_policy_authority(ctx, new_authority)
+    }
+
+    // ═══════════════════════════════════════════
     //  PHASE 4 — Energy Minting
     // ═══════════════════════════════════════════
 

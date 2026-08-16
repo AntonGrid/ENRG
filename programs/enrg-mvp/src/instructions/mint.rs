@@ -3,9 +3,10 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
 use crate::constants::*;
 use crate::error::ErrorCode;
+use crate::instructions::policy_engine::{MintPreambleInput, MintRewardInput, PolicyEngine};
 use crate::math::calculate_reward_dynamic;
 use crate::security::verify_ed25519_signature;
-use crate::security::validation::{verify_nonce, verify_timestamp};
+use crate::security::validation::verify_nonce;
 use crate::state::*;
 
 /// Mint SRC tokens based on verified Oracle report.
@@ -15,16 +16,18 @@ use crate::state::*;
 /// are managed by enrg-profile via CPI — this instruction
 /// calls profile::record_production() after minting.
 ///
-/// NOTE (ADR-0003 conformance): Axis spec separates the Verifier
-/// (cryptography + data transfer) from the Policy Engine (decisions on
-/// Proof admissibility, quarantine, minting). In this Solana MVP the
-/// verifier and policy checks are co-located on-chain: whitelist of
-/// trusted oracles (OracleRegistry), device state gating (can_mint),
-/// energy limits, timestamp freshness and supply cap are all enforced
-/// here. This is a documented simplification acceptable for MVP;
-/// a separate off-chain Policy Engine (or on-chain PolicyRegistry
-/// governed per ADR-0009) can be introduced later without changing
-/// the trust pipeline.
+/// ADR-0003: Verifier и Policy Engine разделены. Эта инструкция — Verifier:
+/// проверяет Ed25519-подписи устройства и оракула, nonce и связку device_id,
+/// затем ИСПОЛНЯЕТ решение Policy Engine (`instructions::policy_engine` /
+/// PolicyRegistry, PDA `[b"policy-registry"]`). Все решения о допустимости
+/// Proof'а — whitelist оракулов (C-0), состояние устройства (ADR-0005),
+/// freshness, tier-лимиты (v7.0 §15), энергия за proof, supply cap и пауза
+/// минта — принимаются в PolicyEngine, а не здесь.
+///
+/// Обратная совместимость: если PolicyRegistry не инициализирован
+/// (policy_registry = None), применяются дефолтные политики протокола —
+/// поведение идентично версии до Policy Engine, существующие устройства
+/// и оракул работают без изменений.
 pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
     let vault = &mut ctx.accounts.vault;
@@ -33,21 +36,13 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // ── Device State check (ADR-0005) + tier-лимит месяца (v7.0 §15) ──
+    // ── Нормализация месячного окна (ADR-0005) ──
     producer.roll_month(now);
-    require!(
-        producer.can_mint(now),
-        ErrorCode::InvalidDeviceState
-    );
-    // ADR-0007: явная защита от минтинга отозванного устройства
-    // (can_mint уже учитывает флаг; проверка для надёжности и ясной ошибки).
-    require!(!producer.revoked, ErrorCode::DeviceRevoked);
 
-    // ══ C-0: оракул должен быть доверенным (OracleRegistry) ══
-    require!(
-        ctx.accounts.oracle_registry.contains(&report.oracle),
-        ErrorCode::UntrustedOracle
-    );
+    // ADR-0007: отозванное устройство не может минтить НИКОГДА — жёсткий
+    // инвариант протокола (не отключается политикой; policy управляет
+    // остальным gating по состоянию устройства).
+    require!(!producer.revoked, ErrorCode::DeviceRevoked);
 
     // ══ C-1: отчёт должен принадлежать именно этому устройству ══
     require!(
@@ -58,7 +53,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     // ══ C-2: подписант транзакции — владелец устройства ИЛИ оракул из отчёта ══
     // (мульти-владельческий mint: любой доверенный оракул из OracleRegistry
     //  может инициировать mint от имени устройства, не будучи его владельцем;
-    //  членство report.oracle в OracleRegistry уже проверено в C-0).
+    //  членство report.oracle в OracleRegistry проверяет Policy Engine — C-0).
     require!(
         mint_submitter_authorized(
             &producer.authority,
@@ -92,19 +87,20 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         &ctx.accounts.instructions.to_account_info(),
     )?;
 
-    // ── Proof validation: timestamp & nonce ──
-    verify_timestamp(now, report.verified_at)?;
+    // ── Proof validation: nonce (verifier) ──
     verify_nonce(producer, report.nonce)?;
 
-    // ── Tier increment check (v7.0 §15): отчёт не должен выходить за лимит месяца ──
-    require!(
-        producer.tier.allows_increment(producer.month_energy_wh, report.energy_wh),
-        ErrorCode::TierLimitExceeded
-    );
-
-    // ── Energy validation ──
-    let max_energy = ctx.accounts.profile.rated_power;
-    require!(report.energy_wh <= max_energy, ErrorCode::ExcessiveEnergy);
+    // ══ Policy Engine (ADR-0003): все решения о допустимости Proof'а ══
+    // Verifier (эта инструкция) не принимает решений — он исполняет политики
+    // из PolicyRegistry (или дефолты протокола, если реестр не инициализирован).
+    PolicyEngine::evaluate_preamble(MintPreambleInput {
+        policy: ctx.accounts.policy_registry.as_ref().map(|a| &**a),
+        producer: &*producer,
+        report: &report,
+        oracle_trusted: ctx.accounts.oracle_registry.contains(&report.oracle),
+        profile_rated_power: ctx.accounts.profile.rated_power,
+        now,
+    })?;
 
     // ── Update network sliding window ──
     let now_ts = clock.unix_timestamp;
@@ -155,15 +151,20 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         vault.network_energy_30d,
     );
 
-    // Никаких "пустых" минтов
-    require!(reward > 0, ErrorCode::ZeroAmountMint);
+    // ══ Policy Engine (ADR-0003): награда > 0 и supply cap ══
+    // Решение о допустимости награды и потолке эмиссии принимает PolicyEngine.
+    PolicyEngine::evaluate_reward(MintRewardInput {
+        policy: ctx.accounts.policy_registry.as_ref().map(|a| &**a),
+        reward,
+        vault_total_supply: vault.total_supply,
+        vault_max_supply: vault.max_supply,
+    })?;
 
-    // ── Check supply cap ──
+    // ── Check supply cap (итоговое значение для обновления vault) ──
     let new_supply = vault
         .total_supply
         .checked_add(reward)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
-    require!(new_supply <= vault.max_supply, ErrorCode::ArithmeticOverflow);
 
     // ── Calculate distributions ──
     let user_amount = reward
@@ -502,6 +503,16 @@ pub struct MintEnergy<'info> {
     /// Вклад участника пула (PDA [b"pool-share", pool, producer]).
     #[account(mut)]
     pub pool_share: Option<Account<'info, PoolContribution>>,
+
+    /// Policy Registry (ADR-0003): адресуемые политики минта. Опционально —
+    /// если PDA [b"policy-registry"] не инициализирован, применяются дефолтные
+    /// политики протокола (полная обратная совместимость с существующими
+    /// деплоями и устройствами).
+    #[account(
+        seeds = [b"policy-registry"],
+        bump
+    )]
+    pub policy_registry: Option<Account<'info, PolicyRegistry>>,
 }
 
 /// Разрешён ли подписант транзакции (submitter) инициировать mint для устройства:

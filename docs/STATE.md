@@ -21,7 +21,9 @@
 | Governance MVP (ADR-0009) | ✅ Реализовано | `instructions/governance.rs`, `state/governance.rs` |
 | Device-registry / device lifecycle (ADR-0002/0005) | ✅ Реализовано | `instructions/device_lifecycle.rs`, `state/owner_devices.rs` |
 | Manifest registry / merkle verification | ✅ Реализовано | `instructions/manifest_registry.rs`, `manifest_verification.rs`, `merkle_proof_verification.rs` |
-| Policy Engine (ADR-0003) | ⏸️ **СОЗНАТЕЛЬНО отложен** | Надстройка через upgrade-инструкцию; не блокирует релиз |
+| Policy Engine (ADR-0003) | ✅ **Реализовано** | `instructions/policy_engine.rs`, `state/policy.rs` (PolicyRegistry, PDA `[b"policy-registry"]`); `mint_energy` — Verifier, исполняет политики |
+| OTA + безопасные обновления (ADR-0008) | ✅ Реализовано | Firmware v3: подпись образов **отдельным холодным firmware-ключом** (`ENRG_FIRMWARE_PUBKEY_HEX`), SHA-256, анти-откат (NVS + опц. eFuse); dual-bank A/B (`partitions_ota.csv`) + monotonic eFuse (`esp32dev-ota`); сервер: `FIRMWARE_SIGNING_KEY_PATH` |
+| Аппаратная подпись устройства (ADR-0001/0007) | ⚠️ Частично | SE050-путь (аппаратная Ed25519, `esp32dev-se050`) + документированный компромисс (ATECC608A seed-vault, подпись в CPU) — `SE050-HARDWARE-SIGNING.md` |
 | Multisig для `set_vault_authority` / timelock-смен | ⏸️ Отложено (TODO(audit)) | `instructions/initialize.rs` |
 
 Принцип эмиссии: post-premine эмиссия **только** через governance;
@@ -177,9 +179,11 @@ timelock (иначе `TimelockNotElapsed`); `vault.total_supply` увеличи�
 
 ## 7. Roadmap (добавляется upgrade-ом, не блокирует релиз)
 
-- **Policy Engine (ADR-0003)** — отдельная on-chain PolicyRegistry / off-chain
-  engine поверх существующей trust-pipeline (сейчас verifier + policy
-  co-located в `mint_energy`; документированное упрощение MVP).
+- ~~**Policy Engine (ADR-0003)**~~ → **✅ Выполнено (2026-08-17):** отдельная
+  on-chain `PolicyRegistry` (`state/policy.rs`) + `PolicyEngine`
+  (`instructions/policy_engine.rs`); `mint_energy` — Verifier и исполняет
+  решения Policy Engine. Аккаунт `policy_registry` опционален в `MintEnergy`
+  (обратная совместимость: дефолты = прежнее поведение).
 - **Multisig + двухшаговая смена authority** для `set_vault_authority`
   (изменение layout Vault требует миграции задеплоенного аккаунта).
 - **DAO** — расширение governance MVP: делегирование, голосование по весу,

@@ -19,8 +19,18 @@ pub fn verify_nonce(producer: &EnergyProducer, nonce: u64) -> Result<()> {
 /// - метка не должна быть в будущем (допускается только отклонение часов MAX_CLOCK_SKEW);
 /// - метка не должна быть старше MAX_PROOF_AGE.
 pub fn verify_timestamp(now: i64, timestamp: i64) -> Result<()> {
+    verify_timestamp_with_skew(now, timestamp, MAX_CLOCK_SKEW)
+}
+
+/// Проверка временной метки с параметризуемым допустимым сдвигом часов
+/// (используется Policy Engine, ADR-0003).
+pub fn verify_timestamp_with_skew(
+    now: i64,
+    timestamp: i64,
+    max_clock_skew: i64,
+) -> Result<()> {
     require!(
-        timestamp <= now + MAX_CLOCK_SKEW,
+        timestamp <= now + max_clock_skew,
         ErrorCode::FutureTimestamp
     );
     require!(now - timestamp <= MAX_PROOF_AGE, ErrorCode::StaleProof);

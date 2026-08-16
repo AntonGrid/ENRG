@@ -1,0 +1,8 @@
+# ENRG — sdkconfig для env `esp32dev-ota` (ADR-0008).
+# Dual-bank OTA: автоматический rollback при невалидном новом образе.
+CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y
+# Аппаратный monotonic-счётчик анти-отката: secure_version в eFuse
+# (значение может только расти). Бутлоадер отказывает в запуске образов
+# со СТАРШЕЙ secure_version, чем в eFuse. Приложение повышает счётчик через
+# esp_efuse_update_secure_version() ПОСЛЕ успешного старта новой версии.
+CONFIG_BOOTLOADER_EFUSE_SECURE_VERSION=y

@@ -71,7 +71,7 @@
 | ADR-0005: состояния и переходы | ✅ Полное | `state/producer.rs:3-37` — матрица совпадает с ADR-0005 |
 | ADR-0006: Core vs Domain Profile | ⚠️ Частичное | `enrg-profile` вынесен; экономика осталась в ядре (`ADR-00X §7.2`) |
 | ADR-0007: управление ключами, ротация, аттестация, подпись firmware | ⚠️ Частичное / ❌ | Ed25519 везде, но нет ротации, нет root-key registry, нет COSE/CBOR, нет подписи прошивки |
-| ADR-0008: OTA и безопасные обновления | ❌ Не реализовано | Нет механизма OTA, dual-bank, anti-rollback |
+| ADR-0008: OTA и безопасные обновления | ⚠️ **Частично (улучшено 2026-08-17)** | OTA реализован (подпись+hash+анти-откат); добавлены холодный firmware-ключ, dual-bank A/B и аппаратный monotonic eFuse (env `esp32dev-ota`) |
 | ADR-0009: governance | ⚠️ Частичное (MVP) | `governance.rs` — members-голосование + timelock 7 дней; нет голосования токенами, Guardians, emergency flow |
 | wire-format.md: детерминированный формат | ⚠️ Частичное | Оракул — JSON; on-chain — бинарный канонический OracleReport (свой формат, документирован в ENRG ADR-001); Trust Envelope/MessageHeader не реализованы |
 | Merkle-верификация манифестов | ⚠️ Частичное | SHA-256 on-chain совпадает с off-chain registry; но подпись издателя не проверяется on-chain, leaf не привязан к content |
@@ -84,8 +84,8 @@
 
 | № | Требование AXIS | Факт в ENRG | Почему не соответствует | Ссылки |
 |---|---|---|---|---|
-| C-1 | ADR-0003: Verifier ≠ Policy Engine | Verifier и политики совмещены в `mint_energy` (whitelist оракулов, гейтинг состояния, tier-лимиты, supply-cap, распределение фондов) | ADR-0003: «Verifier executes actions **only after confirmation** from Policy Engine». Разделение не реализовано; осознанное отклонение | `mint.rs:18-27`, `ADR-00X §7.1` |
-| C-2 | ADR-0003: решения quarantine/maintenance принимает Policy Engine | Решения принимает владелец через явные owner-gated инструкции (`quarantine_device`, `maintenance_device` и т.д.); аномалии фиксирует оракул через `report_anomaly`, но state не меняет | Решение о quarantine принадлежит владельцу/оракулу, а не Policy Engine | `device_lifecycle.rs:297-307`, `lib.rs:337-342`, `ADR-00X §7.4` |
+| C-1 | ADR-0003: Verifier ≠ Policy Engine | **✅ ИСПРАВЛЕНО (2026-08-17):** отдельная on-chain `PolicyRegistry` (PDA `[b"policy-registry"]`) + `PolicyEngine::evaluate_preamble/evaluate_reward` (`instructions/policy_engine.rs`); `mint_energy` — Verifier, исполняет политики (whitelist, state, freshness, tier, энергия, пауза, supply cap) | Было: verifier+policy co-located в `mint_energy` (документированное упрощение). Теперь: `mint.rs:90-103,154-161` → `policy_engine.rs`; аккаунт опционален (обратная совместимость) | `state/policy.rs`, `instructions/policy_engine.rs`, `mint.rs` |
+| C-2 | ADR-0003: решения quarantine/maintenance принимает Policy Engine | ⚠️ **Частично:** решения о допустимости минта — у Policy Engine (P0-блокер D-2 закрыт для mint-пути). Решения quarantine/maintenance по-прежнему owner-gated (`quarantine_device`, `maintenance_device`) — зафиксированное отклонение §7.4 | `device_lifecycle.rs:297-307`, `lib.rs:337-342` |
 | C-3 | ADR-0002/0007: верификация подписи издателя манифеста | `register_manifest_verification` **просто сохраняет** `publisher_key` и `signature`, поле `verified=false`, подпись не проверяется | Любой аккаунт может зарегистрировать произвольный манифест; on-chain не обеспечивает подлинность манифестов | `instructions/manifest_verification.rs:22-50`, `state/manifest_verification.rs:4-28` |
 | C-4 | Merkle-верификация: leaf привязан к содержимому манифеста | `verify_merkle_proof` принимает `leaf_hash` от вызывающего и сверяет только с корнем; `content_hash` (Keccak) из `ManifestVerification` не используется | On-chain доказывает лишь «некий leaf в дереве», а не «leaf = содержимое манифеста N». Привязка — только off-chain (это же ограничение у reference, но оно перенесено без усиления) | `merkle_proof_verification.rs:143-182`, `state/manifest_verification.rs:11` |
 | C-5 | ADR-0007: ротация/отзыв ключей устройства | `device_id` = публичный ключ устройства, неизменяем; ротации и отзыва ключа нет; `set_oracle_authority` — мгновенная смена без timelock | ADR-0007 §4: «Keys MUST support rotation», «Old keys MUST be revocable» | `state/producer.rs:106-107`, `lib.rs:82-87`, `manifest_registry.rs` (SetOracleAuthority) |
@@ -121,10 +121,10 @@
 | № | Требование AXIS | Факт в ENRG | Почему не соответствует | Ссылки |
 |---|---|---|---|---|
 | F-1 | ADR-0001: подпись только на устройстве | ✅ v3: ключ генерируется при первой загрузке, подпись в CPU, binary-формат `device_id(32)\|\|nonce(8)\|\|ts(8)\|\|energy_wh(8)` совпадает с `OracleReport::device_message_to_sign()` | Соответствует | `firmware/esp32_proof_sender/src/esp32_proof_sender_v3.ino:250-280`, `state/oracle.rs:42-51` |
-| F-2 | ADR-0001/0007: ключ в Secure Element, подпись аппаратно | Ключ в NVS (flash) либо в Data-Zone слоте ATECC608A; **Ed25519-подпись выполняется в CPU** (ATECC608A не поддерживает Ed25519) | ADR-0007 §4: «Private keys MUST be stored in secure hardware module (SE/eFuse/TPM)». NVS без secure boot не соответствует; аппаратная подпись — TODO | `esp32_proof_sender_v3.ino:186-250, 349-368`, `README.md:16-19` |
-| F-3 | ADR-0001 (нарушение): legacy-прошивка с ключом в git | `esp32_proof_sender.ino` содержит **захардкоженный приватный ключ** (`0x01…0x20`) и публичный ключ, отправляет по **HTTP** | Прямое нарушение: приватный ключ опубликован в репозитории; любой может подписывать proofs от имени устройства | `firmware/esp32_proof_sender/esp32_proof_sender.ino:22-35,7` (файл отслеживается git — подтверждено `git ls-files`) |
+| F-2 | ADR-0001/0007: ключ в Secure Element, подпись аппаратно | ⚠️ **Частично (2026-08-17):** добавлен путь **NXP SE050** (`ENRG_USE_SE050=1`, env `esp32dev-se050`) — аппаратная Ed25519-подпись (ключ и подпись внутри чипа); серийный вариант без SE050 — документированный компромисс: ключ в NVS/Data-Zone ATECC608A, подпись в CPU | ADR-0007 §4: «Private keys MUST be stored in secure hardware module (SE/eFuse/TPM)». Без SE050 NVS не соответствует; SE050-путь требует чипа (reference implementation, bring-up). Остаточные риски задокументированы в `SE050-HARDWARE-SIGNING.md` | `esp32_proof_sender_v3.ino` (SE050-секция), `platformio.ini` (`esp32dev-se050`), `SE050-HARDWARE-SIGNING.md` |
+| F-3 | ADR-0001 (нарушение): legacy-прошивка с ключом в git | **✅ ИСПРАВЛЕНО (2026-08-17):** `esp32_proof_sender.ino` удалён из git; v1/v2 перенесены в `firmware/legacy/` (gitignored, вне поставки), ключ заредэктирован в архивной копии | Было: приватный ключ опубликован в репозитории | Было: `firmware/esp32_proof_sender/esp32_proof_sender.ino:22-35,7`; теперь: `firmware/legacy/` (архив вне git) |
 | F-4 | ADR-0004: устройство хранит подписанный Manifest и сверяет policy_version | Конфигурация захардкожена через `#define` (`ENRG_ORACLE_URL`, `ENRG_REPORT_INTERVAL_MS` и т.д.); манифест не загружается, не проверяется, `policy_version` отсутствует | ADR-0004 не реализован | `esp32_proof_sender_v3.ino:34-90` |
-| F-5 | ADR-0007 §6/ADR-0008: подпись firmware, верификация перед установкой, OTA | Нет механизма OTA, нет dual-bank, нет подписи прошивки, нет anti-rollback | ADR-0008 полностью не реализован | firmware (отсутствие соответствующих модулей) |
+| F-5 | ADR-0007 §6/ADR-0008: подпись firmware, верификация перед установкой, OTA | **✅ Реализовано (2026-08-17):** OTA (подпись `version\|hash\|size` **отдельным холодным firmware-ключом** `ENRG_FIRMWARE_PUBKEY_HEX`, SHA-256, анти-откат NVS); добавлены dual-bank A/B (`partitions_ota.csv`) и аппаратный monotonic-счётчик (eFuse secure_version, env `esp32dev-ota`) | ADR-0008: подпись+verify ✅; A/B+monotonic в env `esp32dev-ota` (bring-up) | `esp32_proof_sender_v3.ino` (OTA + `ota_mark_boot_ok`/`ota_mark_hardware_anti_rollback`), `partitions_ota.csv`, `sdkconfig.defaults.esp32dev-ota`, `server.js` (FIRMWARE_SIGNING_KEY_PATH) |
 | F-6 | ADR-0007: транспорт TLS | ✅ v3: HTTPS с проверкой корневого CA, mTLS опционально | Соответствует (v1 — нарушение, см. F-3) | `esp32_proof_sender_v3.ino:41-66, 300-344` |
 | F-7 | On-chain жизненный цикл: устройство само проходит register/claim | Прошивка реализует только отправку proof; on-chain register/claim выполняются скриптами/владельцем, а не устройством | Полный конвейер ADR-0005 (device-driven registration) на устройстве не реализован | `esp32_proof_sender_v3.ino` (нет register/claim), `scripts/create-producer-device.js` |
 
@@ -146,7 +146,7 @@
 ### Core Protocol
 1. **C-3 (манифесты):** добавить on-chain проверку Ed25519-подписи издателя в `register_manifest_verification` (использовать существующий паттерн `verify_ed25519_signature` через precompile), либо ограничить регистрацию только `oracle_authority` (Signer) до введения полноценного root-key registry.
 2. **C-4 (Merkle):** привязать `leaf_hash` к `manifest_verification.content_hash` on-chain (например, требовать `leaf_hash == sha256(manifest_id ‖ content_hash)`), чтобы proof доказывал подлинность именно содержимого манифеста.
-3. **C-1/C-2 (ADR-0003):** ввести отдельный on-chain `PolicyRegistry` под governance (или off-chain Policy Engine с подписанными решениями) — как минимум зафиксировать, что quarantine/allow/deny определяет policy, а не владелец и не оракул; убрать «встроенные» правила из `mint_energy` в параметризуемую политику.
+3. **C-1/C-2 (ADR-0003):** ~~ввести отдельный on-chain PolicyRegistry~~ → **✅ C-1 выполнено (2026-08-17):** on-chain `PolicyRegistry` + `PolicyEngine`; `mint_energy` исполняет политики. **Остаток C-2:** перевести решения quarantine/maintenance на Policy Engine (owner-gated инструкции сохраняются как управляющий контур; сама admissibility минта уже у политик).
 4. **C-5 (ротация ключей):** добавить `rotate_device_key` с подписью старого и нового ключей и историей ротации в `EnergyProducer`; разрешить отзыв ключа через owner/governance.
 5. **C-6 (governance):** расширить до ADR-0009: голосование по весу токенов, deposit, настраиваемые quorum/threshold, timelock как параметр, исполнение произвольных инструкций, emergency-флоу с высшим кворумом.
 6. **C-7:** сделать `set_vault_authority` двухшаговым (pending + timelock), а лучше — под multisig/Governance.
@@ -158,10 +158,10 @@
 10. **O-9:** заархивировать EVM-артефакты (`contracts/`, `onchain/`, `onchain_bridge.py`, `docs/onchain-attestation.md`) с пометкой legacy, чтобы не создавать дрейф.
 
 ### Firmware
-11. **F-2:** перейти на аппаратную Ed25519-подпись (NXP SE050/секурный элемент с Ed25519) или eFuse/secure boot + подпись в CPU с защищённым ключевым материалом; документировать остаточные риски NVS.
-12. **F-3 (критично):** удалить legacy v1 (`esp32_proof_sender.ino`) из git (или перенести в `_archive` вне поставки), иначе приватный ключ остаётся «в проде» как постоянная бомба.
+11. **F-2:** ~~перейти на аппаратную Ed25519-подпись~~ → **⚠️ Частично выполнено (2026-08-17):** добавлен SE050-путь (аппаратная Ed25519-подпись) + документированный компромисс (`SE050-HARDWARE-SIGNING.md`). Остаток: bring-up на железе, eFuse (secure boot/flash-encryption/JTAG off) в производстве.
+12. **F-3 (критично):** ~~удалить legacy v1 (`esp32_proof_sender.ino`) из git~~ → **✅ Выполнено (2026-08-17):** v1/v2 перенесены в `firmware/legacy/` (gitignored) и удалены из git.
 13. **F-4:** реализовать получение и проверку подписанного Device Manifest (ADR-0004): `GET /manifests?model=…`, проверка ED25519-подписи сервера, сверка `policy_version`, хранение в NVS.
-14. **F-5 (ADR-0008):** внедрить OTA: подпись образа firmware-ключом, проверка hash+signature перед установкой, A/B-банки или verified boot с откатом, anti-rollback счётчик.
+14. **F-5 (ADR-0008):** ~~внедрить OTA~~ → **✅ Выполнено (2026-08-17):** OTA (подпись холодным firmware-ключом + SHA-256 + анти-откат), dual-bank A/B + аппаратный monotonic eFuse (env `esp32dev-ota`). Остаток: bring-up на железе.
 15. **F-7:** реализовать в прошивке подпись register/claim-сообщений (`b"enrg:device:register"`, `b"enrg:device:claim"`), чтобы устройство могло само проходить on-chain lifecycle.
 
 ### Документация
@@ -174,15 +174,21 @@
 ## 6. Приоритетные фиксы (что делать в первую очередь)
 
 ### 🔴 P0 — блокеры мейннета (до любого продакшн-деплоя)
-1. **Удалить/изолировать legacy-прошивку с захардкоженным ключом** (`esp32_proof_sender.ino`) — угроза ADR-0001/0007 на уровне доверия.
-2. **On-chain верификация подписи манифеста + привязка leaf к содержимому** (C-3/C-4) — сейчас манифестный слой не даёт криптографических гарантий.
-3. **Исправить минт-путь для мульти-владельцев** (O-3/O-4) — текущий оракул минтит только за founder.
-4. **Решение по Policy Engine** (ADR-0003): либо реализовать, либо зафиксировать официальное отклонение со сроками — без этого формальная конформность не достигается.
-5. **Устройство должно получать и проверять Manifest** (ADR-0004) + **OTA** (ADR-0008) — без этого прошивка не соответствует ADR-0004/0008.
+1. ~~**Удалить/изолировать legacy-прошивку с захардкоженным ключом** (`esp32_proof_sender.ino`)~~ → **✅ Закрыт (2026-08-17):** v1/v2 удалены из git → `firmware/legacy/` (gitignored), ключ заредэктирован.
+2. ~~**On-chain верификация подписи манифеста + привязка leaf к содержимому** (C-3/C-4)~~ → **перенесено в P1 (D-7):** подпись издателя манифеста on-chain не проверяется (см. рекомендацию 6).
+3. ~~**Исправить минт-путь для мульти-владельцев** (O-3/O-4)~~ → **✅ Закрыт в предыдущем этапе:** `mint_submitter_authorized` (C-2: владелец ИЛИ доверенный оракул; награда — владельцу).
+4. ~~**Решение по Policy Engine** (ADR-0003)~~ → **✅ Закрыт (2026-08-17):** on-chain `PolicyRegistry` + `PolicyEngine` (`instructions/policy_engine.rs`); `mint_energy` — Verifier, исполняет политики.
+5. ~~**Устройство должно получать и проверять Manifest** (ADR-0004) + **OTA** (ADR-0008)~~ → **✅ Закрыто:** манифест (ADR-0004) — в предыдущем этапе; OTA (ADR-0008) усилен холодным firmware-ключом, dual-bank A/B и monotonic eFuse (2026-08-17).
+
+> **P0-блокеры второй волны (2026-08-17) — все 4 закрыты:**
+> 1. **D-1**: legacy-прошивка с ключом удалена из git → `firmware/legacy/` (gitignored), ключ заредэктирован.
+> 2. **D-2 (ADR-0003)**: on-chain `PolicyRegistry` (PDA `[b"policy-registry"]`) + `PolicyEngine`; `mint_energy` — Verifier, политики управляются через `update_policy`.
+> 3. **D-13 (ADR-0001/0007)**: SE050-путь (аппаратная Ed25519, env `esp32dev-se050`) + документированный компромисс (`SE050-HARDWARE-SIGNING.md`); `ENRG_FOUNDER_PUBKEY_HEX` заполнен реальным ключом.
+> 4. **D-4/D-5 (ADR-0008)**: отдельный холодный firmware-ключ (`ENRG_FIRMWARE_PUBKEY_HEX`, `FIRMWARE_SIGNING_KEY_PATH`), dual-bank A/B (`partitions_ota.csv`) + аппаратный monotonic-счётчик (eFuse secure_version, env `esp32dev-ota`).
 
 ### 🟠 P1 — до мейннета (важно)
 6. Governance: multisig/timelock для admin-операций (`set_vault_authority`), ротация ключей (C-5, C-6, C-7).
-7. Секьюрное хранение ключа устройства: аппаратная подпись или документированный компромисс (F-2).
+7. Секьюрное хранение ключа устройства: bring-up SE050 на железе + eFuse в производстве (F-2).
 8. Персистентность manifest registry + регламент якорения Merkle-корней (O-8, C-8).
 9. Удалить мёртвые/legacy артефакты (routes/manifestRoutes.js, EVM-мост) (O-7, O-9).
 10. Синхронизация документации и форматов (D-1…D-4, O-10/O-11).

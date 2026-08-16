@@ -5,8 +5,11 @@ Arduino sketches for ESP32 that read energy data from a PZEM-004T sensor, sign i
 ## Files
 
 - `src/esp32_proof_sender_v3.ino` — **актуальная безопасная версия** (H-3/H-4).
-- `esp32_proof_sender.ino` — legacy v1 (захардкоженный ключ — **не использовать**).
-- `../esp32_proof_sender_v2.ino` — legacy v2 (NVS-ключ, строковая подпись, HTTP — устарела).
+
+> ⚠️ **Legacy v1** (`esp32_proof_sender.ino`) и **v2** (`esp32_proof_sender_v2.ino`)
+> **удалены из репозитория** (P0-блокер D-1, нарушение ADR-0001/0007) и
+> заархивированы в `firmware/legacy/` (исключены из git через `.gitignore`).
+> Актуальна только v3.
 
 ## v3 — security-hardened
 
@@ -15,8 +18,10 @@ Arduino sketches for ESP32 that read energy data from a PZEM-004T sensor, sign i
   ATECC608A (`ENRG_USE_ATECC608=1`).
 - **H-4**: опциональный Secure Element ATECC608A. ВАЖНО: ATECC608A не умеет
   Ed25519 — чип используется как защищённое хранилище seed, подпись выполняется
-  в CPU. Аппаратная подпись Ed25519 требует чипа с поддержкой ed25519
-  (например, NXP SE050) — см. комментарии в коде.
+  в CPU. **Полная аппаратная подпись Ed25519** — NXP SE050
+  (`ENRG_USE_SE050=1`, env `esp32dev-se050`): ключ генерируется и подпись
+  выполняется ВНУТРИ чипа. См. **`SE050-HARDWARE-SIGNING.md`** (документированный
+  компромисс MVP + bring-up guide).
 - **Бинарный формат подписи** (on-chain): `device_id(32) || nonce(8 LE) || timestamp(8 LE) || energy_wh(8 LE)`
   — совпадает с `OracleReport::device_message_to_sign()`.
 - **Wall-clock** через NTP (`time()`), а не `millis()`.
@@ -78,7 +83,7 @@ device_id|rated_power|oracle_url|public_key|timestamp   →  Ed25519 (ключ �
 | #define | По умолчанию | Смысл |
 |---|---|---|
 | `ENRG_MANIFEST_URL_BASE` | `https://oracle.example.com/api/v1/manifest` | база URL эндпоинта манифестов |
-| `ENRG_FOUNDER_PUBKEY_HEX` | `0x00…00` (заглушка) | публичный ключ оракула (основателя), 32 байта hex — **обязательно заполнить** |
+| `ENRG_FOUNDER_PUBKEY_HEX` | `545ebb75…bfafd` (реальный founder-ключ) | публичный ключ оракула (основателя), 32 байта hex; соответствует founder-кошельку `~/.config/solana/founder-wallet.json` (base58 `6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8`). При смене FOUNDER_KEY на оракуле — обновить и перепрошить |
 | `ENRG_MANIFEST_REQUIRED` | `0` | `1` — без валидного манифеста proof'ы не отправляются |
 | `ENRG_MANIFEST_RETRY_MS` | `60000` | интервал повторного запроса манифеста (мс) |
 
@@ -98,7 +103,7 @@ GET {ENRG_FIRMWARE_URL_BASE}/latest/image → бинарный образ
 Формат подписи (каноническая строка, совпадает с `policy.js::buildFirmwareMessage`):
 
 ```text
-version|image_hash|image_size   →  Ed25519 (ключ основателя)
+version|image_hash|image_size   →  Ed25519 (ОТДЕЛЬНЫЙ холодный firmware-ключ, D-5)
 ```
 
 Цикл `checkForUpdates()`:
@@ -107,8 +112,8 @@ version|image_hash|image_size   →  Ed25519 (ключ основателя)
 2. **Анти-откат** — версия из метаданных должна быть **строго выше** текущей
    (`fw_version` в NVS); старые/равные образы отклоняются.
 3. **Проверка подписи** — `verify_firmware_signature()`: подпись метаданных
-   ключом основателя (`ENRG_FOUNDER_PUBKEY_HEX`); неподписанные/чужие образы
-   отклоняются.
+   **отдельным холодным firmware-ключом** (`ENRG_FIRMWARE_PUBKEY_HEX` — НЕ
+   founder-ключ); неподписанные/чужие образы отклоняются.
 4. **Скачивание** — `downloadFirmware()` пишет образ в LittleFS
    (`/fw_update.bin`) с параллельным вычислением SHA-256; расхождение с
    `image_hash` → отказ.
@@ -126,7 +131,34 @@ version|image_hash|image_size   →  Ed25519 (ключ основателя)
 | `ENRG_MAX_FW_SIZE` | `1300000` | максим. размер образа (байт) |
 
 > Публикация образов: `POST /api/v1/firmware/update` на оракуле (см.
-> `oracle/README.md`). Образы сохраняются в `firmware/updates/` (в `.gitignore`).
+> `oracle/README.md`). Образы подписываются **холодным firmware-ключом**
+> (сервер: `FIRMWARE_SIGNING_KEY_PATH`, по умолчанию
+> `firmware/firmware-signing-keypair.json`, gitignored); публичный ключ вшит
+> в прошивку как `ENRG_FIRMWARE_PUBKEY_HEX`. Образы сохраняются в
+> `firmware/updates/` (в `.gitignore`).
+
+### Dual-bank OTA + аппаратный monotonic-счётчик (ADR-0008)
+
+Для серийных устройств доступен env **`esp32dev-ota`** (A/B + аппаратный
+анти-откат):
+
+- **Dual-bank A/B** — `partitions_ota.csv`: `otadata` + `app0`/`app1`.
+  Новый образ стартует как «pending»; если приложение не подтвердило себя —
+  бутлоадер автоматически откатывается к предыдущему образу.
+- **Monotonic (eFuse)** — `sdkconfig.defaults.esp32dev-ota` включает
+  `CONFIG_BOOTLOADER_EFUSE_SECURE_VERSION`; `ota_mark_hardware_anti_rollback()`
+  «сжигает» версию в eFuse (значение только растёт) ПОСЛЕ успешного старта —
+  бутлоадер откажет в запуске образов со старшей версией-не-новичком.
+- **Подтверждение** — `ota_mark_boot_ok()` вызывает
+  `esp_ota_mark_app_valid_cancel_rollback()` после успешной инициализации
+  (ключ + WiFi + манифест + версия); при фатальной ошибке — rollback.
+
+```bash
+pio run -e esp32dev-ota
+```
+
+> ⚠️ Первый boot образа, собранного под `esp32dev-ota`, прожигает eFuse
+> (необратимо). Не путайте env'ы на одной плате.
 
 ### Отзыв и ротация ключей (ADR-0007)
 
