@@ -128,6 +128,25 @@ version|image_hash|image_size   →  Ed25519 (ключ основателя)
 > Публикация образов: `POST /api/v1/firmware/update` на оракуле (см.
 > `oracle/README.md`). Образы сохраняются в `firmware/updates/` (в `.gitignore`).
 
+### Отзыв и ротация ключей (ADR-0007)
+
+- **Отзыв** — устройство навсегда деактивируется (on-chain `revoke_device`):
+  состояние → `Revoked`, флаг `revoked=true`. Отозванное устройство **не может**
+  минтить и менять состояние. Инициируется владельцем или протокольным админом
+  (`POST /api/v1/device/revoke/:device_id` на оракуле).
+- **Ротация ключа** — владелец меняет публичный ключ устройства
+  (on-chain `rotate_device_key`). Требуется:
+  1. подпись владельца (authority) над `` `${device_id}|${new_device_id}` ``;
+  2. подпись **нового** ключа над `b"enrg:device:rotate" || new(32) || owner(32)
+     || nonce(8) || ts(8)` — proof-of-possession нового ключа.
+  После ротации: старая запись → `revoked` + `rotated_to` (аудит-след), новая
+  запись наследует состояние (owner, nonce, накопленную энергию, tier, state).
+  Для устройства это означает: сгенерировать новый Ed25519-ключ, зарегистрировать
+  его через оракул и продолжать отправлять proof'ы с новым ключом.
+- Эндпоинты оракула: `POST /api/v1/device/revoke/:device_id`,
+  `POST /api/v1/device/rotate/:device_id` (см. `oracle/README.md`).
+- Аудит: события `DeviceRevoked` и `DeviceKeyRotated` эмитятся on-chain.
+
 ### ATECC608A (Secure Element)
 
 ```bash

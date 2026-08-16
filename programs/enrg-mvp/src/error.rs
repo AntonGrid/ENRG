@@ -40,6 +40,10 @@ pub enum ErrorCode {
     DeviceInQuarantine,
     #[msg("Device is revoked — operation not allowed")]
     DeviceRevoked,
+    #[msg("Device is already revoked")]
+    DeviceAlreadyRevoked,
+    #[msg("New device key is already registered")]
+    NewDeviceKeyRegistered,
     #[msg("Device is not registered")]
     DeviceNotRegistered,
     #[msg("Device is already claimed by another wallet")]

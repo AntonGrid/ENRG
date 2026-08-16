@@ -39,6 +39,9 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         producer.can_mint(now),
         ErrorCode::InvalidDeviceState
     );
+    // ADR-0007: явная защита от минтинга отозванного устройства
+    // (can_mint уже учитывает флаг; проверка для надёжности и ясной ошибки).
+    require!(!producer.revoked, ErrorCode::DeviceRevoked);
 
     // ══ C-0: оракул должен быть доверенным (OracleRegistry) ══
     require!(

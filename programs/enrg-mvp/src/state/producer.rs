@@ -133,12 +133,25 @@ pub struct EnergyProducer {
 
     /// Временная метка успешного claim (аудит, ADR-0002).
     pub claimed_at: i64,
+
+    /// Флаг отзыва (ADR-0007). После revoke/rotate — true: устройство не может
+    /// минтить и менять состояние. Дублирует terminal-состояние
+    /// DeviceState::Revoked для defense-in-depth и простых проверок.
+    pub revoked: bool,
+
+    /// При ротации ключа (ADR-0007) — новый device_id. Pubkey::default(), если
+    /// ротации не было. Аудит-след old → new.
+    pub rotated_to: Pubkey,
 }
 
 impl EnergyProducer {
     /// Разрешено ли устройству минтить в момент `now`:
-    /// состояние Active (ADR-0005) И tier-лимит месяца не исчерпан (v7.0 §15).
+    /// не отозвано (ADR-0007) И состояние Active (ADR-0005) И tier-лимит
+    /// месяца не исчерпан (v7.0 §15).
     pub fn can_mint(&self, now: i64) -> bool {
+        if self.revoked {
+            return false;
+        }
         if !self.state.can_mint() {
             return false;
         }
@@ -193,6 +206,8 @@ mod tests {
             month_start_ts: start,
             claim_nonce: 0,
             claimed_at: 0,
+            revoked: false,
+            rotated_to: Pubkey::default(),
         }
     }
 
@@ -236,6 +251,28 @@ mod tests {
         assert!(!v.can_mint(1_000));
         let i = producer_with(DeviceState::Active, DeviceTier::Industrial, u64::MAX, 1_000);
         assert!(i.can_mint(1_000));
+    }
+
+    #[test]
+    fn revoked_device_cannot_mint() {
+        // ADR-0007: флаг revoked блокирует mint даже в состоянии Active.
+        let mut p = producer_with(DeviceState::Active, DeviceTier::Industrial, 0, 1_000);
+        assert!(p.can_mint(1_000));
+        p.revoked = true;
+        assert!(!p.can_mint(1_000), "revoked device must not mint");
+        // И state-переход из Revoked невозможен (терминальное состояние).
+        assert!(!DeviceState::Revoked.can_transition_to(DeviceState::Active));
+        assert!(!DeviceState::Revoked.can_transition_to(DeviceState::Provisioned));
+    }
+
+    #[test]
+    fn rotated_to_tracks_audit() {
+        let mut p = producer_with(DeviceState::Active, DeviceTier::Basic, 0, 1_000);
+        let new_key = Pubkey::new_unique();
+        p.rotated_to = new_key;
+        p.revoked = true;
+        assert_eq!(p.rotated_to, new_key);
+        assert!(p.revoked);
     }
 
     #[test]

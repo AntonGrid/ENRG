@@ -160,6 +160,22 @@ pub struct DeviceRevoked {
     pub timestamp: i64,
 }
 
+/// Emitted when a device key is rotated (ADR-0007).
+/// Старая запись помечается revoked/rotated_to; новая запись наследует
+/// состояние (nonce, энергия, tier, owner).
+#[event]
+pub struct DeviceKeyRotated {
+    /// Старый (отозванный) device_id.
+    pub device_id: Pubkey,
+    /// Новый device_id (публичный ключ устройства).
+    pub new_device_id: Pubkey,
+    /// Владелец (authority) — остаётся прежним.
+    pub owner: Pubkey,
+    /// Кто инициировал ротацию (owner или протокольный админ).
+    pub changed_by: Pubkey,
+    pub timestamp: i64,
+}
+
 /// Emitted when a device is released from quarantine
 /// (ADR-0005: QUARANTINE → ACTIVE; owner-gated).
 #[event]

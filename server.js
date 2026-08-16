@@ -731,6 +731,156 @@ app.get('/api/v1/firmware/latest/image', (req, res) => {
 });
 
 
+// === ОТЗЫВ / РОТАЦИЯ КЛЮЧА УСТРОЙСТВА (ADR-0007) ===
+// Оба эндпоинта вызывают on-chain инструкции программы enrg_mvp.
+// Транзакции подписываются ключом основателя (founder), который является
+// vault.authority (протокольный админ) — on-chain это разрешено.
+
+/** PDA producer'а: [b"producer", device_id]. */
+function findProducerPda(deviceIdPubkey) {
+    return PublicKey.findProgramAddressSync(
+        [Buffer.from('producer'), deviceIdPubkey.toBuffer()], PROGRAM_ID
+    )[0];
+}
+
+/** PDA Vault: [b"vault"]. */
+function findVaultPda() {
+    return PublicKey.findProgramAddressSync([Buffer.from('vault')], PROGRAM_ID)[0];
+}
+
+/** Поднять Anchor-клиент (как в mintEnergy). */
+function anchorProgram(connection) {
+    const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(founderKeypair), {
+        commitment: 'confirmed',
+        preflightCommitment: 'confirmed',
+    });
+    return new anchor.Program(IDL, provider);
+}
+
+// POST /api/v1/device/revoke/:device_id — отзыв устройства (только основатель).
+app.post('/api/v1/device/revoke/:device_id', async (req, res) => {
+    const deviceId = req.params.device_id;
+    const d = policy.validateDeviceId(deviceId);
+    if (!d.ok) return res.status(400).json({ error: d.error });
+    if (!d.deviceIdPubkey) return res.status(400).json({ error: 'invalid device_id (must be a 32-byte key)' });
+    if (!founderKeypair) return res.status(500).json({ error: 'founder_key_missing' });
+    if (!IDL) return res.status(500).json({ error: 'idl_missing' });
+
+    try {
+        const connection = new Connection(RPC_ENDPOINT, 'confirmed');
+        const program = anchorProgram(connection);
+
+        const producerPda = findProducerPda(d.deviceIdPubkey);
+        // owner_devices — Option-аккаунт; передаём null (админ-отзыв не обязан
+        // иметь owner_devices). on-chain корректно обрабатывает None.
+        const tx = await program.methods
+            .revokeDevice()
+            .accounts({
+                authority: founderKeypair.publicKey,
+                producer: producerPda,
+                ownerDevices: null,
+                vault: findVaultPda(),
+            })
+            .rpc();
+        logger.warn(`⛔ Device revoked (admin): ${deviceId}, tx=${tx}`);
+        res.json({ ok: true, device_id: deviceId, tx });
+    } catch (e) {
+        logger.error('❌ revoke on-chain failed:', e && e.message);
+        res.status(500).json({ error: 'revoke_onchain_failed', reason: (e && e.message) || 'rpc error' });
+    }
+});
+
+
+// POST /api/v1/device/rotate/:device_id
+// Body: { new_device_id, owner_signature, new_device_signature }
+//   owner_signature — Ed25519 подпись владельца (authority producer'а) над
+//     `${device_id}|${new_device_id}` — подтверждение намерения владельца;
+//   new_device_signature — Ed25519 подпись НОВОГО ключа над бинарным сообщением
+//     b"enrg:device:rotate" || new(32) || owner(32) || nonce(8) || ts(8)
+//     (зеркало on-chain rotate_device_key).
+app.post('/api/v1/device/rotate/:device_id', async (req, res) => {
+    const deviceId = req.params.device_id;
+    const { new_device_id, owner_signature, new_device_signature } = req.body || {};
+
+    const d = policy.validateDeviceId(deviceId);
+    if (!d.ok) return res.status(400).json({ error: d.error });
+    if (!d.deviceIdPubkey) return res.status(400).json({ error: 'invalid device_id (must be a 32-byte key)' });
+    const nd = policy.validateDeviceId(new_device_id);
+    if (!nd.ok || !nd.deviceIdPubkey) return res.status(400).json({ error: 'invalid new_device_id' });
+    if (nd.deviceIdPubkey.equals(d.deviceIdPubkey)) {
+        return res.status(400).json({ error: 'new_device_id must differ from device_id' });
+    }
+    if (typeof owner_signature !== 'string' || typeof new_device_signature !== 'string') {
+        return res.status(400).json({ error: 'owner_signature and new_device_signature are required' });
+    }
+    if (!founderKeypair) return res.status(500).json({ error: 'founder_key_missing' });
+    if (!IDL) return res.status(500).json({ error: 'idl_missing' });
+
+    try {
+        const connection = new Connection(RPC_ENDPOINT, 'confirmed');
+        const program = anchorProgram(connection);
+        const producerPda = findProducerPda(d.deviceIdPubkey);
+
+        // 1) Владелец устройства — из on-chain producer (authority).
+        let producer;
+        try {
+            producer = await program.account.energyProducer.fetch(producerPda);
+        } catch (e) {
+            return res.status(404).json({ error: 'device_not_registered_on_chain', reason: (e && e.message) || '' });
+        }
+        const ownerPubkey = new PublicKey(producer.authority.toBytes());
+
+        // 2) Подпись владельца над `${device_id}|${new_device_id}`.
+        const authMsg = Buffer.from(`${deviceId}|${new_device_id}`, 'utf8');
+        const ownerOk = nacl.sign.detached.verify(
+            new Uint8Array(authMsg),
+            new Uint8Array(Buffer.from(owner_signature, 'base64')),
+            new Uint8Array(ownerPubkey.toBytes())
+        );
+        if (!ownerOk) return res.status(403).json({ error: 'invalid owner signature' });
+
+        // 3) Подпись нового ключа (PoP) над бинарным rotate-сообщением.
+        const nowSec = Math.floor(Date.now() / 1000);
+        const rotateNonce = nowSec; // монотонный nonce (unixtime) — > claim_nonce
+        const rotateTimestamp = nowSec;
+        const rmsg = policy.buildDeviceRotateMessage(
+            nd.deviceIdPubkey, ownerPubkey, rotateNonce, rotateTimestamp
+        );
+        const newKeyOk = nacl.sign.detached.verify(
+            new Uint8Array(rmsg),
+            new Uint8Array(Buffer.from(new_device_signature, 'base64')),
+            new Uint8Array(nd.deviceIdPubkey.toBytes())
+        );
+        if (!newKeyOk) return res.status(403).json({ error: 'invalid new device signature (proof-of-possession)' });
+
+        // 4) On-chain rotate (подписывает founder как протокольный админ).
+        const newProducerPda = findProducerPda(nd.deviceIdPubkey);
+        const tx = await program.methods
+            .rotateDeviceKey(
+                nd.deviceIdPubkey,
+                Array.from(Buffer.from(new_device_signature, 'base64')),
+                new anchor.BN(rotateNonce),
+                new anchor.BN(rotateTimestamp),
+            )
+            .accounts({
+                authority: founderKeypair.publicKey,
+                oldProducer: producerPda,
+                newDeviceId: nd.deviceIdPubkey,
+                newProducer: newProducerPda,
+                vault: findVaultPda(),
+                instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+                systemProgram: SystemProgram.programId,
+            })
+            .rpc();
+        logger.warn(`🔄 Device key rotated: ${deviceId} -> ${new_device_id}, tx=${tx}`);
+        res.json({ ok: true, device_id: deviceId, new_device_id, tx });
+    } catch (e) {
+        logger.error('❌ rotate on-chain failed:', e && e.message);
+        res.status(500).json({ error: 'rotate_onchain_failed', reason: (e && e.message) || 'rpc error' });
+    }
+});
+
+
 // === СОЗДАНИЕ ПУЛА ===
 app.post('/api/v1/pool/create', async (req, res) => {
     const { pool_id, threshold } = req.body;

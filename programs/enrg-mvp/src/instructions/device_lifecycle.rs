@@ -4,7 +4,9 @@ use crate::constants::{
     ENRG_PROFILE_PROGRAM_ID, INSTRUCTIONS_SYSVAR_ID, MAX_CLOCK_SKEW, MAX_DEVICES_PER_OWNER,
 };
 use crate::error::ErrorCode;
-use crate::security::lifecycle::{device_claim_message, device_register_message};
+use crate::security::lifecycle::{
+    device_claim_message, device_register_message, device_rotate_message,
+};
 use crate::security::verify_ed25519_signature;
 use crate::state::*;
 
@@ -154,6 +156,9 @@ pub fn claim_device(
 ) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
 
+    // ADR-0007: отозванное устройство не может быть заклеймлено.
+    require!(!producer.revoked, ErrorCode::DeviceRevoked);
+
     // Переход только из REGISTERED (ADR-0005).
     require!(producer.state == DeviceState::Registered, ErrorCode::InvalidDeviceState);
     // Устройство не должно быть уже привязано к кошельку.
@@ -245,6 +250,10 @@ pub struct InitEnergyProfile<'info> {
 }
 
 pub fn init_energy_profile(ctx: Context<InitEnergyProfile>) -> Result<()> {
+    require!(
+        !ctx.accounts.producer.revoked,
+        ErrorCode::DeviceRevoked // ADR-0007: отозванному устройству профиль не создаём
+    );
     let authority_key = ctx.accounts.authority.key();
     let profile_seeds = &[b"profile".as_ref(), authority_key.as_ref()];
     let (profile_pda, _bump) = Pubkey::find_program_address(
@@ -297,6 +306,7 @@ pub struct ProvisionDevice<'info> {
 
 pub fn provision_device(ctx: Context<ProvisionDevice>) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
+    require!(!producer.revoked, ErrorCode::DeviceRevoked); // ADR-0007
     require!(
         producer.state.can_transition_to(DeviceState::Provisioned),
         ErrorCode::InvalidStateTransition
@@ -337,6 +347,7 @@ pub struct ActivateDevice<'info> {
 
 pub fn activate_device(ctx: Context<ActivateDevice>) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
+    require!(!producer.revoked, ErrorCode::DeviceRevoked); // ADR-0007
     require!(
         producer.state.can_transition_to(DeviceState::Active),
         ErrorCode::InvalidStateTransition
@@ -389,6 +400,7 @@ pub struct QuarantineDevice<'info> {
 
 pub fn quarantine_device(ctx: Context<QuarantineDevice>) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
+    require!(!producer.revoked, ErrorCode::DeviceRevoked); // ADR-0007
     require!(
         producer.state.can_transition_to(DeviceState::Quarantine),
         ErrorCode::InvalidStateTransition
@@ -432,6 +444,7 @@ pub struct MaintenanceDevice<'info> {
 
 pub fn maintenance_device(ctx: Context<MaintenanceDevice>) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
+    require!(!producer.revoked, ErrorCode::DeviceRevoked); // ADR-0007
     require!(
         producer.state.can_transition_to(DeviceState::Maintenance),
         ErrorCode::InvalidStateTransition
@@ -456,39 +469,67 @@ pub fn maintenance_device(ctx: Context<MaintenanceDevice>) -> Result<()> {
 
 #[derive(Accounts)]
 pub struct RevokeDevice<'info> {
+    /// Владелец устройства ИЛИ протокольный админ (vault.authority).
     pub authority: Signer<'info>,
+
     #[account(
         mut,
         seeds = [b"producer", producer.device_id.as_ref()],
         bump,
-        has_one = authority @ ErrorCode::Unauthorized,
         constraint = producer.device_id != Pubkey::default() @ ErrorCode::InvalidParameter
     )]
     pub producer: Account<'info, EnergyProducer>,
 
     /// Per-owner registry — счётчик активных устройств (BLOCK 4).
+    /// Опционально: для незаклеймленных устройств (authority == default)
+    /// аккаунта владельца может не существовать (админ-отзыв).
     #[account(
         mut,
-        seeds = [b"owner-devices", authority.key().as_ref()],
+        seeds = [b"owner-devices", producer.authority.as_ref()],
         bump,
-        constraint = owner_devices.owner == authority.key() @ ErrorCode::Unauthorized
+        constraint = owner_devices.owner == producer.authority @ ErrorCode::Unauthorized
     )]
-    pub owner_devices: Account<'info, OwnerDevices>,
+    pub owner_devices: Option<Account<'info, OwnerDevices>>,
+
+    /// Vault — протокольный админ (vault.authority) может отозвать устройство
+    /// (ADR-0005: «by owner or system»). Опционален: owner-отзыв работает без
+    /// vault (обратная совместимость).
+    #[account(seeds = [b"vault"], bump)]
+    pub vault: Option<Account<'info, Vault>>,
 }
 
 pub fn revoke_device(ctx: Context<RevokeDevice>) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
+
+    // ADR-0007: повторный отзыв недопустим (терминальное состояние).
+    require!(!producer.revoked, ErrorCode::DeviceAlreadyRevoked);
+
+    // Авторизация: владелец ИЛИ протокольный админ (vault.authority).
+    let is_owner = producer.authority == ctx.accounts.authority.key();
+    let is_admin = ctx
+        .accounts
+        .vault
+        .as_ref()
+        .map(|v| v.authority == ctx.accounts.authority.key())
+        .unwrap_or(false);
+    require!(is_owner || is_admin, ErrorCode::Unauthorized);
+
+    // Отзыв возможен из любого не-терминального состояния (ADR-0005/0007:
+    // «permanent decommissioning by owner or system»).
     require!(
-        producer.state.can_transition_to(DeviceState::Revoked),
-        ErrorCode::InvalidStateTransition
+        producer.state != DeviceState::Revoked,
+        ErrorCode::DeviceAlreadyRevoked
     );
+
     // Уменьшаем счётчик только если устройство уходит из Active
     // (из Quarantine/Maintenance счётчик уже уменьшен ранее).
     if producer.state == DeviceState::Active {
-        let owner_devices = &mut ctx.accounts.owner_devices;
-        owner_devices.active_count = owner_devices.active_count.saturating_sub(1);
+        if let Some(owner_devices) = &mut ctx.accounts.owner_devices {
+            owner_devices.active_count = owner_devices.active_count.saturating_sub(1);
+        }
     }
     producer.state = DeviceState::Revoked;
+    producer.revoked = true; // ADR-0007: явный флаг отзыва
 
     let clock = Clock::get()?;
     emit!(DeviceRevoked {
@@ -497,6 +538,147 @@ pub fn revoke_device(ctx: Context<RevokeDevice>) -> Result<()> {
         timestamp: clock.unix_timestamp,
     });
     msg!("Device revoked: {}", producer.device_id);
+    Ok(())
+}
+
+// ══════════════════════════════════════════════════════════════
+//  ROTATE KEY — ротация ключа устройства (ADR-0007)
+// ══════════════════════════════════════════════════════════════
+//  Владелец (или протокольный админ) меняет публичный ключ устройства.
+//  НОВЫЙ ключ обязан подписать сообщение
+//    b"enrg:device:rotate" || new_device_id(32) || owner(32)
+//                          || rotate_nonce(8 LE) || rotate_timestamp(8 LE)
+//  — proof-of-possession нового ключа (ADR-0007 §4).
+//
+//  Реализация: создаётся новая запись EnergyProducer с seed
+//  [b"producer", new_device_id] (PDA определяется новым ключом), в неё
+//  копируется состояние (nonce, энергия, tier, owner, state). Старая запись
+//  помечается revoked + rotated_to = new_device_id (аудит-след). Счётчик
+//  активных устройств не меняется: устройство остаётся тем же, меняется ключ.
+#[derive(Accounts)]
+#[instruction(new_device_id: Pubkey)]
+pub struct RotateDeviceKey<'info> {
+    /// Владелец устройства ИЛИ протокольный админ (vault.authority).
+    /// mut — т.к. является payer для init новой записи.
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    /// Текущая запись устройства (PDA от старого device_id).
+    #[account(
+        mut,
+        seeds = [b"producer", old_producer.device_id.as_ref()],
+        bump,
+        constraint = old_producer.device_id != Pubkey::default() @ ErrorCode::InvalidParameter
+    )]
+    pub old_producer: Account<'info, EnergyProducer>,
+
+    /// Новый публичный ключ устройства (Ed25519, 32 байта) — новый seed PDA.
+    /// CHECK: используется только для вывода PDA seeds и проверки подписи.
+    #[account(
+        constraint = new_device_id.key() != Pubkey::default() @ ErrorCode::InvalidParameter
+    )]
+    pub new_device_id: UncheckedAccount<'info>,
+
+    /// Новая запись устройства (PDA от нового device_id) — наследует состояние.
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + EnergyProducer::INIT_SPACE,
+        seeds = [b"producer", new_device_id.key().as_ref()],
+        bump
+    )]
+    pub new_producer: Account<'info, EnergyProducer>,
+
+    /// Vault — проверка админ-роли (authority == vault.authority).
+    /// Опционален: owner-ротация работает без vault (обратная совместимость).
+    #[account(seeds = [b"vault"], bump)]
+    pub vault: Option<Account<'info, Vault>>,
+
+    /// CHECK: sysvar Instructions — ed25519-precompile с подписью НОВОГО ключа.
+    #[account(
+        constraint = instructions.key() == INSTRUCTIONS_SYSVAR_ID @ ErrorCode::InvalidInstructionsAccount
+    )]
+    pub instructions: UncheckedAccount<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+pub fn rotate_device_key(
+    ctx: Context<RotateDeviceKey>,
+    new_device_id: Pubkey,
+    device_signature: [u8; 64],
+    rotate_nonce: u64,
+    rotate_timestamp: i64,
+) -> Result<()> {
+    let old = &mut ctx.accounts.old_producer;
+
+    // ADR-0007: отозванное устройство не ротируем.
+    require!(!old.revoked, ErrorCode::DeviceAlreadyRevoked);
+    require!(old.device_id != new_device_id, ErrorCode::InvalidParameter);
+    require!(
+        ctx.accounts.new_device_id.key() == new_device_id,
+        ErrorCode::InvalidParameter
+    );
+    require!(old.state != DeviceState::Revoked, ErrorCode::DeviceAlreadyRevoked);
+
+    // Авторизация: владелец ИЛИ протокольный админ (vault.authority).
+    let is_owner = old.authority == ctx.accounts.authority.key();
+    let is_admin = ctx
+        .accounts
+        .vault
+        .as_ref()
+        .map(|v| v.authority == ctx.accounts.authority.key())
+        .unwrap_or(false);
+    require!(is_owner || is_admin, ErrorCode::Unauthorized);
+
+    let clock = Clock::get()?;
+    require!(rotate_timestamp > 0, ErrorCode::InvalidParameter);
+    require!(
+        rotate_timestamp <= clock.unix_timestamp + MAX_CLOCK_SKEW,
+        ErrorCode::FutureTimestamp
+    );
+    // Anti-replay: rotate-nonce строго возрастает относительно claim_nonce.
+    require!(rotate_nonce > old.claim_nonce, ErrorCode::InvalidNonce);
+
+    // ── Подпись НОВОГО ключа (ADR-0007: proof-of-possession нового ключа) ──
+    let owner = old.authority;
+    let message = device_rotate_message(&new_device_id, &owner, rotate_nonce, rotate_timestamp);
+    verify_ed25519_signature(
+        &device_signature,
+        &new_device_id.to_bytes(),
+        &message,
+        &ctx.accounts.instructions.to_account_info(),
+    )?;
+
+    // ── Новая запись: копируем состояние ──
+    let new_producer = &mut ctx.accounts.new_producer;
+    new_producer.authority = owner;
+    new_producer.device_id = new_device_id;
+    new_producer.nonce = old.nonce;
+    new_producer.energy_wh = old.energy_wh;
+    new_producer.timestamp = old.timestamp;
+    new_producer.state = old.state;
+    new_producer.tier = old.tier;
+    new_producer.month_energy_wh = old.month_energy_wh;
+    new_producer.month_start_ts = old.month_start_ts;
+    new_producer.claim_nonce = rotate_nonce;
+    new_producer.claimed_at = clock.unix_timestamp;
+    new_producer.revoked = false;
+    new_producer.rotated_to = Pubkey::default();
+
+    // ── Старая запись — терминальное состояние + аудит-след ──
+    old.state = DeviceState::Revoked;
+    old.revoked = true;
+    old.rotated_to = new_device_id;
+
+    emit!(DeviceKeyRotated {
+        device_id: old.device_id,
+        new_device_id,
+        owner,
+        changed_by: ctx.accounts.authority.key(),
+        timestamp: clock.unix_timestamp,
+    });
+    msg!("Device key rotated: {} -> {}", old.device_id, new_device_id);
     Ok(())
 }
 
@@ -524,6 +706,7 @@ pub struct ReleaseFromQuarantine<'info> {
 
 pub fn release_from_quarantine(ctx: Context<ReleaseFromQuarantine>) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
+    require!(!producer.revoked, ErrorCode::DeviceRevoked); // ADR-0007
     require!(
         producer.state.can_transition_to(DeviceState::Active),
         ErrorCode::InvalidStateTransition

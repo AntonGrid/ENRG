@@ -61,6 +61,34 @@ pub fn device_claim_message(
     buf
 }
 
+/// Prefix сообщения ротации ключа.
+pub const DEVICE_ROTATE_MESSAGE_PREFIX: &[u8] = b"enrg:device:rotate";
+
+/// Сообщение, которое подписывает НОВЫЙ ключ устройства при ротации
+/// (ADR-0007: ротация подтверждается новым ключом — proof-of-possession):
+///
+/// ```text
+/// b"enrg:device:rotate" (18 bytes)
+/// || new_device_id      (32 bytes) — новый публичный Ed25519-ключ устройства
+/// || owner              (32 bytes) — текущий владелец (authority)
+/// || rotate_nonce       (8 bytes,  little-endian) — anti-replay
+/// || rotate_timestamp   (8 bytes,  little-endian) — freshness
+/// ```
+pub fn device_rotate_message(
+    new_device_id: &Pubkey,
+    owner: &Pubkey,
+    rotate_nonce: u64,
+    rotate_timestamp: i64,
+) -> Vec<u8> {
+    let mut buf = Vec::with_capacity(DEVICE_ROTATE_MESSAGE_PREFIX.len() + 32 + 32 + 8 + 8);
+    buf.extend_from_slice(DEVICE_ROTATE_MESSAGE_PREFIX);
+    buf.extend_from_slice(&new_device_id.to_bytes());
+    buf.extend_from_slice(&owner.to_bytes());
+    buf.extend_from_slice(&rotate_nonce.to_le_bytes());
+    buf.extend_from_slice(&rotate_timestamp.to_le_bytes());
+    buf
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -127,6 +155,44 @@ mod tests {
         assert_ne!(
             device_register_message(&pk(), 1_700_000_000),
             device_claim_message(&pk(), &pk2(), 1, 1_700_000_000)
+        );
+    }
+
+    #[test]
+    fn rotate_message_format_is_locked() {
+        let new_key = pk2();
+        let owner = pk();
+        let nonce: u64 = 7;
+        let ts: i64 = 1_700_000_000;
+        let msg = device_rotate_message(&new_key, &owner, nonce, ts);
+
+        let mut expected = Vec::new();
+        expected.extend_from_slice(DEVICE_ROTATE_MESSAGE_PREFIX);
+        expected.extend_from_slice(&new_key.to_bytes());
+        expected.extend_from_slice(&owner.to_bytes());
+        expected.extend_from_slice(&nonce.to_le_bytes());
+        expected.extend_from_slice(&ts.to_le_bytes());
+        assert_eq!(msg, expected);
+    }
+
+    #[test]
+    fn rotate_message_binds_key_owner_nonce_timestamp() {
+        let a = device_rotate_message(&pk2(), &pk(), 1, 1_700_000_000);
+        assert_ne!(a, device_rotate_message(&pk(), &pk(), 1, 1_700_000_000), "new key must be bound");
+        assert_ne!(a, device_rotate_message(&pk2(), &pk2(), 1, 1_700_000_000), "owner must be bound");
+        assert_ne!(a, device_rotate_message(&pk2(), &pk(), 2, 1_700_000_000), "nonce must be bound");
+        assert_ne!(a, device_rotate_message(&pk2(), &pk(), 1, 1_700_000_001), "timestamp must be bound");
+    }
+
+    #[test]
+    fn rotate_message_is_domain_separated_from_register_and_claim() {
+        assert_ne!(
+            device_rotate_message(&pk2(), &pk(), 1, 1_700_000_000),
+            device_register_message(&pk2(), 1_700_000_000)
+        );
+        assert_ne!(
+            device_rotate_message(&pk2(), &pk(), 1, 1_700_000_000),
+            device_claim_message(&pk2(), &pk(), 1, 1_700_000_000)
         );
     }
 }

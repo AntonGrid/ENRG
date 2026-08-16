@@ -318,6 +318,24 @@ pub mod enrg_mvp {
         instructions::device_lifecycle::revoke_device(ctx)
     }
 
+    /// Ротация ключа устройства (ADR-0007): owner/admin меняет device_id.
+    /// Новый ключ обязан подписать b"enrg:device:rotate" || ... (PoP).
+    pub fn rotate_device_key(
+        ctx: Context<RotateDeviceKey>,
+        new_device_id: Pubkey,
+        device_signature: [u8; 64],
+        rotate_nonce: u64,
+        rotate_timestamp: i64,
+    ) -> Result<()> {
+        instructions::device_lifecycle::rotate_device_key(
+            ctx,
+            new_device_id,
+            device_signature,
+            rotate_nonce,
+            rotate_timestamp,
+        )
+    }
+
     /// Назначение/смена tier устройства (v7.0 §15 — Trust Levels).
     pub fn set_device_tier(
         ctx: Context<SetDeviceTier>,

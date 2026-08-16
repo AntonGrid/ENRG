@@ -7,6 +7,8 @@
     "test:policy": "mocha tests/policy.test.js",
     "test:manifest": "mocha tests/manifest.test.js",
     "test:firmware": "mocha tests/firmware.test.js",
+    "test:keyrotation": "mocha tests/keyrotation-api.test.js",
+    "test:anchor": "anchor test --skip-build",
     "e2e:local": "RPC_ENDPOINT=http://127.0.0.1:8899 ts-node scripts/devnet_e2e_lifecycle.ts",
     "e2e:local:smoke": "RPC_ENDPOINT=http://127.0.0.1:8899 ts-node scripts/devnet_e2e_lifecycle.ts --smoke",
     "devnet:e2e": "RPC_ENDPOINT=https://api.devnet.solana.com ts-node scripts/devnet_e2e_lifecycle.ts",

@@ -190,6 +190,25 @@ function buildOracleMessage(deviceIdPubkey, nonce, timestamp, verifiedAt, energy
     return Buffer.concat([deviceIdPubkey.toBuffer(), le8(nonce), le8(timestamp), le8(verifiedAt), le8(energyWh)]);
 }
 
+/** Prefix канонического сообщения ротации ключа (совпадает с security/lifecycle.rs). */
+const DEVICE_ROTATE_MESSAGE_PREFIX = Buffer.from('enrg:device:rotate', 'utf8');
+
+/**
+ * Сообщение ротации ключа (ADR-0007), подписываемое НОВЫМ ключом устройства
+ * (зеркало security/lifecycle.rs::device_rotate_message):
+ *   b"enrg:device:rotate" || new_device_id(32) || owner(32)
+ *                        || rotate_nonce(8 LE) || rotate_timestamp(8 LE)
+ */
+function buildDeviceRotateMessage(newDeviceIdPubkey, ownerPubkey, rotateNonce, rotateTimestamp) {
+    return Buffer.concat([
+        DEVICE_ROTATE_MESSAGE_PREFIX,
+        newDeviceIdPubkey.toBuffer(),
+        ownerPubkey.toBuffer(),
+        le8(rotateNonce),
+        le8(rotateTimestamp),
+    ]);
+}
+
 /**
  * Разобрать device_id как Solana Pubkey (32 байта):
  *   - "0x" + 64 hex-символа, либо
@@ -661,6 +680,7 @@ module.exports = {
     le8,
     buildDeviceMessage,
     buildOracleMessage,
+    buildDeviceRotateMessage,
     parseDevicePubkey,
     // manifest (ADR-0004)
     buildManifestMessage,

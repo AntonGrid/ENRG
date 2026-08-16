@@ -415,6 +415,7 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
         authority: authority.publicKey,
         producer: devicePda,
         ownerDevices: ownerDevicesPda(authority.publicKey),
+        vault: null, // ADR-0007: owner-отзыв без vault (обратная совместимость)
       })
       .signers([authority])
       .rpc();
@@ -433,7 +434,7 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
         })
         .signers([authority])
         .rpc(),
-      /state transition is not allowed/
+      /state transition is not allowed|revoked/i
     );
   });
 });

@@ -29,6 +29,19 @@ This server receives signed energy proofs from IoT devices, verifies Ed25519 sig
 - `GET /api/v1/firmware/latest` — метаданные текущей прошивки
   (`{ version, image_hash, image_size, model, image_url, signature, signed_by, issued_at }`)
 - `GET /api/v1/firmware/latest/image` — бинарный образ (заголовки `X-Firmware-Version`, `X-Firmware-Hash`)
+- `POST /api/v1/device/revoke/:device_id` — **отзыв устройства** (ADR-0007)
+  - Только основатель (транзакция подписывается `FOUNDER_KEY` = vault.authority)
+  - Вызывает on-chain `revoke_device` → `revoked=true`, состояние `Revoked` (терминальное)
+  - Отозванное устройство не может минтить и менять состояние
+- `POST /api/v1/device/rotate/:device_id` — **ротация ключа** (ADR-0007)
+  - Body: `{ new_device_id, owner_signature, new_device_signature }`
+  - `owner_signature` — Ed25519 подпись владельца (authority producer'а) над
+    `` `${device_id}|${new_device_id}` `` — подтверждение намерения владельца
+  - `new_device_signature` — Ed25519 подпись НОВОГО ключа над
+    `b"enrg:device:rotate" || new(32) || owner(32) || nonce(8) || ts(8)`
+    (proof-of-possession нового ключа)
+  - Вызывает on-chain `rotate_device_key`: старая запись → `revoked` + `rotated_to`,
+    новая запись наследует состояние (owner, nonce, энергия, tier)
 - `GET /api/v1/device/:id/status` | `GET /api/v1/device/:id/balance` | `GET /api/v1/device/:id/history`
 - `POST /api/v1/pool/create`, `GET /api/v1/stats`
 
