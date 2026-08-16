@@ -11,7 +11,12 @@ app.use(cors());
 app.use(bodyParser.json());
 
 const PORT = process.env.PORT || 4000;
-const ADMIN_KEY = process.env.REGISTRY_ADMIN_KEY || 'secure-key';
+// H-5: дефолтного admin-ключа больше нет. REGISTRY_ADMIN_KEY обязателен
+// и должен быть достаточно длинным (≥32 символов) — иначе сервер не стартует.
+const ADMIN_KEY = process.env.REGISTRY_ADMIN_KEY;
+if (!ADMIN_KEY || ADMIN_KEY.length < 32) {
+  throw new Error('REGISTRY_ADMIN_KEY is required and must be at least 32 characters long');
+}
 const SERVICE_NAME = process.env.SERVICE_NAME || 'enrg-manifest-registry';
 
 const manifests = new Map();

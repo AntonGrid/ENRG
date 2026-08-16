@@ -2,6 +2,7 @@ use anchor_lang::prelude::*;
 use anchor_spl::token::{Mint, Token};
 
 use crate::constants::*;
+use crate::error::ErrorCode;
 use crate::state::TokenMint;
 
 /// Initialize SPL Token subsystem.
@@ -67,6 +68,13 @@ pub struct InitializeToken<'info> {
 }
 
 pub fn initialize_token(ctx: Context<InitializeToken>) -> Result<()> {
+    // H-2: только EXPECTED_DEPLOYER может инициализировать протокол
+    // (защита от front-running захвата mint/token-конфигурации).
+    require!(
+        ctx.accounts.authority.key() == EXPECTED_DEPLOYER,
+        ErrorCode::UnauthorizedDeployer
+    );
+
     let token_mint = &mut ctx.accounts.token_mint;
 
     let mint_bump = ctx.bumps.mint;

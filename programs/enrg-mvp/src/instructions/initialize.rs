@@ -98,6 +98,13 @@ pub struct InitializeFunds<'info> {
 }
 
 pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
+    // H-2: только EXPECTED_DEPLOYER может инициализировать vault
+    // (защита от front-running захвата протокольной экономики).
+    require!(
+        ctx.accounts.authority.key() == EXPECTED_DEPLOYER,
+        ErrorCode::UnauthorizedDeployer
+    );
+
     let vault = &mut ctx.accounts.vault;
 
     // Аккаунт только что создан (все поля в нулях) — настраиваем дефолтную экономику.

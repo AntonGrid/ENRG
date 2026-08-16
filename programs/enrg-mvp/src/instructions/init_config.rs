@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 
+use crate::constants::EXPECTED_DEPLOYER;
 use crate::error::ErrorCode;
 use crate::state::Config;
 
@@ -31,6 +32,13 @@ pub fn init_config(
     oracle: Pubkey,
     mint: Pubkey,
 ) -> Result<()> {
+    // H-2: только EXPECTED_DEPLOYER может инициализировать config (активная пара
+    // oracle+mint) — защита от front-running захвата конфигурации протокола.
+    require!(
+        ctx.accounts.authority.key() == EXPECTED_DEPLOYER,
+        ErrorCode::UnauthorizedDeployer
+    );
+
     let config = &mut ctx.accounts.config;
 
     require!(

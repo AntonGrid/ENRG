@@ -24,6 +24,7 @@ services:
       - "4000:4000"
     environment:
       PORT: 4000
-      REGISTRY_ADMIN_KEY: ${REGISTRY_ADMIN_KEY:-secure-key}
+      # H-5: ключ обязателен (≥32 символов) — без него сервис упадёт при старте.
+      REGISTRY_ADMIN_KEY: ${REGISTRY_ADMIN_KEY}
       SERVICE_NAME: enrg-manifest-registry
     restart: unless-stopped

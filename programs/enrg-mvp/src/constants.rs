@@ -91,6 +91,15 @@ pub const MAX_DEVICES_PER_OWNER: u64 = 100;
 pub const FOUNDER_WALLET: Pubkey =
     pubkey!("6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8");
 
+/// H-2 (front-running): адрес, которому разрешена инициализация протокола
+/// (initialize_token / initialize_vault / initialize_oracle_registry /
+/// init_config / initialize_governance / initialize_manifest_registry).
+/// Только этот кошелёк может быть первым инициализатором PDA — иначе атакующий,
+/// наблюдающий за мемпулом, мог бы захватить роль oracle_admin/governance.
+/// По умолчанию — адрес основателя (FOUNDER_WALLET); для другого деплоера
+/// изменить эту константу и пересобрать программу.
+pub const EXPECTED_DEPLOYER: Pubkey = FOUNDER_WALLET;
+
 // ══════════════════════════════════════════════════════════════
 //  Governance MVP (ADR-0009)
 //  Числа — атомарные единицы (1 SRC = 1e9 атомар; MAX_SUPPLY_ATOMIC = 1e18).

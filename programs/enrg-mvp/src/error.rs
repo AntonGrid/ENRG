@@ -72,6 +72,9 @@ pub enum ErrorCode {
     SupplyLimitExceeded,
     #[msg("Founder premine already minted")]
     FounderPremineAlreadyMinted,
+    // ── H-2: front-running защита инициализации ──
+    #[msg("Signer is not the expected protocol deployer")]
+    UnauthorizedDeployer,
     // ── Governance MVP (ADR-0009) ──
     #[msg("Not governance authority")]
     NotGovernanceAuthority,

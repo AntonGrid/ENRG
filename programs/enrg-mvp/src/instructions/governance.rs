@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
-use crate::constants::PROPOSAL_TITLE_MAX_LEN;
+use crate::constants::{EXPECTED_DEPLOYER, PROPOSAL_TITLE_MAX_LEN};
 use crate::error::ErrorCode;
 use crate::state::*;
 
@@ -28,6 +28,13 @@ pub fn initialize_governance(
     ctx: Context<InitializeGovernance>,
     members: Vec<Pubkey>,
 ) -> Result<()> {
+    // H-2: только EXPECTED_DEPLOYER может инициализировать governance —
+    // защита от front-running захвата роли governance authority.
+    require!(
+        ctx.accounts.authority.key() == EXPECTED_DEPLOYER,
+        ErrorCode::UnauthorizedDeployer
+    );
+
     validate_members(&members)?;
 
     let governance = &mut ctx.accounts.governance;

@@ -1,5 +1,6 @@
 use anchor_lang::prelude::*;
 
+use crate::constants::EXPECTED_DEPLOYER;
 use crate::error::ErrorCode;
 use crate::state::*;
 
@@ -67,6 +68,13 @@ pub struct SetOracleAdmin<'info> {
 pub fn initialize_oracle_registry(
     ctx: Context<InitializeOracleRegistry>,
 ) -> Result<()> {
+    // H-2: только EXPECTED_DEPLOYER может быть первым инициализатором registry —
+    // иначе атакующий мог бы захватить роль oracle_admin и добавить свой ключ
+    // в список доверенных оракулов (front-running при деплое).
+    require!(
+        ctx.accounts.authority.key() == EXPECTED_DEPLOYER,
+        ErrorCode::UnauthorizedDeployer
+    );
 
     let registry = &mut ctx.accounts.registry;
 

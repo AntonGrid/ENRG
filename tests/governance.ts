@@ -13,6 +13,8 @@
  *   `approved_after_majority_and_timelock` (state/governance.rs). В TS проверяем,
  *   что немедленный вызов падает с TimelockNotElapsed (стандартная практика).
  */
+import * as os from "os";
+import * as path from "path";
 import * as anchor from "@coral-xyz/anchor";
 import { BN, AnchorProvider, Program } from "@coral-xyz/anchor";
 import {
@@ -24,7 +26,7 @@ import {
 } from "@solana/web3.js";
 import { getOrCreateAssociatedTokenAccount, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import { PROGRAM_ID, LOCAL_ENDPOINT } from "./helpers/program";
-import { ensureFunded } from "./helpers/accounts";
+import { ensureFunded, loadAuthority } from "./helpers/accounts";
 import { patchIdl } from "./helpers/patch-idl";
 import rawIdl from "../target/idl/enrg_mvp.json";
 import * as assert from "assert";
@@ -55,7 +57,12 @@ describe("ENRG — Governance MVP (ADR-0009) runtime", () => {
   let members: Keypair[];
 
   before(async () => {
-    authority = Keypair.generate();
+    // H-2: инициализация протокола разрешена только EXPECTED_DEPLOYER
+    // (адрес основателя) — bootstrap-инструкции подписываем founder-ключом.
+    authority = loadAuthority(
+      process.env.FOUNDER_KEYPAIR_PATH ||
+        path.join(os.homedir(), ".config/solana/founder-wallet.json")
+    );
     members = Array.from({ length: 5 }, () => Keypair.generate());
 
     connection = new Connection(LOCAL_ENDPOINT, "confirmed");

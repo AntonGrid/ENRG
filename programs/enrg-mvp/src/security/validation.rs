@@ -5,7 +5,9 @@ use crate::error::ErrorCode;
 use crate::state::EnergyProducer;
 
 /// Максимальный «возраст» доказательства.
-pub const MAX_PROOF_AGE: i64 = 31_536_000;
+/// M-3: было 31_536_000 (1 год) — теперь 15 минут, как требует спецификация
+/// (см. docs «не старше 15 минут»). Синхронизировано с server.js (MAX_PROOF_AGE_SEC).
+pub const MAX_PROOF_AGE: i64 = 900;
 
 /// Проверка nonce производителя (строго возрастающий — защита от replay).
 pub fn verify_nonce(producer: &EnergyProducer, nonce: u64) -> Result<()> {

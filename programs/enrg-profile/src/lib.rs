@@ -15,7 +15,10 @@ pub use self::enrg_profile::*;
 /// без неё владелец мог бы выставить произвольно большую мощность и тем
 /// самым завысить потолок mint (enrg-mvp::mint_energy сверяет
 /// `report.energy_wh <= profile.rated_power`).
-pub const MAX_RATED_POWER: u64 = 100_000_000_000; // 100 GW
+/// M-4: снижено со 100 ГВт до 1 МВт (1_000_000 Вт) — для неподтверждённых
+/// устройств потолок одного отчёта теперь ≤ 1 МВт·ч. Подтверждённые профили
+/// с более высокой мощностью требуют отдельной процедуры верификации/апгрейда.
+pub const MAX_RATED_POWER: u64 = 1_000_000; // 1 MW
 
 /// Обновляет скользящее окно энергии устройства (30-дневное окно).
 /// Вычитает энергию, которая вышла за пределы окна, и добавляет новую.
@@ -90,6 +93,11 @@ pub mod enrg_profile {
 
     /// Обновляет метаданные устройства (rated_power, device_type, location).
     /// Может вызывать только authority профиля.
+    ///
+    /// M-4: rated_power ИММУТАБЕЛЕН после первого назначения — владелец не может
+    /// «поднять себе потолок» минта. Изменение возможно только через процедуру
+    /// верификации/апгрейда (вне рамок MVP; требует upgrade-инструкции с
+    /// governance-контролем). Изменение фиксируется событием RatedPowerChanged.
     pub fn update_metadata(
         ctx: Context<UpdateMetadata>,
         rated_power: u64,
@@ -110,9 +118,27 @@ pub mod enrg_profile {
         );
 
         let profile = &mut ctx.accounts.profile;
+
+        // M-4: первый вызов (0 → N) задаёт мощность; любые последующие
+        // изменения rated_power отклоняются (RatedPowerImmutable).
+        let old_rated_power = profile.rated_power;
+        if old_rated_power != 0 && rated_power != old_rated_power {
+            return err!(ErrorCode::RatedPowerImmutable);
+        }
+
         profile.rated_power = rated_power;
         profile.device_type = device_type;
         profile.location = location;
+
+        if old_rated_power != profile.rated_power {
+            emit!(RatedPowerChanged {
+                profile: profile.key(),
+                old_rated_power,
+                new_rated_power: profile.rated_power,
+                changed_by: ctx.accounts.authority.key(),
+                timestamp: Clock::get()?.unix_timestamp,
+            });
+        }
 
         Ok(())
     }
@@ -234,6 +260,20 @@ pub enum ErrorCode {
     DeviceTypeTooLong,
     #[msg("Location string exceeds maximum length (64 bytes)")]
     LocationTooLong,
-    #[msg("Rated power exceeds the maximum allowed (100 GW)")]
+    #[msg("Rated power exceeds the maximum allowed (1 MW)")]
     RatedPowerTooHigh,
+    // M-4: изменение rated_power после первого назначения запрещено
+    // (только процедура верификации/апгрейда через governance).
+    #[msg("Rated power is immutable after initial assignment")]
+    RatedPowerImmutable,
+}
+
+// M-4: событие аудита изменения rated_power.
+#[event]
+pub struct RatedPowerChanged {
+    pub profile: Pubkey,
+    pub old_rated_power: u64,
+    pub new_rated_power: u64,
+    pub changed_by: Pubkey,
+    pub timestamp: i64,
 }

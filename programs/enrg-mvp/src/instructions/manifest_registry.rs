@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use crate::constants::EXPECTED_DEPLOYER;
 use crate::error::ErrorCode;
 use crate::state::ManifestRegistry;
 
@@ -58,6 +59,13 @@ pub fn initialize_manifest_registry(ctx: Context<InitializeManifestRegistry>) ->
     // Иначе любой вызывающий мог бы повторным вызовом init_if_needed
     // перезаписать authority и oracle_authority и захватить реестр.
     if registry.authority == Pubkey::default() {
+        // H-2: первым инициализатором обязан быть EXPECTED_DEPLOYER —
+        // защита от front-running захвата manifest registry.
+        require!(
+            ctx.accounts.payer.key() == EXPECTED_DEPLOYER,
+            ErrorCode::UnauthorizedDeployer
+        );
+
         registry.authority = ctx.accounts.payer.key();
         registry.oracle_authority = ctx.accounts.payer.key();
         registry.merkle_root = [0u8; 32];

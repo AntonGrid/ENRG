@@ -1,5 +1,7 @@
 // ENRG Merkle proof flow — Anchor IDL style (ts-mocha).
 import { Connection, PublicKey, Keypair, SystemProgram } from "@solana/web3.js";
+import * as os from "os";
+import * as path from "path";
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN, AnchorProvider } from "@coral-xyz/anchor";
 import * as assert from "assert";
@@ -17,9 +19,14 @@ const idl = patchIdl(rawIdl);
 
 describe("ENRG Merkle proof — Anchor IDL", () => {
   const connection = new Connection("http://127.0.0.1:8899", "confirmed");
+  // H-2: initializeManifestRegistry (первый init PDA) разрешён только
+  // EXPECTED_DEPLOYER (адрес основателя) — используем founder-ключ.
+  const FOUNDER_KEYPAIR_PATH =
+    process.env.FOUNDER_KEYPAIR_PATH ||
+    path.join(os.homedir(), ".config/solana/founder-wallet.json");
   const provider = new AnchorProvider(
     connection,
-    new anchor.Wallet(loadAuthority()),
+    new anchor.Wallet(loadAuthority(FOUNDER_KEYPAIR_PATH)),
     { commitment: "confirmed", preflightCommitment: "confirmed" }
   );
 

@@ -12,11 +12,13 @@ function wait(ms) {
 describe('Manifest Registry API', function () {
   this.timeout(20000);
   let server;
+  // H-5: ключ обязан быть ≥32 символов (тест — на длинном ключе).
+  const TEST_ADMIN_KEY = 'test-key-0123456789abcdef0123456789abcdef';
 
   before(async function () {
     server = spawn('node', ['server.js'], {
       cwd: path.join(__dirname, '..'),
-      env: { ...process.env, PORT: '4101', REGISTRY_ADMIN_KEY: 'test-key' },
+      env: { ...process.env, PORT: '4101', REGISTRY_ADMIN_KEY: TEST_ADMIN_KEY },
       stdio: ['ignore', 'pipe', 'pipe']
     });
 
@@ -57,7 +59,7 @@ describe('Manifest Registry API', function () {
   it('creates a snapshot and exposes current root', async function () {
     const snapshotRes = await fetch('http://127.0.0.1:4101/api/v1/merkle/snapshot', {
       method: 'POST',
-      headers: { 'x-api-key': 'test-key' }
+      headers: { 'x-api-key': TEST_ADMIN_KEY }
     });
     assert.strictEqual(snapshotRes.status, 201);
     const snapshot = await snapshotRes.json();
