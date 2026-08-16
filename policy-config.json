@@ -4,5 +4,6 @@
   "maxProofAgeSec": 900,
   "rateLimitPerMinute": 100,
   "oracleUrl": "http://localhost:3000",
-  "defaultRatedPowerW": 10000
+  "defaultRatedPowerW": 10000,
+  "maxFirmwareSizeBytes": 2000000
 }

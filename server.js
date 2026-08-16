@@ -42,6 +42,15 @@ const FOUNDER_WALLET = '6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8';
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || clusterApiUrl('devnet');
 const PROFILE_PROGRAM_ID = new PublicKey('78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt');
 
+// ── OTA (ADR-0008) ──
+// Директория для образов прошивки (по умолчанию firmware/updates/).
+const FIRMWARE_UPDATES_DIR =
+    process.env.FIRMWARE_UPDATES_DIR || path.join(__dirname, 'firmware', 'updates');
+// Админ-ключ для публикации прошивки (POST /api/v1/firmware/update).
+// Обязателен: публикация образа без аутентификации = подпись оракулом
+// произвольного (возможно враждебного) контента.
+const FIRMWARE_ADMIN_KEY = process.env.FIRMWARE_ADMIN_KEY;
+
 // Функции load*/save* вынесены в storage.js (M-2: Postgres/SQLite).
 // В памяти держим копии (devices/energyStore/pools) для быстрого доступа,
 // персистентность — через storage.save*() в каждом эндпоинте.
@@ -621,6 +630,106 @@ app.get('/api/v1/manifest/:device_id', (req, res) => {
     logger.info(`📋 Manifest issued for ${deviceId} (rated_power=${rated_power}W, oracle=${oracle_url})`);
     res.json({ ...manifest, signature });
 });
+
+// === OTA-ОБНОВЛЕНИЯ ПРОШИВКИ (ADR-0008) ===
+// Образ подписывается ключом основателя (FOUNDER_KEY) по схеме
+//   version|image_hash|image_size  (policy.buildFirmwareMessage)
+// Устройство проверяет подпись + SHA-256(образ) перед установкой.
+
+/** Санитизировать имя файла версии (без путей и спецсимволов). */
+function sanitizeVersion(v) {
+    return String(v).replace(/[^A-Za-z0-9._-]/g, '_');
+}
+
+/** Загрузить latest.json (метаданные текущей прошивки) или null. */
+function loadFirmwareMeta() {
+    try {
+        const p = path.join(FIRMWARE_UPDATES_DIR, 'latest.json');
+        if (!fs.existsSync(p)) return null;
+        return JSON.parse(fs.readFileSync(p, 'utf8'));
+    } catch (e) {
+        logger.error('❌ firmware metadata read failed:', e && e.message);
+        return null;
+    }
+}
+
+// POST /api/v1/firmware/update?version=1.2.0[&model=ENRG-ESP32-v1]
+// Body: raw binary образ прошивки. Требует x-api-key == FIRMWARE_ADMIN_KEY.
+app.post('/api/v1/firmware/update', express.raw({
+    type: ['application/octet-stream', 'application/json', '*/*'],
+    limit: String(policy.config.maxFirmwareSizeBytes),
+}), async (req, res) => {
+    try {
+        if (!FIRMWARE_ADMIN_KEY) {
+            return res.status(503).json({ error: 'firmware_admin_key_missing' });
+        }
+        if (req.headers['x-api-key'] !== FIRMWARE_ADMIN_KEY) {
+            return res.status(401).json({ error: 'invalid admin key' });
+        }
+        if (!founderKeypair) {
+            return res.status(500).json({ error: 'founder_key_missing' });
+        }
+
+        const version = req.query.version;
+        const model = req.query.model || '';
+        if (typeof version !== 'string' || !version.trim() || version.includes('|') || version.includes('..')) {
+            return res.status(400).json({ error: 'invalid firmware version' });
+        }
+
+        const buf = req.body;
+        if (!Buffer.isBuffer(buf) || buf.length === 0) {
+            return res.status(400).json({ error: 'empty firmware image' });
+        }
+        if (buf.length > policy.config.maxFirmwareSizeBytes) {
+            return res.status(400).json({ error: `firmware image too large (max ${policy.config.maxFirmwareSizeBytes} bytes)` });
+        }
+
+        const image_hash = crypto.createHash('sha256').update(buf).digest('hex');
+        const image_size = buf.length;
+
+        await fs.promises.mkdir(FIRMWARE_UPDATES_DIR, { recursive: true });
+        const binPath = path.join(FIRMWARE_UPDATES_DIR, `${sanitizeVersion(version)}.bin`);
+        await fs.promises.writeFile(binPath, buf);
+
+        const firmware = { version, image_hash, image_size };
+        const signature = policy.signFirmware(firmware, founderKeypair.secretKey);
+        const meta = {
+            ...firmware,
+            model,
+            image_url: '/api/v1/firmware/latest/image',
+            signature,
+            signed_by: founderKeypair.publicKey.toBase58(),
+            issued_at: Math.floor(Date.now() / 1000),
+        };
+        await fs.promises.writeFile(path.join(FIRMWARE_UPDATES_DIR, 'latest.json'), JSON.stringify(meta, null, 2));
+
+        logger.info(`🔄 Firmware ${version} published (${image_size} bytes, sha256=${image_hash.slice(0, 12)}…)`);
+        res.status(201).json({ ok: true, version, image_size, image_hash, signature });
+    } catch (e) {
+        logger.error('❌ firmware update failed:', e && e.message);
+        return res.status(500).json({ error: (e && e.message) || 'internal error' });
+    }
+});
+
+// GET /api/v1/firmware/latest — метаданные текущей прошивки (подпись + хеш).
+app.get('/api/v1/firmware/latest', (req, res) => {
+    const meta = loadFirmwareMeta();
+    if (!meta) return res.status(404).json({ error: 'no firmware published' });
+    res.json(meta);
+});
+
+// GET /api/v1/firmware/latest/image — бинарный образ текущей прошивки.
+app.get('/api/v1/firmware/latest/image', (req, res) => {
+    const meta = loadFirmwareMeta();
+    if (!meta) return res.status(404).json({ error: 'no firmware published' });
+    const binPath = path.join(FIRMWARE_UPDATES_DIR, `${sanitizeVersion(meta.version)}.bin`);
+    if (!fs.existsSync(binPath)) return res.status(404).json({ error: 'firmware image missing' });
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('X-Firmware-Version', meta.version);
+    res.setHeader('X-Firmware-Hash', meta.image_hash);
+    res.sendFile(binPath);
+});
+
 
 // === СОЗДАНИЕ ПУЛА ===
 app.post('/api/v1/pool/create', async (req, res) => {

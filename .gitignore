@@ -78,3 +78,5 @@ keypairs/
 enrg-wallet.json
 .config/
 deploy/
+# OTA-образы прошивки, публикуемые оракулом (ADR-0008)
+firmware/updates/

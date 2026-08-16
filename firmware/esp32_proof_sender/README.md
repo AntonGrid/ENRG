@@ -86,6 +86,48 @@ device_id|rated_power|oracle_url|public_key|timestamp   →  Ed25519 (ключ �
 устройство работает и без манифеста — использует `ENRG_ORACLE_URL` и хардкод-
 конфигурацию, как раньше. Если манифест доступен и валиден — применяется он.
 
+### OTA-обновления (ADR-0008)
+
+Устройство периодически проверяет наличие новой прошивки у оракула:
+
+```text
+GET {ENRG_FIRMWARE_URL_BASE}/latest       → { version, image_hash, image_size, model, signature, ... }
+GET {ENRG_FIRMWARE_URL_BASE}/latest/image → бинарный образ
+```
+
+Формат подписи (каноническая строка, совпадает с `policy.js::buildFirmwareMessage`):
+
+```text
+version|image_hash|image_size   →  Ed25519 (ключ основателя)
+```
+
+Цикл `checkForUpdates()`:
+
+1. **Проверка наличия** — `GET /latest`; если модель не совпадает — пропуск.
+2. **Анти-откат** — версия из метаданных должна быть **строго выше** текущей
+   (`fw_version` в NVS); старые/равные образы отклоняются.
+3. **Проверка подписи** — `verify_firmware_signature()`: подпись метаданных
+   ключом основателя (`ENRG_FOUNDER_PUBKEY_HEX`); неподписанные/чужие образы
+   отклоняются.
+4. **Скачивание** — `downloadFirmware()` пишет образ в LittleFS
+   (`/fw_update.bin`) с параллельным вычислением SHA-256; расхождение с
+   `image_hash` → отказ.
+5. **Применение** — `applyFirmwareUpdate()` через ESP32 OTA (`Update`),
+   затем запись новой версии в NVS и `ESP.restart()`.
+
+Настройки OTA:
+
+| #define | По умолчанию | Смысл |
+|---|---|---|
+| `ENRG_FW_VERSION` | `"1.0.0"` | текущая версия прошивки (анти-откат) |
+| `ENRG_FIRMWARE_URL_BASE` | `https://oracle.example.com/api/v1/firmware` | база URL эндпоинтов firmware |
+| `ENRG_FW_MODEL` | `"ENRG-ESP32-v1"` | модель устройства (фильтр обновлений) |
+| `ENRG_UPDATE_CHECK_MS` | `21600000` (6 ч) | интервал проверки обновлений |
+| `ENRG_MAX_FW_SIZE` | `1300000` | максим. размер образа (байт) |
+
+> Публикация образов: `POST /api/v1/firmware/update` на оракуле (см.
+> `oracle/README.md`). Образы сохраняются в `firmware/updates/` (в `.gitignore`).
+
 ### ATECC608A (Secure Element)
 
 ```bash

@@ -71,6 +71,33 @@
 #define ENRG_MANIFEST_RETRY_MS 60000UL
 #endif
 
+// ── OTA-обновления (ADR-0008) ──
+// Текущая версия прошивки (используется для анти-отката).
+#ifndef ENRG_FW_VERSION
+#define ENRG_FW_VERSION "1.0.0"
+#endif
+
+// База URL эндпоинтов firmware оракула: к ней добавляется /latest и /latest/image.
+#ifndef ENRG_FIRMWARE_URL_BASE
+#define ENRG_FIRMWARE_URL_BASE "https://oracle.example.com/api/v1/firmware"
+#endif
+
+// Модель устройства (оракул кладёт её в метаданные; устройство пропускает
+// обновление, если модель не совпадает).
+#ifndef ENRG_FW_MODEL
+#define ENRG_FW_MODEL "ENRG-ESP32-v1"
+#endif
+
+// Как часто проверять наличие обновлений (мс). По умолчанию 6 часов.
+#ifndef ENRG_UPDATE_CHECK_MS
+#define ENRG_UPDATE_CHECK_MS 21600000UL
+#endif
+
+// Максимальный размер образа (байт) — меньше OTA-раздела ESP32 (~1.3 МБ).
+#ifndef ENRG_MAX_FW_SIZE
+#define ENRG_MAX_FW_SIZE 1300000UL
+#endif
+
 // NTP-сервер для wall-clock.
 #ifndef ENRG_NTP_SERVER
 #define ENRG_NTP_SERVER "pool.ntp.org"
@@ -126,7 +153,10 @@
 #include <HTTPClient.h>
 #include <Preferences.h>
 #include <ArduinoJson.h>   // ADR-0004: разбор подписанного Device Manifest
-#include <Crypto.h>
+#include <LittleFS.h>      // ADR-0008: staging-область для OTA-образа
+#include <Update.h>        // ADR-0008: ESP32 OTA (обновление прошивки)
+#include <Crypto.h>        // Ed25519 (подписи)
+#include <SHA256.h>        // ADR-0008: SHA-256 для проверки OTA-образа
 #include <Ed25519.h>
 
 #if ENRG_USE_PZEM
@@ -650,6 +680,46 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
 }
 
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+//  OTA-ОБНОВЛЕНИЯ ПРОШИВКИ (ADR-0008)
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Сравнение версий "a.b.c..." (числовое, по компонентам).
+ * Возвращает >0 если a > b, <0 если a < b, 0 если равны.
+ */
+int compare_versions(const String &a, const String &b) {
+    int pa = 0, pb = 0;
+    while (pa < a.length() || pb < b.length()) {
+        long na = 0, nb = 0;
+        while (pa < a.length() && a[pa] != '.') { na = na * 10 + (a[pa] - '0'); pa++; }
+        while (pb < b.length() && b[pb] != '.') { nb = nb * 10 + (b[pb] - '0'); pb++; }
+        if (na != nb) return na < nb ? -1 : 1;
+        pa++; pb++;
+    }
+    return 0;
+}
+
+/**
+ * Проверка подписи firmware-метаданных (ADR-0008).
+ * Каноническое сообщение — `version|image_hash|image_size` (то же, что в
+ * policy.js::buildFirmwareMessage). Публичный ключ основателя вшит в прошивку
+ * (ENRG_FOUNDER_PUBKEY_HEX — тот же, что для манифестов).
+ */
+bool verify_firmware_signature(const String &version, const String &hashHex,
+                               long imageSize, const String &sigB64) {
+    uint8_t founderPub[32];
+    if (!parse_hex(ENRG_FOUNDER_PUBKEY_HEX, founderPub, sizeof(founderPub))) {
+        Serial.println("[OTA] FATAL: ENRG_FOUNDER_PUBKEY_HEX некорректен");
+        return false;
+    }
+    String msg = version + "|" + hashHex + "|" + String(imageSize);
+    uint8_t sig[64];
+    if (base64_decode(sigB64, sig, sizeof(sig)) != 64) return false;
+    return Ed25519::verify(sig, founderPub, (const uint8_t *)msg.c_str(), msg.length());
+}
+
+
 //  SETUP / LOOP
 // ════════════════════════════════════════════════════════════════
 
@@ -674,6 +744,11 @@ void setup() {
     g_pzem_ok = true;
 #endif
 
+    // ADR-0008: LittleFS — staging-область для OTA-образа.
+    if (!LittleFS.begin()) {
+        Serial.println("[OTA] WARN: LittleFS не смонтирован — OTA недоступен");
+    }
+
     if (!connect_wifi(30000)) {
         Serial.println("[WARN] WiFi не подключён — жду в loop");
     }
@@ -683,11 +758,28 @@ void setup() {
     String deviceId = device_id_from_pubkey(g_publicKey);
     init_manifest(deviceId);
 
+    // ADR-0008: текущая версия прошивки (из NVS или дефолт) — для анти-отката.
+    if (g_prefs.getString("fw_version", "").length() == 0) {
+        g_prefs.putString("fw_version", ENRG_FW_VERSION);
+    }
+    Serial.printf("[OTA] текущая версия: %s\n", g_prefs.getString("fw_version", ENRG_FW_VERSION).c_str());
+
+    // Первая проверка обновления сразу после старта (не ждём ENRG_UPDATE_CHECK_MS).
+    checkForUpdates();
+
     ntp_sync();
     g_lastReportMs = millis();
 }
 
 void loop() {
+    // ADR-0008: периодическая проверка обновлений прошивки.
+    static unsigned long g_lastUpdateCheckMs = 0;
+    unsigned long nowMs = millis();
+    if (nowMs - g_lastUpdateCheckMs >= ENRG_UPDATE_CHECK_MS) {
+        g_lastUpdateCheckMs = nowMs;
+        checkForUpdates(); // внутри — ESP.restart() при успешной установке
+    }
+
     // ADR-0004: если манифест обязателен, но ещё не получен — периодически
     // повторяем запрос (иначе устройство никогда не выйдет из блокировки).
     if (ENRG_MANIFEST_REQUIRED && !g_manifest_valid) {
@@ -712,4 +804,159 @@ void loop() {
     }
     delay(10);
 }
+
+/**
+ * Скачивание образа в LittleFS (/fw_update.bin) с параллельным вычислением
+ * SHA-256. Возвращает true, если размер и хеш совпали с метаданными.
+ */
+bool download_firmware(const String &url, long expectedSize, const String &expectedHashHex) {
+    WiFiClientSecure client;
+    client.setCACert(ENRG_CA_CERT);
+    HTTPClient http;
+    if (!http.begin(client, url)) { Serial.println("[OTA] GET begin failed"); return false; }
+    int code = http.GET();
+    if (code != 200) {
+        Serial.printf("[OTA] GET %s -> %d\n", url.c_str(), code);
+        http.end();
+        return false;
+    }
+    int len = http.getSize();
+    if (len <= 0 || len > (int)ENRG_MAX_FW_SIZE) {
+        Serial.printf("[OTA] bad size: %d\n", len);
+        http.end();
+        return false;
+    }
+
+    LittleFS.remove("/fw_update.bin");
+    File out = LittleFS.open("/fw_update.bin", "w");
+    if (!out) { http.end(); return false; }
+
+    WiFiClient *stream = http.getStreamPtr();
+    SHA256 sha;
+    sha.reset();
+    uint8_t buf[512];
+    size_t total = 0;
+    while (http.connected() && total < (size_t)len) {
+        size_t n = stream->readBytes(buf, sizeof(buf));
+        if (n == 0) break;
+        sha.update(buf, n);
+        out.write(buf, n);
+        total += n;
+    }
+    out.close();
+    http.end();
+
+    if (total != (size_t)len) {
+        Serial.printf("[OTA] size mismatch: %u != %d\n", total, len);
+        LittleFS.remove("/fw_update.bin");
+        return false;
+    }
+
+    uint8_t digest[32];
+    sha.finalize(digest, sizeof(digest));
+    char hex[65];
+    for (int i = 0; i < 32; i++) snprintf(hex + i * 2, 3, "%02x", digest[i]);
+    hex[64] = 0;
+
+    if (String(hex) != expectedHashHex) {
+        Serial.printf("[OTA] SHA-256 mismatch: got %s\n", hex);
+        LittleFS.remove("/fw_update.bin");
+        return false;
+    }
+    Serial.printf("[OTA] downloaded %u bytes, SHA-256 OK\n", total);
+    return true;
+}
+
+
+
+/**
+ * Применение образа через ESP32 OTA (Update). Файл уже проверен
+ * (подпись + SHA-256). После успешной установки вызывающий делает ESP.restart().
+ */
+bool apply_firmware_update(const char *path) {
+    File f = LittleFS.open(path, "r");
+    if (!f) { Serial.println("[OTA] staging file missing"); return false; }
+    if (!Update.begin(f.size())) {
+        Update.printError(Serial);
+        f.close();
+        return false;
+    }
+    size_t written = Update.writeStream(f);
+    if (written != f.size()) {
+        Update.printError(Serial);
+        f.close();
+        return false;
+    }
+    if (!Update.end()) {
+        Update.printError(Serial);
+        f.close();
+        return false;
+    }
+    f.close();
+    LittleFS.remove(path);
+    Serial.println("[OTA] Update.end() OK — образ установлен, перезагрузка...");
+    return true;
+}
+
+/**
+ * Полный цикл проверки обновления (вызывается периодически):
+ *   1. GET {ENRG_FIRMWARE_URL_BASE}/latest → метаданные (version, hash, size, signature).
+ *   2. Анти-откат: version должна быть строго выше текущей (из NVS).
+ *   3. Проверка подписи метаданных ключом основателя.
+ *   4. Скачивание образа + проверка SHA-256.
+ *   5. Применение (Update) + запись новой версии в NVS + перезагрузка.
+ */
+bool checkForUpdates() {
+    String url = String(ENRG_FIRMWARE_URL_BASE) + "/latest";
+    String body = http_get(url);
+    if (body.length() == 0) { Serial.println("[OTA] оракул не ответил"); return false; }
+
+    DynamicJsonDocument doc(1024);
+    if (deserializeJson(doc, body)) { Serial.println("[OTA] невалидный JSON"); return false; }
+
+    const char *v = doc["version"];
+    const char *hash = doc["image_hash"];
+    long size = doc["image_size"];
+    const char *sig = doc["signature"];
+    const char *model = doc["model"];
+    if (!v || !hash || size <= 0 || !sig) { Serial.println("[OTA] неполные метаданные"); return false; }
+
+    if (model && strlen(model) > 0 && String(model) != String(ENRG_FW_MODEL)) {
+        Serial.printf("[OTA] модель %s != %s — пропуск\n", model, ENRG_FW_MODEL);
+        return false;
+    }
+
+    // Анти-откат: принимаем только строго более новую версию.
+    String current = g_prefs.getString("fw_version", ENRG_FW_VERSION);
+    if (compare_versions(String(v), current) <= 0) {
+        Serial.printf("[OTA] версия %s <= текущая %s — пропуск (анти-откат)\n", v, current.c_str());
+        return false;
+    }
+
+    // Подпись метаданных (без скачивания) — отклоняем неподписанные/чужие образы.
+    if (!verify_firmware_signature(String(v), String(hash), size, String(sig))) {
+        Serial.println("[OTA] невалидная подпись — образ отклонён");
+        return false;
+    }
+
+    // Скачивание + проверка SHA-256.
+    String imgUrl = String(ENRG_FIRMWARE_URL_BASE) + "/latest/image";
+    if (!download_firmware(imgUrl, size, String(hash))) {
+        Serial.println("[OTA] скачивание/хеш не сошёлся — образ отклонён");
+        return false;
+    }
+
+    // Применение.
+    if (!apply_firmware_update("/fw_update.bin")) {
+        Serial.println("[OTA] установка не удалась");
+        return false;
+    }
+
+    g_prefs.putString("fw_version", String(v)); // новая версия (анти-откат после перезагрузки)
+    Serial.printf("[OTA] обновление до %s применено, перезагрузка...\n", v);
+    ESP.restart();
+    return true;
+}
+
+
 #endif

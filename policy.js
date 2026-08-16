@@ -52,6 +52,9 @@ const DEFAULT_CONFIG = {
     // Номинальная мощность устройства по умолчанию (Вт) для Device Manifest,
     // если для устройства не задано иное значение (ADR-0004).
     defaultRatedPowerW: 10_000,
+    // Максимальный размер образа прошивки для OTA (байт) — защита от DoS
+    // и переполнения OTA-раздела (ADR-0008).
+    maxFirmwareSizeBytes: 2_000_000,
 };
 
 /** Маппинг env-переменных → ключей конфигурации (env имеет приоритет). */
@@ -62,6 +65,7 @@ const CONFIG_ENV_KEYS = {
     RATE_LIMIT_PER_MINUTE: 'rateLimitPerMinute',
     ORACLE_URL: 'oracleUrl',
     DEFAULT_RATED_POWER_W: 'defaultRatedPowerW',
+    MAX_FIRMWARE_SIZE_BYTES: 'maxFirmwareSizeBytes',
 };
 
 /** Текущая (активная) конфигурация. Мутируется через setConfig/reloadConfig. */
@@ -282,6 +286,77 @@ function verifyManifest(manifest, signature, publicKey) {
     if (!valid) return { ok: false, error: 'signature_invalid' };
     return { ok: true };
 }
+
+// ════════════════════════════════════════════════════════════════
+//  FIRMWARE (ADR-0008) — каноническое сообщение и подписи OTA-образа
+// ════════════════════════════════════════════════════════════════
+
+/**
+ * Каноническая строка для подписи firmware-метаданных (ADR-0008).
+ *   `version|image_hash|image_size`
+ * Должна побайтово совпадать в оракуле и в прошивке ESP32
+ * (verify_firmware_signature в esp32_proof_sender_v3.ino).
+ * Поля не должны содержать '|' (валидируется на стороне оракула).
+ */
+function buildFirmwareMessage(f) {
+    return `${f.version}|${f.image_hash}|${f.image_size}`;
+}
+
+/**
+ * Подписать firmware-метаданные ключом оракула/основателя (Ed25519).
+ * Подпись покрывает version + hash + size; подлинность самого образа
+ * обеспечивается проверкой SHA-256(image) == image_hash на устройстве.
+ */
+function signFirmware(firmware, secretKey) {
+    const msg = Buffer.from(buildFirmwareMessage(firmware), 'utf8');
+    const sig = nacl.sign.detached(new Uint8Array(msg), secretKey);
+    return Buffer.from(sig).toString('base64');
+}
+
+/**
+ * Проверить подпись firmware-метаданных (зеркалит прошивку ESP32).
+ *
+ * @param {object} f { version, image_hash, image_size }
+ * @param {string} signature base64-подпись
+ * @param {Uint8Array|string} publicKey публичный ключ оракула (32 байта) или base64
+ * @returns {{ok: true} | {ok: false, error: string}}
+ */
+function verifyFirmware(f, signature, publicKey) {
+    if (!f || typeof f !== 'object') return { ok: false, error: 'firmware_missing' };
+    const required = ['version', 'image_hash', 'image_size'];
+    for (const k of required) {
+        if (f[k] === undefined || f[k] === null || f[k] === '') {
+            return { ok: false, error: `firmware_field_missing:${k}` };
+        }
+    }
+    if (typeof f.image_hash !== 'string' || !/^[0-9a-fA-F]{64}$/.test(f.image_hash)) {
+        return { ok: false, error: 'invalid_image_hash' };
+    }
+    if (!Number.isInteger(Number(f.image_size)) || Number(f.image_size) <= 0) {
+        return { ok: false, error: 'invalid_image_size' };
+    }
+    if (typeof signature !== 'string') return { ok: false, error: 'signature_missing' };
+    let sigBytes;
+    let pubBytes;
+    try {
+        sigBytes = Buffer.from(signature, 'base64');
+        pubBytes = typeof publicKey === 'string' ? Buffer.from(publicKey, 'base64') : Buffer.from(publicKey);
+        if (sigBytes.length !== 64 || pubBytes.length !== 32) {
+            return { ok: false, error: 'bad_signature_or_key_length' };
+        }
+    } catch (e) {
+        return { ok: false, error: 'bad_encoding' };
+    }
+    const msg = Buffer.from(buildFirmwareMessage(f), 'utf8');
+    const valid = nacl.sign.detached.verify(
+        new Uint8Array(msg),
+        new Uint8Array(sigBytes),
+        new Uint8Array(pubBytes)
+    );
+    if (!valid) return { ok: false, error: 'signature_invalid' };
+    return { ok: true };
+}
+
 
 /** Короткая фабрика результата-ошибки. */
 function fail(status, error) {
@@ -591,6 +666,10 @@ module.exports = {
     buildManifestMessage,
     signManifest,
     verifyManifest,
+    // firmware (ADR-0008)
+    buildFirmwareMessage,
+    signFirmware,
+    verifyFirmware,
     // validators
     validateDeviceId,
     validateEnergyWh,

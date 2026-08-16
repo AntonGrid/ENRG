@@ -6,6 +6,7 @@
     "test": "TS_NODE_TRANSPILE_ONLY=1 ts-mocha -p tsconfig.json \"tests/**/*.test.ts\"",
     "test:policy": "mocha tests/policy.test.js",
     "test:manifest": "mocha tests/manifest.test.js",
+    "test:firmware": "mocha tests/firmware.test.js",
     "e2e:local": "RPC_ENDPOINT=http://127.0.0.1:8899 ts-node scripts/devnet_e2e_lifecycle.ts",
     "e2e:local:smoke": "RPC_ENDPOINT=http://127.0.0.1:8899 ts-node scripts/devnet_e2e_lifecycle.ts --smoke",
     "devnet:e2e": "RPC_ENDPOINT=https://api.devnet.solana.com ts-node scripts/devnet_e2e_lifecycle.ts",

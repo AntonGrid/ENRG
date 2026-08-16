@@ -21,6 +21,14 @@ This server receives signed energy proofs from IoT devices, verifies Ed25519 sig
   - Устройство проверяет подпись вшитым публичным ключом основателя ДО
     использования манифеста; при невалидном манифесте proof'ы не отправляются
   - Опциональный query-параметр `?rated_power=<Вт>` — переопределить мощность
+- `POST /api/v1/firmware/update?version=1.2.0[&model=ENRG-ESP32-v1]` — публикация OTA-образа (ADR-0008)
+  - Body: raw binary образ прошивки; заголовок `x-api-key: <FIRMWARE_ADMIN_KEY>`
+  - Сохраняет образ в `firmware/updates/` (или `FIRMWARE_UPDATES_DIR`),
+    подписывает метаданные ключом основателя (`version|image_hash|image_size`),
+    возвращает `{ ok, version, image_size, image_hash, signature }`
+- `GET /api/v1/firmware/latest` — метаданные текущей прошивки
+  (`{ version, image_hash, image_size, model, image_url, signature, signed_by, issued_at }`)
+- `GET /api/v1/firmware/latest/image` — бинарный образ (заголовки `X-Firmware-Version`, `X-Firmware-Hash`)
 - `GET /api/v1/device/:id/status` | `GET /api/v1/device/:id/balance` | `GET /api/v1/device/:id/history`
 - `POST /api/v1/pool/create`, `GET /api/v1/stats`
 
@@ -66,6 +74,7 @@ if (!v.ok) return res.status(v.status).json({ error: v.error });
 | `rateLimitPerMinute` | `RATE_LIMIT_PER_MINUTE` | `100` | глобальный rate-limit (запросов/мин на IP) |
 | `oracleUrl` | `ORACLE_URL` | `http://localhost:3000` | публичный URL оракула для Device Manifest (ADR-0004) |
 | `defaultRatedPowerW` | `DEFAULT_RATED_POWER_W` | `10000` | rated_power по умолчанию (Вт) в Device Manifest |
+| `maxFirmwareSizeBytes` | `MAX_FIRMWARE_SIZE_BYTES` | `2000000` | макс. размер OTA-образа (байт) |
 
 Пример `policy-config.json`:
 
@@ -76,7 +85,8 @@ if (!v.ok) return res.status(v.status).json({ error: v.error });
   "maxProofAgeSec": 900,
   "rateLimitPerMinute": 100,
   "oracleUrl": "https://oracle.enrg.network",
-  "defaultRatedPowerW": 10000
+  "defaultRatedPowerW": 10000,
+  "maxFirmwareSizeBytes": 2000000
 }
 ```
 
