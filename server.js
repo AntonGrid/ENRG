@@ -1,14 +1,15 @@
 const express = require('express');
 const path = require('path');
 const nacl = require('tweetnacl');
+const util = require('tweetnacl-util'); // encodeBase64/decodeBase64 (манифесты, подписи)
 const storage = require('./storage');
+const policy = require('./policy'); // Policy Engine (ADR-0003)
 const winston = require('winston');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const { Connection, clusterApiUrl, Keypair, Transaction, TransactionInstruction, PublicKey, TransactionMessage, VersionedTransaction, Ed25519Program, SYSVAR_INSTRUCTIONS_PUBKEY, AddressLookupTableProgram, sendAndConfirmTransaction, SystemProgram } = require('@solana/web3.js');
 const { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } = require('@solana/spl-token');
 const anchor = require('@coral-xyz/anchor');
-const bs58 = require('bs58');
 const crypto = require('crypto');
 const fs = require('fs');
 const cors = require('cors');
@@ -82,14 +83,9 @@ app.use(express.json({ limit: '1mb' }));
 // чтобы rate-limit корректно считал реальные IP клиентов.
 app.set('trust proxy', 1);
 
-// M-6: глобальный rate-limit — 100 запросов в минуту на IP (защита от DoS).
-const limiter = rateLimit({
-    windowMs: 60 * 1000, // 1 минута
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'too many requests, please retry later' },
-});
+// M-6: глобальный rate-limit (защита от DoS). Лимит задаётся в Policy Engine:
+// policy-config.json / RATE_LIMIT_PER_MINUTE (по умолчанию 100 запросов/мин на IP).
+const limiter = rateLimit(policy.rateLimitOptions());
 app.use(limiter);
 
 // L-1: health-эндпоинт (используется для проверки живости оракула).
@@ -203,33 +199,9 @@ try {
     logger.warn('⚠️ Cannot load enrg_mvp IDL (' + ENRG_IDL_PATH + '):', e.message);
 }
 
-// device_id в on-chain — это Solana Pubkey (32 байта): base58 или 0x-hex.
-function parseDevicePubkey(device_id) {
-    if (typeof device_id !== 'string' || !device_id) return null;
-    try {
-        if (/^0x[0-9a-fA-F]{64}$/.test(device_id)) return new PublicKey(Buffer.from(device_id.slice(2), 'hex'));
-        const b = bs58.decode(device_id);
-        if (b.length !== 32) return null;
-        return new PublicKey(b);
-    } catch (e) { return null; }
-}
-
-// little-endian u64 (совпадает с state/oracle.rs device_message_to_sign).
-function le8(value) {
-    const b = Buffer.alloc(8);
-    b.writeBigUInt64LE(BigInt(Math.trunc(Number(value))), 0);
-    return b;
-}
-
-// OracleReport::device_message_to_sign(): device_id || nonce || device_timestamp || energy_wh
-function buildDeviceMessage(deviceIdPubkey, nonce, timestamp, energyWh) {
-    return Buffer.concat([deviceIdPubkey.toBuffer(), le8(nonce), le8(timestamp), le8(energyWh)]);
-}
-
-// OracleReport::oracle_message_to_sign(): device_id || nonce || device_timestamp || verified_at || energy_wh
-function buildOracleMessage(deviceIdPubkey, nonce, timestamp, verifiedAt, energyWh) {
-    return Buffer.concat([deviceIdPubkey.toBuffer(), le8(nonce), le8(timestamp), le8(verifiedAt), le8(energyWh)]);
-}
+// Канонические сообщения подписи (buildDeviceMessage/buildOracleMessage) и
+// разбор device_id (parseDevicePubkey) вынесены в Policy Engine (policy.js,
+// ADR-0003) — единый источник правды для server.js и policy.js.
 
 async function accountExists(connection, pk) {
     const info = await connection.getAccountInfo(pk);
@@ -406,8 +378,8 @@ async function mintEnergy(proof) {
         const energyWh = new anchor.BN(proof.energy_wh);
 
         // Сообщения для ed25519-precompile (совпадают с state/oracle.rs).
-        const deviceMsg = buildDeviceMessage(deviceIdPubkey, proof.nonce, proof.device_timestamp, proof.energy_wh);
-        const oracleMsg = buildOracleMessage(deviceIdPubkey, proof.nonce, proof.device_timestamp, nowSec, proof.energy_wh);
+        const deviceMsg = policy.buildDeviceMessage(deviceIdPubkey, proof.nonce, proof.device_timestamp, proof.energy_wh);
+        const oracleMsg = policy.buildOracleMessage(deviceIdPubkey, proof.nonce, proof.device_timestamp, nowSec, proof.energy_wh);
         const oracleSignature = nacl.sign.detached(new Uint8Array(oracleMsg), founderKeypair.secretKey);
 
         // OracleReport (borsh, как в state/oracle.rs): oracle(32) device_id(32) nonce(8)
@@ -508,14 +480,8 @@ async function mintEnergy(proof) {
     }
 }
 
-// Валидация device_id: только base58 (алфавит без 0/O/I/l) или hex (с префиксом 0x).
-// Отклоняет спецсимволы, пробелы, XSS-пейлоады и т.п.
-function isValidDeviceId(id) {
-    if (typeof id !== 'string' || id.length === 0 || id.length > 128) return false;
-    if (/^[1-9A-HJ-NP-Za-km-z]+$/.test(id)) return true;         // base58
-    if (/^0x[0-9a-fA-F]+$/.test(id)) return id.length % 2 === 0;  // hex (чётное число hex-цифр)
-    return false;
-}
+// Формат device_id (base58/hex) и все проверки входящих данных вынесены
+// в Policy Engine — policy.validateDeviceId() / policy.validateProof() (ADR-0003).
 
 // === Регистрация устройства ===
 app.post('/api/v1/device/register', [
@@ -529,40 +495,14 @@ app.post('/api/v1/device/register', [
     }
     const { device_id, public_key, signature } = req.body;
 
-    // CR-1: только base58/hex — без спецсимволов и мусорных строк.
-    if (!isValidDeviceId(device_id)) {
-        return res.status(400).json({ error: 'invalid device_id format (base58 or hex only)' });
-    }
-
-    // Публичный ключ: ровно 32 байта base64.
-    let pubBytes;
-    try {
-        pubBytes = Buffer.from(public_key, 'base64');
-        if (pubBytes.length !== 32) {
-            return res.status(400).json({ error: 'invalid public key (must be 32 bytes base64)' });
+    // CR-1: Policy Engine — формат device_id, длины ключа/подписи и
+    // proof-of-possession по сообщению `${device_id}|${public_key}` (ADR-0003).
+    const v = policy.validateRegister(device_id, public_key, signature);
+    if (!v.ok) {
+        if (v.status === 403) {
+            logger.warn(`⛔ Register denied (bad signature) for device ${device_id}`);
         }
-    } catch (e) {
-        return res.status(400).json({ error: 'invalid public key format' });
-    }
-
-    // CR-1: proof-of-possession. Подпись сделана приватным ключом, соответствующим
-    // public_key, по сообщению `device_id|public_key` (детерминированный challenge).
-    let sigBytes;
-    try {
-        sigBytes = Buffer.from(signature, 'base64');
-        if (sigBytes.length !== 64) {
-            return res.status(400).json({ error: 'invalid signature (must be 64 bytes base64)' });
-        }
-    } catch (e) {
-        return res.status(400).json({ error: 'invalid signature format' });
-    }
-    const msgBytes = Buffer.from(`${device_id}|${public_key}`, 'utf8');
-    const verified = nacl.sign.detached.verify(
-        new Uint8Array(msgBytes), new Uint8Array(sigBytes), new Uint8Array(pubBytes)
-    );
-    if (!verified) {
-        logger.warn(`⛔ Register denied (bad signature) for device ${device_id}`);
-        return res.status(403).json({ error: 'invalid signature: proof of device key ownership required' });
+        return res.status(v.status).json({ error: v.error });
     }
 
     // CR-1: запрет перезаписи чужого device_id. Если устройство существует,
@@ -583,9 +523,9 @@ app.post('/api/v1/device/register', [
 });
 
 // M-5: валидация формата device_id во всех read-эндпоинтах
-// (/status, /balance, /history) — только base58/hex, без спецсимволов и XSS.
+// (/status, /balance, /history) — Policy Engine (ADR-0003).
 app.param('id', (req, res, next, id) => {
-    if (!isValidDeviceId(id)) {
+    if (!policy.validateDeviceId(id).ok) {
         return res.status(400).json({ error: 'invalid device_id format (base58 or hex only)' });
     }
     next();
@@ -626,6 +566,62 @@ app.get('/api/v1/device/:id/history', (req, res) => {
     res.json({ history: [] });
 });
 
+// === ПОДПИСАННЫЙ DEVICE MANIFEST (ADR-0004) ===
+// Устройство запрашивает конфигурацию (rated_power, oracle_url) у оракула и
+// проверяет подпись ключом основателя (FOUNDER_KEY) перед использованием.
+// Каноническое сообщение подписи — policy.buildManifestMessage() (policy.js),
+// оно же воспроизводится в прошивке ESP32 (verifyManifest).
+app.get('/api/v1/manifest/:device_id', (req, res) => {
+    const deviceId = req.params.device_id;
+
+    // Формат device_id (base58/hex) — через Policy Engine.
+    const d = policy.validateDeviceId(deviceId);
+    if (!d.ok) {
+        return res.status(d.status).json({ error: d.error });
+    }
+    if (!d.deviceIdPubkey) {
+        return res.status(400).json({ error: 'invalid device_id (must be a 32-byte key)' });
+    }
+    if (!founderKeypair) {
+        return res.status(500).json({ error: 'founder_key_missing' });
+    }
+
+    // public_key: ключ из реестра, либо (для незарегистрированных устройств)
+    // сам device_id (обратная совместимость с flow «манифест до регистрации»).
+    const public_key =
+        devices[deviceId] ||
+        util.encodeBase64(d.deviceIdPubkey.toBytes());
+
+    // rated_power: опциональный query-параметр (только доверенный вызывающий),
+    // иначе — defaultRatedPowerW из конфигурации политик.
+    let rated_power = policy.config.defaultRatedPowerW;
+    if (req.query.rated_power !== undefined) {
+        const rp = Number(req.query.rated_power);
+        if (!Number.isFinite(rp) || rp <= 0 || rp > 1_000_000_000) {
+            return res.status(400).json({ error: 'invalid rated_power (positive number <= 1e9 W)' });
+        }
+        rated_power = Math.round(rp);
+    }
+
+    // oracle_url: публичный URL оракула (куда устройству слать proof'ы).
+    const oracle_url = policy.config.oracleUrl;
+    if (typeof oracle_url !== 'string' || !/^https?:\/\//.test(oracle_url) || oracle_url.includes('|')) {
+        return res.status(500).json({ error: 'oracle_url misconfigured' });
+    }
+
+    const manifest = {
+        device_id: deviceId,
+        rated_power,
+        oracle_url,
+        public_key,
+        timestamp: Math.floor(Date.now() / 1000),
+    };
+
+    const signature = policy.signManifest(manifest, founderKeypair.secretKey);
+    logger.info(`📋 Manifest issued for ${deviceId} (rated_power=${rated_power}W, oracle=${oracle_url})`);
+    res.json({ ...manifest, signature });
+});
+
 // === СОЗДАНИЕ ПУЛА ===
 app.post('/api/v1/pool/create', async (req, res) => {
     const { pool_id, threshold } = req.body;
@@ -648,135 +644,34 @@ app.post('/api/v1/pool/create', async (req, res) => {
 });
 
 // === ОТПРАВКА PROOF ===
-// CR-2: лимит энергии в одном отчёте (1 ГВт·ч) — защита от инфляции.
-const MAX_ENERGY_PER_REPORT_WH = 1_000_000_000;
-// M-3: константы свежести СИНХРОНИЗИРОВАНЫ с on-chain
-// (programs/enrg-mvp/src/constants.rs MAX_CLOCK_SKEW=300,
-//  programs/enrg-mvp/src/security/validation.rs MAX_PROOF_AGE=900).
-const MAX_CLOCK_SKEW_SEC = 300;  // метка не в будущем более чем на 5 минут
-const MAX_PROOF_AGE_SEC = 900;   // доказательство не старше 15 минут
+// CR-2 / M-3: лимиты (energyWh, timestamp-свежесть, nonce, подпись) задаются
+// в Policy Engine (policy-config.json, ADR-0003) и синхронизированы с on-chain
+// (constants.rs::MAX_CLOCK_SKEW=300, security/validation.rs::MAX_PROOF_AGE=900).
 
 app.post('/api/v1/proof/submit', async (req, res) => {
     try {
-        const { device_id, timestamp, energyWh, nonce, signature, pool_id } = req.body;
-        if (!device_id || timestamp === undefined || energyWh === undefined || nonce === undefined || !signature) {
-            return res.status(400).json({ error: 'missing fields' });
+        // CR-1/CR-2/CR-3/M-3/M-5: ВСЕ проверки входящего proof выполняет Policy
+        // Engine — policy.validateProof(): формат device_id, energyWh, свежесть
+        // timestamp, unknown device (ctx.getPublicKey), монотонный nonce
+        // (ctx.getLastNonce) и Ed25519-подпись (binary/legacy).
+        // L-3: политика возвращает готовый HTTP-код и строку ошибки.
+        const v = policy.validateProof(req.body, {
+            getPublicKey: (id) => devices[id] || null,
+            getLastNonce: (id) => (energyStore[id] || { nonce: 0 }).nonce,
+        });
+        if (!v.ok) {
+            return res.status(v.status).json({ error: v.error });
         }
-
-        // M-5: строгий формат device_id (base58/hex) — как в /register.
-        if (typeof device_id !== 'string' || !isValidDeviceId(device_id)) {
-            return res.status(400).json({ error: 'invalid device_id format (base58 or hex only)' });
-        }
-
-        // ── CR-2: валидация energyWh ──
-        // Отклоняем NaN/Infinity, строки-«мусор», null (Number(null)=0), отрицательные,
-        // нуль и значения выше лимита.
-        if (typeof energyWh !== 'number' && typeof energyWh !== 'string') {
-            return res.status(400).json({ error: 'invalid energyWh (must be a number)' });
-        }
-        const energyWhNum = Number(energyWh);
-        if (!Number.isFinite(energyWhNum)) {
-            return res.status(400).json({ error: 'invalid energyWh (must be a finite number)' });
-        }
-        if (typeof energyWh === 'string' && !/^\d+(\.\d+)?$/.test(energyWh.trim())) {
-            return res.status(400).json({ error: 'invalid energyWh format' });
-        }
-        if (energyWhNum <= 0) {
-            return res.status(400).json({ error: 'invalid energyWh (must be positive)' });
-        }
-        if (energyWhNum > MAX_ENERGY_PER_REPORT_WH) {
-            return res.status(400).json({ error: `energyWh exceeds maximum allowed per report (${MAX_ENERGY_PER_REPORT_WH} Wh)` });
-        }
-
-        // ── CR-2: валидация timestamp (свежесть ±5 минут) ──
-        if (typeof timestamp !== 'number' && typeof timestamp !== 'string') {
-            return res.status(400).json({ error: 'invalid timestamp (must be a number)' });
-        }
-        const timestampNum = Number(timestamp);
-        if (!Number.isFinite(timestampNum)) {
-            return res.status(400).json({ error: 'invalid timestamp (must be a finite number)' });
-        }
-        const nowSec = Math.floor(Date.now() / 1000);
-        // M-3: проверки синхронизированы с on-chain verify_timestamp():
-        // - метка не в будущем более чем на MAX_CLOCK_SKEW (5 мин);
-        // - доказательство не старше MAX_PROOF_AGE (15 мин).
-        if (timestampNum > nowSec + MAX_CLOCK_SKEW_SEC) {
-            return res.status(400).json({ error: 'FutureTimestamp' });
-        }
-        if (nowSec - timestampNum > MAX_PROOF_AGE_SEC) {
-            return res.status(400).json({ error: 'StaleProof' });
-        }
-
-        const publicKeyB64 = devices[device_id];
-        if (!publicKeyB64) return res.status(400).json({ error: 'unknown device' });
-
-        // ── CR-2: монотонный nonce — повторное использование отклоняется ──
-        // Последний принятый nonce хранится в energy_store для каждого device_id.
-        if (typeof nonce !== 'number' && typeof nonce !== 'string') {
-            return res.status(400).json({ error: 'invalid nonce (must be a positive integer)' });
-        }
-        const nonceNum = Number(nonce);
-        if (!Number.isInteger(nonceNum) || nonceNum <= 0) {
-            return res.status(400).json({ error: 'invalid nonce (must be a positive integer)' });
-        }
-        const stored = energyStore[device_id] || { nonce: 0 };
-        if (nonceNum <= stored.nonce) {
-            return res.status(400).json({ error: 'InvalidNonce' });
-        }
-
-        // ── CR-2 + CR-3: проверка подписи ──
-        // CR-3: подпись принимается в on-chain бинарном формате
-        // device_id(32) || nonce(le8) || device_timestamp(le8) || energy_wh(le8)  → sig_mode='binary',
-        // либо в legacy строковом формате device_id|timestamp|energyWh|nonce     → sig_mode='legacy'.
-        // Только 'binary' можно использовать в OracleReport для on-chain mint.
-        // L-3: весь блок в try/catch — битые/неожиданные входные данные
-        // дают 400/401 (Bad Request), а не 500 Internal Server Error.
-        let sigBytes;
-        let pubBytes;
-        try {
-            if (typeof signature !== 'string') throw new Error('bad signature type');
-            sigBytes = Buffer.from(signature, 'base64');
-            pubBytes = Buffer.from(publicKeyB64, 'base64');
-        } catch (e) {
-            return res.status(400).json({ error: 'invalid signature format' });
-        }
-        if (sigBytes.length !== 64 || pubBytes.length !== 32) {
-            return res.status(401).json({ error: 'invalid signature' });
-        }
-        const energyWhInt = Math.round(energyWhNum);
-        const deviceIdPubkey = parseDevicePubkey(device_id);
-        let sigMode = null;
-        try {
-            if (deviceIdPubkey) {
-                const bmsg = buildDeviceMessage(deviceIdPubkey, nonceNum, timestampNum, energyWhInt);
-                if (nacl.sign.detached.verify(new Uint8Array(bmsg), new Uint8Array(sigBytes), new Uint8Array(pubBytes))) {
-                    sigMode = 'binary';
-                }
-            }
-            if (!sigMode) {
-                const lmsg = Buffer.from(`${device_id}|${timestamp}|${energyWh}|${nonce}`, 'utf8');
-                if (nacl.sign.detached.verify(new Uint8Array(lmsg), new Uint8Array(sigBytes), new Uint8Array(pubBytes))) {
-                    sigMode = 'legacy';
-                }
-            }
-        } catch (e) {
-            return res.status(400).json({ error: 'invalid signature' });
-        }
-        if (!sigMode) return res.status(401).json({ error: 'invalid signature' });
 
         // ── Накопление энергии (целые Wh) + сохранение proof для on-chain mint ──
+        const proof = v.proof;
+        const { device_id } = proof;
+        const pool_id = v.pool_id;
+        const energyWhInt = proof.energy_wh;
+        const stored = energyStore[device_id] || { energy_wh: 0, nonce: 0 };
         const newEnergy = (stored.energy_wh || 0) + energyWhInt;
-        const proof = {
-            device_id,
-            device_id_pubkey: deviceIdPubkey,
-            nonce: nonceNum,
-            device_timestamp: timestampNum,
-            energy_wh: energyWhInt,
-            device_signature: sigBytes,
-            sig_mode: sigMode,
-        };
-        energyStore[device_id] = { energy_wh: newEnergy, nonce: nonceNum, last_proof: proof };
-        await storage.saveEnergy(device_id, newEnergy, nonceNum);
+        energyStore[device_id] = { energy_wh: newEnergy, nonce: proof.nonce, last_proof: proof };
+        await storage.saveEnergy(device_id, newEnergy, proof.nonce);
 
         if (pool_id && pools[pool_id]) {
             const pool = pools[pool_id];
@@ -796,11 +691,11 @@ app.post('/api/v1/proof/submit', async (req, res) => {
             return res.json({ ok: true, pool_total: pool.total_energy });
         }
 
-        logger.info(`📊 Device ${device_id} submitted ${energyWhInt}Wh (nonce=${nonceNum}, sig=${sigMode}). Accumulated: ${newEnergy}Wh`);
+        logger.info(`📊 Device ${device_id} submitted ${energyWhInt}Wh (nonce=${proof.nonce}, sig=${proof.sig_mode}). Accumulated: ${newEnergy}Wh`);
 
         // CR-3: on-chain-совместимая (binary) подпись → каждый proof минтится
         // отдельной транзакцией mint_energy (как в devnet_e2e_lifecycle.ts).
-        if (sigMode === 'binary') {
+        if (proof.sig_mode === 'binary') {
             const mintRes = await mintEnergy(proof);
             if (mintRes.success) {
                 return res.json({ ok: true, minted: proof.energy_wh, tx: mintRes.tx, accumulated: newEnergy });

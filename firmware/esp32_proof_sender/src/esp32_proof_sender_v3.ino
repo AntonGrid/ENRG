@@ -39,8 +39,36 @@
 #endif
 
 // HTTPS-эндпоинт оракула (обязательно https://, см. ENRG_CA_CERT).
+// Используется по умолчанию (обратная совместимость). Если получен валидный
+// Device Manifest (ADR-0004), реальный URL берётся из manifest.oracle_url.
 #ifndef ENRG_ORACLE_URL
 #define ENRG_ORACLE_URL "https://oracle.example.com/api/v1/proof/submit"
+#endif
+
+// ── Device Manifest (ADR-0004) ──
+// База URL эндпоинта манифестов: к ней добавляется "/<device_id>".
+#ifndef ENRG_MANIFEST_URL_BASE
+#define ENRG_MANIFEST_URL_BASE "https://oracle.example.com/api/v1/manifest"
+#endif
+
+// Публичный ключ ОРАКУЛА (основателя, Ed25519, 32 байта) — вшивается в прошивку.
+// Манифесты подписываются этим ключом на стороне оракула (FOUNDER_KEY);
+// устройство проверяет подпись ДО использования манифеста.
+// ЗАПОЛНИТЕ реальным ключом перед прошивкой (32 hex-байта, без "0x").
+#ifndef ENRG_FOUNDER_PUBKEY_HEX
+#define ENRG_FOUNDER_PUBKEY_HEX "0000000000000000000000000000000000000000000000000000000000000000"
+#endif
+
+// 1 — манифест обязателен: без валидного манифеста proof'ы НЕ отправляются.
+// 0 — обратная совместимость: при недоступном/невалидном манифесте устройство
+//     работает по хардкод-конфигурации (ENRG_ORACLE_URL).
+#ifndef ENRG_MANIFEST_REQUIRED
+#define ENRG_MANIFEST_REQUIRED 0
+#endif
+
+// Как часто повторять попытку получить манифест (мс), если он не получен.
+#ifndef ENRG_MANIFEST_RETRY_MS
+#define ENRG_MANIFEST_RETRY_MS 60000UL
 #endif
 
 // NTP-сервер для wall-clock.
@@ -97,6 +125,7 @@
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
 #include <Preferences.h>
+#include <ArduinoJson.h>   // ADR-0004: разбор подписанного Device Manifest
 #include <Crypto.h>
 #include <Ed25519.h>
 
@@ -107,6 +136,11 @@
 #if ENRG_USE_ATECC608
 #include <cryptoauthlib.h>
 #endif
+
+// ── Глобальные ключи устройства (заполняются в identity_init_v3) ──
+static uint8_t g_privateKey[32];
+static uint8_t g_publicKey[32];
+static unsigned long g_lastReportMs = 0;
 
 // ════════════════════════════════════════════════════════════════
 //  base64 (компактная реализация, без внешних библиотек)
@@ -124,10 +158,44 @@ String base64_encode(const uint8_t *data, size_t len) {
         if (i + 2 < len) b |= data[i + 2];
         out += BASE64_CHARS[(b >> 18) & 0x3F];
         out += BASE64_CHARS[(b >> 12) & 0x3F];
-        out += (i + 1 < len) ? BASE64_CHARS[(b >> 6) & 0x3F] : '=';
+        out += (i + 1 < len) ? BASE64_CHARS[(b >> 6) & 0x3F] : '=' ;
         out += (i + 2 < len) ? BASE64_CHARS[b & 0x3F] : '=';
     }
     return out;
+}
+
+// Значение base64-символа (0..63) или -1, если символ недопустим.
+static int b64_val(char c) {
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+
+/**
+ * Декодирование base64 (без внешних библиотек). Возвращает число
+ * декодированных байт или -1 при ошибке/переполнении буфера.
+ * Используется для разбора signature Device Manifest (ADR-0004).
+ */
+int base64_decode(const String &in, uint8_t *out, size_t maxOut) {
+    size_t oi = 0;
+    int buf = 0, bits = 0;
+    for (size_t i = 0; i < in.length(); i++) {
+        char c = in[i];
+        if (c == '=' || c == '\r' || c == '\n' || c == ' ') break; // padding/мусор
+        int v = b64_val(c);
+        if (v < 0) return -1;
+        buf = (buf << 6) | v;
+        bits += 6;
+        if (bits >= 8) {
+            bits -= 8;
+            if (oi >= maxOut) return -1;
+            out[oi++] = (uint8_t)((buf >> bits) & 0xFF);
+        }
+    }
+    return (int)oi;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -318,6 +386,15 @@ bool connect_wifi(unsigned long timeoutMs) {
 //  HTTPS-ОТПРАВКА PROOF (проверка сертификата; mTLS опционально)
 // ════════════════════════════════════════════════════════════════
 
+// ── Глобальное состояние манифеста (ADR-0004) ──
+// URL для отправки proof'ов: по умолчанию ENRG_ORACLE_URL (обратная
+// совместимость); при валидном манифесте заменяется на manifest.oracle_url.
+static String g_proof_url = ENRG_ORACLE_URL;
+// Номинальная мощность устройства из манифеста (Вт); 0 — не задана.
+static uint64_t g_rated_power = 0;
+// true — манифест получен и подпись проверена.
+static bool g_manifest_valid = false;
+
 int send_proof_https(const String &body) {
     WiFiClientSecure client;
     client.setCACert(ENRG_CA_CERT); // обязательная проверка корневого CA
@@ -327,7 +404,7 @@ int send_proof_https(const String &body) {
 #endif
 
     HTTPClient http;
-    if (!http.begin(client, ENRG_ORACLE_URL)) {
+    if (!http.begin(client, g_proof_url)) {
         Serial.println("[HTTP] begin failed (недоступен https)");
         return -1;
     }
@@ -343,17 +420,197 @@ int send_proof_https(const String &body) {
     return code;
 }
 
+/**
+ * Простой HTTPS GET (для получения Device Manifest, ADR-0004).
+ * Возвращает тело ответа (пустая строка при ошибке).
+ */
+String http_get(const String &url) {
+    WiFiClientSecure client;
+    client.setCACert(ENRG_CA_CERT); // обязательная проверка корневого CA
+#if ENRG_MTLS
+    client.setCertificate(ENRG_CLIENT_CERT);
+    client.setPrivateKey(ENRG_CLIENT_PRIVKEY);
+#endif
+
+    HTTPClient http;
+    if (!http.begin(client, url)) {
+        Serial.println("[HTTP] GET begin failed");
+        return "";
+    }
+    int code = http.GET();
+    String body = "";
+    if (code == 200) {
+        body = http.getString();
+    } else {
+        Serial.printf("[HTTP] GET %s -> %d\n", url.c_str(), code);
+    }
+    http.end();
+    return body;
+}
+
 // ════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════
+//  DEVICE MANIFEST (ADR-0004)
+// ════════════════════════════════════════════════════════════════
+
+// Парсинг hex-строки публичного ключа основателя в байты (32).
+bool parse_hex(const char *hex, uint8_t *out, size_t outLen) {
+    size_t len = strlen(hex);
+    if (len != outLen * 2) return false;
+    for (size_t i = 0; i < outLen; i++) {
+        char hi = hex[i * 2], lo = hex[i * 2 + 1];
+        auto nib = [](char c) -> int {
+            if (c >= '0' && c <= '9') return c - '0';
+            if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+            if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+            return -1;
+        };
+        int h = nib(hi), l = nib(lo);
+        if (h < 0 || l < 0) return false;
+        out[i] = (uint8_t)((h << 4) | l);
+    }
+    return true;
+}
+
+/**
+ * Проверка подписанного Device Manifest (ADR-0004).
+ *
+ * 1. Разбирает JSON.
+ * 2. Проверяет привязку к ЭТОМУ устройству: device_id == свой, public_key == свой.
+ * 3. Пересобирает каноническое сообщение подписи (то же, что в policy.js):
+ *      device_id|rated_power|oracle_url|public_key|timestamp
+ * 4. Декодирует base64-подпись и проверяет Ed25519 публичным ключом основателя
+ *    (вшит в прошивку как ENRG_FOUNDER_PUBKEY_HEX).
+ *
+ * @param body тело ответа оракула (JSON)
+ * @param deviceId собственный device_id ("0x" + hex публичного ключа)
+ * @param ownPublicKey собственный Ed25519-публичный ключ (32 байта)
+ * @param ratedPowerOut номинальная мощность (Вт) из манифеста
+ * @param oracleUrlOut oracle_url из манифеста
+ * @returns true, если манифест валиден
+ */
+bool verify_manifest(const String &body, const String &deviceId,
+                     const uint8_t *ownPublicKey,
+                     uint64_t &ratedPowerOut, String &oracleUrlOut) {
+    // Публичный ключ основателя (оракула) из конфигурации.
+    uint8_t founderPub[32];
+    if (!parse_hex(ENRG_FOUNDER_PUBKEY_HEX, founderPub, sizeof(founderPub))) {
+        Serial.println("[MANIFEST] FATAL: ENRG_FOUNDER_PUBKEY_HEX некорректен");
+        return false;
+    }
+
+    DynamicJsonDocument doc(1024);
+    if (deserializeJson(doc, body)) return false;
+
+    const char *m_id = doc["device_id"];
+    const char *m_rated = doc["rated_power"];
+    const char *m_oracle = doc["oracle_url"];
+    const char *m_pub = doc["public_key"];
+    const char *m_ts = doc["timestamp"];
+    const char *m_sig = doc["signature"];
+    if (!m_id || !m_rated || !m_oracle || !m_pub || !m_ts || !m_sig) return false;
+
+    // Привязка к этому устройству (манифест нельзя подменить/переадресовать).
+    if (String(m_id) != deviceId) return false;
+    if (String(m_pub) != base64_encode(ownPublicKey, 32)) return false;
+
+    // Каноническое сообщение — побайтово как в policy.js::buildManifestMessage.
+    String msg = String(m_id) + "|" + String(m_rated) + "|" +
+                 String(m_oracle) + "|" + String(m_pub) + "|" + String(m_ts);
+
+    uint8_t sig[64];
+    if (base64_decode(String(m_sig), sig, sizeof(sig)) != 64) return false;
+    if (!Ed25519::verify(sig, founderPub, (const uint8_t *)msg.c_str(), msg.length())) {
+        return false;
+    }
+
+    ratedPowerOut = strtoull(m_rated, NULL, 10);
+    oracleUrlOut = String(m_oracle);
+    return true;
+}
+
+/** Применить валидный манифест: rated_power + oracle_url → эндпоинт proof. */
+bool apply_manifest(const String &body, const String &deviceId) {
+    uint64_t rp = 0;
+    String ourl = "";
+    if (!verify_manifest(body, deviceId, g_publicKey, rp, ourl)) return false;
+
+    g_rated_power = rp;
+    if (ourl.endsWith("/")) ourl.remove(ourl.length() - 1);
+    g_proof_url = ourl + "/api/v1/proof/submit";
+    g_manifest_valid = true;
+
+    Serial.printf("[MANIFEST] OK device=%s rated_power=%lluW proof_url=%s\n",
+                  deviceId.c_str(), (unsigned long long)g_rated_power, g_proof_url.c_str());
+    return true;
+}
+
+/** Загрузить манифест из NVS и проверить подпись. */
+bool load_manifest_from_nvs(const String &deviceId) {
+    String stored = g_prefs.getString("manifest", "");
+    if (stored.length() == 0) return false;
+    if (!apply_manifest(stored, deviceId)) {
+        Serial.println("[MANIFEST] NVS-копия невалидна — перезапросим");
+        g_prefs.remove("manifest");
+        return false;
+    }
+    return true;
+}
+
+/** Запросить манифест у оракула (GET /api/v1/manifest/<device_id>). */
+String fetch_manifest_body(const String &deviceId) {
+    String url = String(ENRG_MANIFEST_URL_BASE) + "/" + deviceId;
+    Serial.printf("[MANIFEST] fetching %s\n", url.c_str());
+    return http_get(url);
+}
+
+/** Полная инициализация манифеста при старте (setup). */
+bool init_manifest(const String &deviceId) {
+    // 1) Сначала NVS-копия (устройство может работать офлайн, ADR-0004).
+    if (load_manifest_from_nvs(deviceId)) return true;
+
+    // 2) Иначе — получить свежий манифест и сохранить.
+    String body = fetch_manifest_body(deviceId);
+    if (body.length() > 0 && apply_manifest(body, deviceId)) {
+        g_prefs.putString("manifest", body);
+        return true;
+    }
+
+    g_manifest_valid = false;
+    if (ENRG_MANIFEST_REQUIRED) {
+        Serial.println("[MANIFEST] FATAL: манифест не получен/невалиден — proof'ы заблокированы");
+    } else {
+        Serial.println("[MANIFEST] WARN: манифест недоступен — работаем по хардкод-конфигу (обратная совместимость)");
+    }
+    return false;
+}
+
+
 //  PROOF
 // ════════════════════════════════════════════════════════════════
 
 void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
+    // ADR-0004: если манифест обязателен, но не получен/невалиден — proof'ы НЕ отправляем.
+    if (ENRG_MANIFEST_REQUIRED && !g_manifest_valid) {
+        Serial.println("[PROOF] пропуск: нет валидного манифеста (ENRG_MANIFEST_REQUIRED)");
+        return;
+    }
+
     if (!time_is_synced()) {
         Serial.println("[NTP] время ещё не синхронизировано — proof пропущен");
         return;
     }
 
     uint64_t energyWh = read_energy_wh();
+
+    // ADR-0004: если известна номинальная мощность (rated_power из манифеста),
+    // энергия одного отчёта ограничена ею (грубая защита от ложных показаний).
+    if (g_rated_power > 0 && energyWh > g_rated_power) {
+        Serial.printf("[PROOF] WARN: energy %lluWh > rated_power %lluW — ограничиваем\n",
+                      (unsigned long long)energyWh, (unsigned long long)g_rated_power);
+        energyWh = g_rated_power;
+    }
+
     uint32_t nonce = next_nonce();
     int64_t timestamp = (int64_t)time(nullptr); // wall-clock (epoch)
 
@@ -396,10 +653,6 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
 //  SETUP / LOOP
 // ════════════════════════════════════════════════════════════════
 
-static uint8_t g_privateKey[32];
-static uint8_t g_publicKey[32];
-static unsigned long g_lastReportMs = 0;
-
 void setup() {
     Serial.begin(115200);
     delay(500);
@@ -424,11 +677,34 @@ void setup() {
     if (!connect_wifi(30000)) {
         Serial.println("[WARN] WiFi не подключён — жду в loop");
     }
+
+    // ADR-0004: получаем и проверяем подписанный манифест при старте.
+    // device_id = "0x" + hex публичного ключа (как при регистрации в оракуле).
+    String deviceId = device_id_from_pubkey(g_publicKey);
+    init_manifest(deviceId);
+
     ntp_sync();
     g_lastReportMs = millis();
 }
 
 void loop() {
+    // ADR-0004: если манифест обязателен, но ещё не получен — периодически
+    // повторяем запрос (иначе устройство никогда не выйдет из блокировки).
+    if (ENRG_MANIFEST_REQUIRED && !g_manifest_valid) {
+        static unsigned long lastAttemptMs = 0;
+        unsigned long nowMs = millis();
+        if (nowMs - lastAttemptMs >= ENRG_MANIFEST_RETRY_MS) {
+            lastAttemptMs = nowMs;
+            String deviceId = device_id_from_pubkey(g_publicKey);
+            if (!load_manifest_from_nvs(deviceId)) {
+                String body = fetch_manifest_body(deviceId);
+                if (body.length() > 0 && apply_manifest(body, deviceId)) {
+                    g_prefs.putString("manifest", body);
+                }
+            }
+        }
+    }
+
     unsigned long now = millis();
     if (now - g_lastReportMs >= ENRG_REPORT_INTERVAL_MS) {
         g_lastReportMs = now;

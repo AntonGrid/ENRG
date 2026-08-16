@@ -1,0 +1,8 @@
+{
+  "maxEnergyPerReportWh": 1000000000,
+  "maxTimestampSkewSec": 300,
+  "maxProofAgeSec": 900,
+  "rateLimitPerMinute": 100,
+  "oracleUrl": "http://localhost:3000",
+  "defaultRatedPowerW": 10000
+}
