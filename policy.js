@@ -26,7 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const nacl = require('tweetnacl');
 const bs58 = require('bs58');
-const { PublicKey } = require('@solana/web3.js');
+const { Keypair, PublicKey } = require('@solana/web3.js');
 
 // ════════════════════════════════════════════════════════════════
 //  КОНФИГУРАЦИЯ ПОЛИТИК (ADR-0003: лимиты — параметры, не хардкод)
@@ -382,6 +382,29 @@ function fail(status, error) {
     return { ok: false, status, error };
 }
 
+/**
+ * Загрузить ключевую пару ОРАКУЛА для подписи OracleReport в mint (ADR-0003).
+ *
+ * Мульти-владельческий mint: любой оракул из OracleRegistry может подписывать
+ * отчёты, НЕ будучи основателем. Ключ оракула задаётся отдельно от founder:
+ *   - ORACLE_KEY (env, JSON-массив 64 байт);
+ *   - ORACLE_KEY_PATH (файл) — рекомендуется (секрет не в /proc/<pid>/environ).
+ * Публичный ключ оракула обязан быть добавлен в on-chain OracleRegistry
+ * (addOracle), иначе mint будет отклонён (UntrustedOracle).
+ *
+ * @returns {Keypair|null} ключ оракула или null (минт недоступен)
+ */
+function getOracleKeypair() {
+    if (process.env.ORACLE_KEY) {
+        return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(process.env.ORACLE_KEY)));
+    }
+    if (process.env.ORACLE_KEY_PATH) {
+        const raw = fs.readFileSync(process.env.ORACLE_KEY_PATH, 'utf8');
+        return Keypair.fromSecretKey(Uint8Array.from(JSON.parse(raw)));
+    }
+    return null;
+}
+
 
 // ════════════════════════════════════════════════════════════════
 //  ВАЛИДАЦИИ (по одной функции на проверку)
@@ -690,6 +713,8 @@ module.exports = {
     buildFirmwareMessage,
     signFirmware,
     verifyFirmware,
+    // oracle key (ADR-0003, multi-oracle mint)
+    getOracleKeypair,
     // validators
     validateDeviceId,
     validateEnergyWh,

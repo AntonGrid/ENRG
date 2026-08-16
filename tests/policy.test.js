@@ -13,6 +13,9 @@
  */
 
 const assert = require('assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
 const nacl = require('tweetnacl');
 const util = require('tweetnacl-util');
 const bs58 = require('bs58');
@@ -392,6 +395,50 @@ describe('policy config', function () {
         policy.reloadConfig();
         assert.strictEqual(policy.config.maxEnergyPerReportWh, 42);
     });
+
+
+describe('policy.getOracleKeypair (multi-oracle mint, ADR-0003)', function () {
+    const savedEnv = {};
+
+    before(function () {
+        savedEnv.ORACLE_KEY = process.env.ORACLE_KEY;
+        savedEnv.ORACLE_KEY_PATH = process.env.ORACLE_KEY_PATH;
+    });
+
+    after(function () {
+        delete process.env.ORACLE_KEY;
+        delete process.env.ORACLE_KEY_PATH;
+        if (savedEnv.ORACLE_KEY !== undefined) process.env.ORACLE_KEY = savedEnv.ORACLE_KEY;
+        if (savedEnv.ORACLE_KEY_PATH !== undefined) process.env.ORACLE_KEY_PATH = savedEnv.ORACLE_KEY_PATH;
+    });
+
+    it('loads oracle keypair from ORACLE_KEY env (JSON array)', function () {
+        const kp = nacl.sign.keyPair();
+        process.env.ORACLE_KEY = JSON.stringify(Array.from(kp.secretKey));
+        delete process.env.ORACLE_KEY_PATH;
+        const loaded = policy.getOracleKeypair();
+        assert.ok(loaded, 'keypair должен загрузиться');
+        assert.strictEqual(Buffer.from(loaded.publicKey.toBytes()).toString('hex'), Buffer.from(kp.publicKey).toString('hex'));
+    });
+
+    it('loads oracle keypair from ORACLE_KEY_PATH file', function () {
+        const kp = nacl.sign.keyPair();
+        const file = path.join(os.tmpdir(), `enrg-oracle-${Date.now()}.json`);
+        fs.writeFileSync(file, JSON.stringify(Array.from(kp.secretKey)));
+        delete process.env.ORACLE_KEY;
+        process.env.ORACLE_KEY_PATH = file;
+        const loaded = policy.getOracleKeypair();
+        assert.ok(loaded);
+        assert.strictEqual(Buffer.from(loaded.publicKey.toBytes()).toString('hex'), Buffer.from(kp.publicKey).toString('hex'));
+        fs.unlinkSync(file);
+    });
+
+    it('returns null when no oracle key configured', function () {
+        delete process.env.ORACLE_KEY;
+        delete process.env.ORACLE_KEY_PATH;
+        assert.strictEqual(policy.getOracleKeypair(), null);
+    });
+});
 
     it('loadConfig tolerates a missing config file', function () {
         const cfg = policy.loadConfig({ configPath: '/nonexistent/policy-config.json' });

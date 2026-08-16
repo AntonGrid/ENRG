@@ -8,7 +8,7 @@ const winston = require('winston');
 const rateLimit = require('express-rate-limit');
 const { body, validationResult } = require('express-validator');
 const { Connection, clusterApiUrl, Keypair, Transaction, TransactionInstruction, PublicKey, TransactionMessage, VersionedTransaction, Ed25519Program, SYSVAR_INSTRUCTIONS_PUBKEY, AddressLookupTableProgram, sendAndConfirmTransaction, SystemProgram } = require('@solana/web3.js');
-const { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync } = require('@solana/spl-token');
+const { TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, getOrCreateAssociatedTokenAccount } = require('@solana/spl-token');
 const anchor = require('@coral-xyz/anchor');
 const crypto = require('crypto');
 const fs = require('fs');
@@ -83,6 +83,23 @@ try {
 }
 if (!founderKeypair) {
     logger.warn('⚠️ Founder keypair not found. Minting will not work.');
+}
+
+// Мульти-владельческий mint (ADR-0003): для подписи OracleReport используется
+// ОТДЕЛЬНЫЙ ключ оракула (ORACLE_KEY / ORACLE_KEY_PATH), а не founder.
+// Публичный ключ оракула обязан быть в on-chain OracleRegistry (addOracle).
+// Транзакцию mint подписывает сам оракул; награда идёт владельцу устройства.
+let oracleKeypair = null;
+try {
+    oracleKeypair = policy.getOracleKeypair();
+    if (oracleKeypair) {
+        logger.info('✅ Loaded oracle keypair: ' + oracleKeypair.publicKey.toBase58());
+    }
+} catch (e) {
+    logger.warn('⚠️ Failed to parse oracle keypair:', e.message);
+}
+if (!oracleKeypair) {
+    logger.warn('⚠️ Oracle keypair not found. Minting will not work (set ORACLE_KEY_PATH / ORACLE_KEY).');
 }
 
 const app = express();
@@ -367,14 +384,14 @@ async function createProducerIfNeeded() {
 // формате) и подписывает OracleReport ключом основателя (оракул = FOUNDER_KEY).
 // Образец: scripts/devnet_e2e_lifecycle.ts (oracleMint, v0+LUT, 2× ed25519).
 async function mintEnergy(proof) {
-    if (!founderKeypair) return { success: false, error: 'founder_key_missing' };
+    if (!oracleKeypair) return { success: false, error: 'oracle_key_missing' };
     if (!proof || proof.sig_mode !== 'binary') return { success: false, error: 'device_signature_not_onchain_compatible' };
     const deviceIdPubkey = proof.device_id_pubkey;
     if (!deviceIdPubkey) return { success: false, error: 'device_id_not_a_pubkey' };
     if (!IDL) return { success: false, error: 'idl_missing' };
     try {
         const connection = new Connection(RPC_ENDPOINT, 'confirmed');
-        const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(founderKeypair), {
+        const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(oracleKeypair), {
             commitment: 'confirmed',
             preflightCommitment: 'confirmed',
         });
@@ -389,12 +406,13 @@ async function mintEnergy(proof) {
         // Сообщения для ed25519-precompile (совпадают с state/oracle.rs).
         const deviceMsg = policy.buildDeviceMessage(deviceIdPubkey, proof.nonce, proof.device_timestamp, proof.energy_wh);
         const oracleMsg = policy.buildOracleMessage(deviceIdPubkey, proof.nonce, proof.device_timestamp, nowSec, proof.energy_wh);
-        const oracleSignature = nacl.sign.detached(new Uint8Array(oracleMsg), founderKeypair.secretKey);
+        // Мульти-владельческий mint: отчёт подписывает ОРАКУЛ (ORACLE_KEY), не founder.
+        const oracleSignature = nacl.sign.detached(new Uint8Array(oracleMsg), oracleKeypair.secretKey);
 
         // OracleReport (borsh, как в state/oracle.rs): oracle(32) device_id(32) nonce(8)
         // device_timestamp(8) verified_at(8) energy_wh(8) device_signature(64) oracle_signature(64).
         const report = {
-            oracle: founderKeypair.publicKey,
+            oracle: oracleKeypair.publicKey,
             deviceId: deviceIdPubkey,
             nonce,
             deviceTimestamp,
@@ -418,10 +436,27 @@ async function mintEnergy(proof) {
         const [producerPda] = PublicKey.findProgramAddressSync(
             [Buffer.from('producer'), deviceIdPubkey.toBuffer()], PROGRAM_ID
         );
+
+        // Пре-проверка: producer существует; из него берём ВЛАДЕЛЬЦА (authority).
+        let producer;
+        try {
+            producer = await program.account.energyProducer.fetch(producerPda);
+        } catch (e) {
+            return { success: false, error: 'producer_not_registered_on_chain' };
+        }
+        const ownerPubkey = new PublicKey(producer.authority.toBytes());
+
+        // Награда идёт ВЛАДЕЛЬЦУ устройства: profile/reputation/ATA привязаны к
+        // producer.authority (а не к подписанту-оракулу).
         const [profilePda] = PublicKey.findProgramAddressSync(
-            [Buffer.from('profile'), founderKeypair.publicKey.toBuffer()], PROFILE_PROGRAM_ID
+            [Buffer.from('profile'), ownerPubkey.toBuffer()], PROFILE_PROGRAM_ID
         );
-        const userAta = getAssociatedTokenAddressSync(srcMintPda, founderKeypair.publicKey, false);
+        const [reputationPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from('reputation'), ownerPubkey.toBuffer()], PROGRAM_ID
+        );
+        const userAta = (await getOrCreateAssociatedTokenAccount(
+            connection, oracleKeypair, srcMintPda, ownerPubkey
+        )).address;
         const fundAtas = {
             buyback: getAssociatedTokenAddressSync(srcMintPda, buybackAuthorityPda, true),
             staking: getAssociatedTokenAddressSync(srcMintPda, fundStakingPda, true),
@@ -429,10 +464,7 @@ async function mintEnergy(proof) {
             emergency: getAssociatedTokenAddressSync(srcMintPda, fundEmergencyPda, true),
         };
 
-        // Пре-проверки: без on-chain аккаунтов транзакция заведомо упадёт.
-        if (!(await accountExists(connection, producerPda))) {
-            return { success: false, error: 'producer_not_registered_on_chain' };
-        }
+        // Пре-проверка: без profile транзакция заведомо упадёт.
         if (!(await accountExists(connection, profilePda))) {
             return { success: false, error: 'energy_profile_missing_on_chain' };
         }
@@ -453,9 +485,9 @@ async function mintEnergy(proof) {
             oracleRegistry: oracleRegistryPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             profileProgram: PROFILE_PROGRAM_ID,
-            authority: founderKeypair.publicKey,
+            authority: oracleKeypair.publicKey,
             profile: profilePda,
-            reputation: null,
+            reputation: reputationPda,
             pool: null,
             poolShare: null,
         }).instruction();
@@ -467,7 +499,7 @@ async function mintEnergy(proof) {
             signature: Buffer.from(proof.device_signature),
         });
         const edOracleIx = Ed25519Program.createInstructionWithPublicKey({
-            publicKey: founderKeypair.publicKey.toBytes(),
+            publicKey: oracleKeypair.publicKey.toBytes(),
             message: oracleMsg,
             signature: Buffer.from(oracleSignature),
         });
@@ -477,10 +509,10 @@ async function mintEnergy(proof) {
             producerPda, vaultPda, tokenMintPda, srcMintPda, mintAuthorityPda, userAta,
             fundAtas.buyback, fundAtas.staking, fundAtas.dao, fundAtas.emergency,
             SYSVAR_INSTRUCTIONS_PUBKEY, oracleRegistryPda, TOKEN_PROGRAM_ID, PROFILE_PROGRAM_ID,
-            founderKeypair.publicKey, profilePda, Ed25519Program.programId,
+            oracleKeypair.publicKey, profilePda, Ed25519Program.programId,
         ];
-        const lut = await ensureLookupTable(connection, founderKeypair, lutAddresses);
-        const sig = await sendVersioned(connection, founderKeypair, [edDeviceIx, edOracleIx, mintIx], lut);
+        const lut = await ensureLookupTable(connection, oracleKeypair, lutAddresses);
+        const sig = await sendVersioned(connection, oracleKeypair, [edDeviceIx, edOracleIx, mintIx], lut);
         logger.info('🎉 Mint successful! TX:', sig);
         return { success: true, tx: sig };
     } catch (e) {

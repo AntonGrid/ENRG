@@ -107,11 +107,47 @@ if (!v.ok) return res.status(v.status).json({ error: v.error });
 Конфигурация загружается при старте оракула; в рантайме доступна как
 `policy.config` (для тестов — `policy.setConfig()`, `policy.reloadConfig()`).
 
+### Мульти-владельческий mint (ADR-0003)
+
+Mint выполняет **любой доверенный оракул из OracleRegistry**, а не основатель:
+
+1. **Ключ оракула** задаётся отдельно от founder:
+   - `ORACLE_KEY` (env, JSON-массив 64 байт) или `ORACLE_KEY_PATH` (файл) —
+     загружается через `policy.getOracleKeypair()`.
+   - Публичный ключ оракула обязан быть **в on-chain OracleRegistry**
+     (`addOracle`), иначе `mint_energy` вернёт `UntrustedOracle`.
+2. **On-chain** (`mint_energy`):
+   - C-0: `report.oracle ∈ OracleRegistry`;
+   - C-2: подписант транзакции = владелец устройства **ИЛИ** `report.oracle`
+     (мульти-владельческий mint);
+   - награда идёт **владельцу** устройства (`producer.authority`), а не оракулу;
+   - отчёт подписывается ключом оракула (не founder).
+3. **Оракул подписывает** OracleReport своим ключом и отправляет транзакцию
+   `mint_energy` (authority = ключ оракула); ATA владельца создаётся
+   автоматически (`getOrCreateAssociatedTokenAccount`).
+
+Добавление оракула в OracleRegistry (on-chain):
+
+```bash
+# ключ оракула (сгенерировать и сохранить в защищённом месте)
+solana-keygen new -o oracle-keypair.json
+# добавить в реестр (authority = oracle_admin, по умолчанию vault.authority)
+# через Anchor-клиент: program.methods.addOracle(oraclePubkey)...
+#  .accounts({ registry: oracleRegistryPda, authority: oracleAdmin })
+```
+
+Если `ORACLE_KEY_PATH`/`ORACLE_KEY` не задан — mint недоступен
+(`oracle_key_missing`), оракул продолжает работать (приём proof, манифесты, OTA).
+
 ### Тесты
 
 ```bash
-npm run test:policy        # mocha tests/policy.test.js (40 unit-тестов)
-npx mocha tests/policy.test.js
+npm run test:policy        # mocha tests/policy.test.js (юнит Policy Engine)
+npm run test:manifest      # tests/manifest.test.js
+npm run test:firmware      # tests/firmware.test.js
+npm run test:keyrotation   # tests/keyrotation-api.test.js
+npm run test:mint          # tests/mint-oracle.test.js (мульти-оракульный mint)
+npm run test:anchor        # anchor test --skip-build (on-chain, solana-test-validator)
 ```
 
 ## Configuration

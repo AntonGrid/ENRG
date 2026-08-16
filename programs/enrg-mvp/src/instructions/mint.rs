@@ -55,9 +55,16 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         ErrorCode::DeviceMismatch
     );
 
-    // ══ C-2: signer обязан быть владельцем producer'а (authority) ══
+    // ══ C-2: подписант транзакции — владелец устройства ИЛИ оракул из отчёта ══
+    // (мульти-владельческий mint: любой доверенный оракул из OracleRegistry
+    //  может инициировать mint от имени устройства, не будучи его владельцем;
+    //  членство report.oracle в OracleRegistry уже проверено в C-0).
     require!(
-        producer.authority == ctx.accounts.authority.key(),
+        mint_submitter_authorized(
+            &producer.authority,
+            &ctx.accounts.authority.key(),
+            &report.oracle,
+        ),
         ErrorCode::NotProducerOwner
     );
 
@@ -406,10 +413,12 @@ pub struct MintEnergy<'info> {
     )]
     pub mint_authority: UncheckedAccount<'info>,
 
-    /// C-2: user token account должен принадлежать authority (владельцу producer'а).
+    /// Мульти-владельческий mint: награда идёт ВЛАДЕЛЬЦУ устройства
+    /// (producer.authority), а не подписанту транзакции (оракулу).
+    /// user token account должен принадлежать producer.authority.
     #[account(
         mut,
-        constraint = user_token_account.owner == authority.key() @ ErrorCode::UnauthorizedTokenAccountOwner,
+        constraint = user_token_account.owner == producer.authority @ ErrorCode::UnauthorizedTokenAccountOwner,
     )]
     pub user_token_account: Box<Account<'info, TokenAccount>>,
 
@@ -463,21 +472,24 @@ pub struct MintEnergy<'info> {
     )]
     pub profile_program: UncheckedAccount<'info>,
 
-    /// Authority of the EnergyProfile (producer's owner).
+    /// Подписант транзакции: владелец устройства ИЛИ доверенный оракул из
+    /// отчёта (мульти-владельческий mint). Сам по себе награду не получает —
+    /// она идёт producer.authority (см. user_token_account).
     pub authority: Signer<'info>,
 
     #[account(
         mut,
-        seeds = [b"profile", authority.key().as_ref()],
+        seeds = [b"profile", producer.authority.as_ref()],
         bump,
         seeds::program = profile_program.key()
     )]
     pub profile: Account<'info, crate::enrg_profile::accounts::EnergyProfile>,
 
     /// ERS (v7.0 §16) — опционально: если передан, обновляется после минта.
+    /// Привязан к владельцу устройства (producer.authority).
     #[account(
         mut,
-        seeds = [b"reputation", authority.key().as_ref()],
+        seeds = [b"reputation", producer.authority.as_ref()],
         bump = reputation.bump
     )]
     pub reputation: Option<Account<'info, Reputation>>,
@@ -491,3 +503,68 @@ pub struct MintEnergy<'info> {
     #[account(mut)]
     pub pool_share: Option<Account<'info, PoolContribution>>,
 }
+
+/// Разрешён ли подписант транзакции (submitter) инициировать mint для устройства:
+/// это либо владелец устройства (producer.authority), либо оракул, подписавший
+/// отчёт (report.oracle == submitter). Членство report.oracle в OracleRegistry
+/// проверяется отдельно (C-0) — здесь только связка «кто подписывает».
+pub fn mint_submitter_authorized(
+    producer_authority: &Pubkey,
+    submitter: &Pubkey,
+    report_oracle: &Pubkey,
+) -> bool {
+    producer_authority == submitter || report_oracle == submitter
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn pk(n: u8) -> Pubkey {
+        Pubkey::new_from_array([n; 32])
+    }
+
+    #[test]
+    fn owner_can_submit() {
+        let owner = pk(1);
+        let oracle = pk(2);
+        assert!(
+            mint_submitter_authorized(&owner, &owner, &oracle),
+            "владелец устройства может инициировать mint"
+        );
+    }
+
+    #[test]
+    fn registered_oracle_can_submit() {
+        let owner = pk(1);
+        let oracle = pk(2);
+        assert!(
+            mint_submitter_authorized(&owner, &oracle, &oracle),
+            "оракул из отчёта может инициировать mint (мульти-владельческий flow)"
+        );
+    }
+
+    #[test]
+    fn stranger_cannot_submit() {
+        let owner = pk(1);
+        let oracle = pk(2);
+        let stranger = pk(3);
+        assert!(
+            !mint_submitter_authorized(&owner, &stranger, &oracle),
+            "посторонний подписант не может инициировать mint"
+        );
+    }
+
+    #[test]
+    fn owner_fabricating_report_still_owner_but_oracle_not_in_registry() {
+        // Владелец может подписать транзакцию (authorized=true), НО если он
+        // указывает себя как report.oracle и не находится в OracleRegistry —
+        // отклонит C-0 (UntrustedOracle). Это покрыто интеграционно.
+        let owner = pk(1);
+        assert!(
+            mint_submitter_authorized(&owner, &owner, &owner),
+            "владелец всегда authorized на уровне C-2; блокировку даёт C-0"
+        );
+    }
+}
+

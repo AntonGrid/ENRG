@@ -8,6 +8,7 @@
     "test:manifest": "mocha tests/manifest.test.js",
     "test:firmware": "mocha tests/firmware.test.js",
     "test:keyrotation": "mocha tests/keyrotation-api.test.js",
+    "test:mint": "mocha tests/mint-oracle.test.js",
     "test:anchor": "anchor test --skip-build",
     "e2e:local": "RPC_ENDPOINT=http://127.0.0.1:8899 ts-node scripts/devnet_e2e_lifecycle.ts",
     "e2e:local:smoke": "RPC_ENDPOINT=http://127.0.0.1:8899 ts-node scripts/devnet_e2e_lifecycle.ts --smoke",
