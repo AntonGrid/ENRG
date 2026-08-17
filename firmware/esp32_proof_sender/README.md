@@ -51,6 +51,95 @@ pio run -t upload -e esp32dev
 `WIFI_SSID`, `WIFI_PASSWORD`, `ENRG_ORACLE_URL`, `ENRG_CA_CERT`,
 `ENRG_NTP_SERVER`, `ENRG_USE_ATECC608`, `ENRG_USE_PZEM`.
 
+> ⚠️ Системный `pio` может быть сломан (несовместимость с `click`). В этом
+> workspace используйте PlatformIO из виртуального окружения:
+> `/home/enrg/Axis-workspace/.venv/bin/pio`. Скрипт
+> [`upload-firmware.sh`](upload-firmware.sh) находит его автоматически.
+
+## Загрузка прошивки на ESP32
+
+### 1. Сборка
+
+```bash
+cd firmware/esp32_proof_sender
+
+# OTA-версия (dual-bank A/B + anti-rollback, ADR-0008) — для серийных устройств
+pio run -e esp32dev-ota
+
+# Базовая версия (ключ в NVS) / ATECC608A
+pio run -e esp32dev
+pio run -e esp32dev-atecc
+```
+
+Успешная сборка: `[SUCCESS]`, размер `firmware.bin` выводится в конце
+(RAM/Flash usage). Пример:
+```
+RAM:   [=         ]  14.5% (used 47456 bytes from 327680 bytes)
+Flash: [=====     ]  54.9% (used 1007289 bytes from 1835008 bytes)
+========================= [SUCCESS] Took 7.33 seconds =========================
+```
+
+### 2. Загрузка на устройство
+
+Устройство подключается по USB (кабель должен поддерживать передачу данных,
+не только зарядку). На Linux проверьте драйвер USB-UART (CH340/CP210x) и
+права группы `dialout`.
+
+**Вариант A — скрипт `upload-firmware.sh` (рекомендуется):**
+
+```bash
+cd firmware/esp32_proof_sender
+./upload-firmware.sh                    # env по умолчанию: esp32dev-ota
+./upload-firmware.sh esp32dev           # другой env
+./upload-firmware.sh --no-monitor       # без монитора после загрузки
+```
+
+Скрипт проверяет, что ESP32 подключён, показывает найденный порт,
+предупреждает о прожиге eFuse (для `esp32dev-ota`) и запрашивает
+подтверждение перед загрузкой. После загрузки открывает монитор порта.
+
+**Вариант B — команды PlatformIO вручную:**
+
+```bash
+# Список доступных портов
+pio device list
+
+# Загрузка прошивки
+pio run -e esp32dev-ota -t upload
+# если порт не определяется автоматически:
+pio run -e esp32dev-ota -t upload --upload-port /dev/ttyUSB0
+```
+
+### 3. Монитор порта (логи)
+
+```bash
+pio device monitor                              # baud из platformio.ini (115200)
+pio device monitor --port /dev/ttyUSB0 --baud 115200
+# Выход из монитора: Ctrl+]
+```
+
+**Что должно появиться в логах при успешном старте:**
+
+- `[KEY]` / `device_id: 0x...` — публичный ключ устройства (32 байта hex).
+  Его нужно зарегистрировать в оракуле (`POST /api/v1/device/register`).
+- `[WIFI] connecting to ...` → `[WIFI] connected` — подключение к Wi-Fi.
+- `[MANIFEST]` — загрузка и проверка Device Manifest (ADR-0004), если включён.
+- `[OTA]` — проверка обновлений / анти-откат (`ota_mark_boot_ok()`).
+- `[PROOF] sent` — отправка подписанного proof на оракул
+  (интервал — `ENRG_REPORT_INTERVAL_MS`, по умолчанию 60 с).
+
+Если логов нет — проверьте baud (115200), порт и наличие конфигурации
+`WIFI_SSID`/`WIFI_PASSWORD` в шапке `.ino` (сейчас там плейсхолдеры).
+
+### ⚠️ ВАЖНО (ADR-0008) — env `esp32dev-ota`
+
+- **Dual-bank A/B**: `otadata` + `app0`/`app1` (`partitions_ota.csv`). Новый
+  образ стартует как «pending»; без подтверждения приложение откатывается.
+- **Аппаратный anti-rollback**: `CONFIG_BOOTLOADER_EFUSE_SECURE_VERSION`
+  (`sdkconfig.defaults.esp32dev-ota`) — первый успешный boot образа прожигает
+  `secure_version` в eFuse. **Это необратимо.** Не смешивайте env'ы на одной
+  плате (не заливайте `esp32dev` поверх `esp32dev-ota` и наоборот).
+
 ### Device Manifest (ADR-0004)
 
 Устройство получает конфигурацию от оракула в виде **подписанного манифеста**:
