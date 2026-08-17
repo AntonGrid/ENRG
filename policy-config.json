@@ -3,7 +3,7 @@
   "maxTimestampSkewSec": 300,
   "maxProofAgeSec": 900,
   "rateLimitPerMinute": 100,
-  "oracleUrl": "http://localhost:3000",
+  "oracleUrl": "http://192.168.1.123:3000",
   "defaultRatedPowerW": 10000,
   "maxFirmwareSizeBytes": 2000000
 }

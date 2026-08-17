@@ -4,7 +4,7 @@ Arduino sketches for ESP32 that read energy data from a PZEM-004T sensor, sign i
 
 ## Files
 
-- `src/esp32_proof_sender_v3.ino` — **актуальная безопасная версия** (H-3/H-4).
+- `src/esp32_proof_sender_v3/esp32_proof_sender_v3.ino` — **актуальная безопасная версия** (H-3/H-4).
 
 > ⚠️ **Legacy v1** (`esp32_proof_sender.ino`) и **v2** (`esp32_proof_sender_v2.ino`)
 > **удалены из репозитория** (P0-блокер D-1, нарушение ADR-0001/0007) и
@@ -47,7 +47,7 @@ pio run -e esp32dev
 pio run -t upload -e esp32dev
 ```
 
-Конфигурация — в шапке `src/esp32_proof_sender_v3.ino`:
+Конфигурация — в шапке `src/esp32_proof_sender_v3/esp32_proof_sender_v3.ino`:
 `WIFI_SSID`, `WIFI_PASSWORD`, `ENRG_ORACLE_URL`, `ENRG_CA_CERT`,
 `ENRG_NTP_SERVER`, `ENRG_USE_ATECC608`, `ENRG_USE_PZEM`.
 

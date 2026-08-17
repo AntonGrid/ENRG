@@ -7,7 +7,7 @@
 | Путь | Описание |
 |---|---|
 | [`esp32_proof_sender/`](esp32_proof_sender/) | PlatformIO-проект (Arduino, ESP32 DevKit V1) |
-| [`esp32_proof_sender/src/esp32_proof_sender_v3.ino`](esp32_proof_sender/src/esp32_proof_sender_v3.ino) | Актуальная безопасная прошивка v3 (H-3/H-4) |
+| [`esp32_proof_sender/src/esp32_proof_sender_v3/esp32_proof_sender_v3.ino`](esp32_proof_sender/src/esp32_proof_sender_v3/esp32_proof_sender_v3.ino) | Актуальная безопасная прошивка v3 (H-3/H-4) |
 | [`esp32_proof_sender/platformio.ini`](esp32_proof_sender/platformio.ini) | Env: `esp32dev`, `esp32dev-atecc`, `esp32dev-se050`, `esp32dev-ota` |
 | [`esp32_proof_sender/upload-firmware.sh`](esp32_proof_sender/upload-firmware.sh) | Скрипт проверки/подтверждения/загрузки/монитора |
 | [`esp32_proof_sender/SE050-HARDWARE-SIGNING.md`](esp32_proof_sender/SE050-HARDWARE-SIGNING.md) | NXP SE050 — аппаратная Ed25519-подпись |

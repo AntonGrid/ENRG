@@ -40,17 +40,19 @@
 #define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
 #endif
 
-// HTTPS-эндпоинт оракула (обязательно https://, см. ENRG_CA_CERT).
+// HTTP(S)-эндпоинт оракула. Прошивка поддерживает оба режима: http://
+// (локальная сеть / dev) и https:// (с проверкой корневого CA, ENRG_CA_CERT).
 // Используется по умолчанию (обратная совместимость). Если получен валидный
 // Device Manifest (ADR-0004), реальный URL берётся из manifest.oracle_url.
+// ⚠️ Если IP ноутбука с оракулом изменится — обновите этот адрес и перепрошейте.
 #ifndef ENRG_ORACLE_URL
-#define ENRG_ORACLE_URL "https://oracle.example.com/api/v1/proof/submit"
+#define ENRG_ORACLE_URL "http://192.168.1.123:3000/api/v1/proof/submit"
 #endif
 
 // ── Device Manifest (ADR-0004) ──
 // База URL эндпоинта манифестов: к ней добавляется "/<device_id>".
 #ifndef ENRG_MANIFEST_URL_BASE
-#define ENRG_MANIFEST_URL_BASE "https://oracle.example.com/api/v1/manifest"
+#define ENRG_MANIFEST_URL_BASE "http://192.168.1.123:3000/api/v1/manifest"
 #endif
 
 // Публичный ключ ОРАКУЛА (основателя, Ed25519, 32 байта) — вшивается в прошивку.
@@ -96,7 +98,7 @@
 
 // База URL эндпоинтов firmware оракула: к ней добавляется /latest и /latest/image.
 #ifndef ENRG_FIRMWARE_URL_BASE
-#define ENRG_FIRMWARE_URL_BASE "https://oracle.example.com/api/v1/firmware"
+#define ENRG_FIRMWARE_URL_BASE "http://192.168.1.123:3000/api/v1/firmware"
 #endif
 
 // Модель устройства (оракул кладёт её в метаданные; устройство пропускает
@@ -573,7 +575,7 @@ bool connect_wifi(unsigned long timeoutMs) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  HTTPS-ОТПРАВКА PROOF (проверка сертификата; mTLS опционально)
+//  ОТПРАВКА PROOF (http:// или https:// — выбор по схеме URL)
 // ════════════════════════════════════════════════════════════════
 
 // ── Глобальное состояние манифеста (ADR-0004) ──
@@ -585,56 +587,91 @@ static uint64_t g_rated_power = 0;
 // true — манифест получен и подпись проверена.
 static bool g_manifest_valid = false;
 
-int send_proof_https(const String &body) {
-    WiFiClientSecure client;
-    client.setCACert(ENRG_CA_CERT); // обязательная проверка корневого CA
-#if ENRG_MTLS
-    client.setCertificate(ENRG_CLIENT_CERT);
-    client.setPrivateKey(ENRG_CLIENT_PRIVKEY);
-#endif
+int send_proof_http(const String &body) {
+    int code = -1;
+    String resp = "";
 
-    HTTPClient http;
-    if (!http.begin(client, g_proof_url)) {
-        Serial.println("[HTTP] begin failed (недоступен https)");
-        return -1;
-    }
-    http.addHeader("Content-Type", "application/json");
-    int code = http.POST(body);
-    if (code > 0) {
-        Serial.printf("[HTTP] proof sent, code=%d, resp=%s\n", code,
-                      http.getString().c_str());
+    if (g_proof_url.startsWith("https://")) {
+        // TLS с проверкой корневого CA (ENRG_CA_CERT); mTLS опционально.
+        WiFiClientSecure client;
+        client.setCACert(ENRG_CA_CERT); // обязательная проверка корневого CA
+#if ENRG_MTLS
+        client.setCertificate(ENRG_CLIENT_CERT);
+        client.setPrivateKey(ENRG_CLIENT_PRIVKEY);
+#endif
+        HTTPClient http;
+        if (!http.begin(client, g_proof_url)) {
+            Serial.println("[HTTP] begin failed (https)");
+            return -1;
+        }
+        http.addHeader("Content-Type", "application/json");
+        code = http.POST(body);
+        if (code > 0) resp = http.getString();
+        http.end();
     } else {
-        Serial.printf("[HTTP] send failed: %s\n", http.errorToString(code).c_str());
+        // Обычный HTTP (локальная сеть / dev): http://host:port
+        WiFiClient client;
+        HTTPClient http;
+        if (!http.begin(client, g_proof_url)) {
+            Serial.println("[HTTP] begin failed (http)");
+            return -1;
+        }
+        http.addHeader("Content-Type", "application/json");
+        code = http.POST(body);
+        if (code > 0) resp = http.getString();
+        http.end();
     }
-    http.end();
+
+    if (code == 200) {
+        Serial.printf("[PROOF] sent successfully (code=%d, resp=%.120s)\n",
+                      code, resp.c_str());
+    } else if (code > 0) {
+        Serial.printf("[HTTP] proof rejected, code=%d, resp=%.120s\n",
+                      code, resp.c_str());
+    } else {
+        Serial.printf("[HTTP] send failed: %s\n",
+                      HTTPClient::errorToString(code).c_str());
+    }
     return code;
 }
 
 /**
- * Простой HTTPS GET (для получения Device Manifest, ADR-0004).
- * Возвращает тело ответа (пустая строка при ошибке).
+ * Простой HTTP(S) GET (для получения Device Manifest, ADR-0004, и
+ * метаданных OTA). Возвращает тело ответа (пустая строка при ошибке).
  */
 String http_get(const String &url) {
-    WiFiClientSecure client;
-    client.setCACert(ENRG_CA_CERT); // обязательная проверка корневого CA
-#if ENRG_MTLS
-    client.setCertificate(ENRG_CLIENT_CERT);
-    client.setPrivateKey(ENRG_CLIENT_PRIVKEY);
-#endif
-
-    HTTPClient http;
-    if (!http.begin(client, url)) {
-        Serial.println("[HTTP] GET begin failed");
-        return "";
-    }
-    int code = http.GET();
     String body = "";
-    if (code == 200) {
-        body = http.getString();
+    int code;
+
+    if (url.startsWith("https://")) {
+        WiFiClientSecure client;
+        client.setCACert(ENRG_CA_CERT); // обязательная проверка корневого CA
+#if ENRG_MTLS
+        client.setCertificate(ENRG_CLIENT_CERT);
+        client.setPrivateKey(ENRG_CLIENT_PRIVKEY);
+#endif
+        HTTPClient http;
+        if (!http.begin(client, url)) {
+            Serial.println("[HTTP] GET begin failed (https)");
+            return "";
+        }
+        code = http.GET();
+        if (code == 200) body = http.getString();
+        else Serial.printf("[HTTP] GET %s -> %d\n", url.c_str(), code);
+        http.end();
     } else {
-        Serial.printf("[HTTP] GET %s -> %d\n", url.c_str(), code);
+        WiFiClient client;
+        HTTPClient http;
+        if (!http.begin(client, url)) {
+            Serial.println("[HTTP] GET begin failed (http)");
+            return "";
+        }
+        code = http.GET();
+        if (code == 200) body = http.getString();
+        else Serial.printf("[HTTP] GET %s -> %d\n", url.c_str(), code);
+        http.end();
     }
-    http.end();
+
     return body;
 }
 
@@ -848,7 +885,7 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
     if (WiFi.status() != WL_CONNECTED) {
         if (!connect_wifi(20000)) return;
     }
-    send_proof_https(body);
+    send_proof_http(body);
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1067,10 +1104,20 @@ void loop() {
  * SHA-256. Возвращает true, если размер и хеш совпали с метаданными.
  */
 bool download_firmware(const String &url, long expectedSize, const String &expectedHashHex) {
-    WiFiClientSecure client;
-    client.setCACert(ENRG_CA_CERT);
+    // Транспорт по схеме URL: https:// → TLS (WiFiClientSecure + проверка CA),
+    // http:// → обычный TCP (локальная dev-сеть, порт 3000).
+    WiFiClientSecure secureClient;
+    WiFiClient plainClient;
+    WiFiClient *client;
+    if (url.startsWith("https://")) {
+        secureClient.setCACert(ENRG_CA_CERT);
+        client = &secureClient;
+    } else {
+        client = &plainClient;
+    }
+
     HTTPClient http;
-    if (!http.begin(client, url)) { Serial.println("[OTA] GET begin failed"); return false; }
+    if (!http.begin(*client, url)) { Serial.println("[OTA] GET begin failed"); return false; }
     int code = http.GET();
     if (code != 200) {
         Serial.printf("[OTA] GET %s -> %d\n", url.c_str(), code);
