@@ -742,11 +742,65 @@ async function deviceLifecycle() {
   }
 
   // ── update_metadata в enrg-profile: rated_power ≥ energy_wh ──
-  await profileProgram.methods
-    .updateMetadata(RATED_POWER, DEVICE_TYPE, LOCATION)
-    .accounts({ authority: operator.publicKey, profile: profilePda })
-    .rpc();
-  stepLog("update_metadata (rated_power)", true, RATED_POWER.toString());
+  // M-4: rated_power иммутабелен после первого назначения. Профиль (PDA
+  // [b"profile", authority]) персистентен между прогонами E2E. Если он был
+  // создан прошлым прогоном со значением мощности, отличающимся от текущего
+  // RATED_POWER (особенно legacy-значением выше нового лимита 1 MW), смена
+  // rated_power невозможна: RatedPowerImmutable (6003) при отличии от прежнего,
+  // RatedPowerTooHigh (6002) при повторной записи legacy-значения > 1 MW.
+  // Для идемпотентности читаем профиль и адаптируемся:
+  //   * мощность ещё не задана (0)         → задаём RATED_POWER;
+  //   * мощность == RATED_POWER            → идемпотентный повтор (type/location);
+  //   * legacy-мощность ≤ 1 MW             → обновляем type/location с прежней мощностью;
+  //   * legacy-мощность > 1 MW (не валидна)→ пропускаем (минт продолжится:
+  //     энергия за proof ≤ legacy-мощности, проверка энергокапа проходит).
+  const MAX_RATED_POWER_BN = new BN(1_000_000); // enrg-profile::MAX_RATED_POWER
+  let existingPower: BN | null = null;
+  try {
+    const prof = await (profileProgram.account as any).energyProfile.fetch(
+      profilePda
+    );
+    existingPower = prof.ratedPower as BN;
+  } catch (_) {
+    /* профиль ещё не создан — зададим rated_power с нуля */
+  }
+  if (existingPower && !existingPower.isZero()) {
+    if (existingPower.eq(RATED_POWER)) {
+      await profileProgram.methods
+        .updateMetadata(RATED_POWER, DEVICE_TYPE, LOCATION)
+        .accounts({ authority: operator.publicKey, profile: profilePda })
+        .rpc();
+      stepLog("update_metadata (rated_power)", true, RATED_POWER.toString());
+    } else if (existingPower.lte(MAX_RATED_POWER_BN)) {
+      await profileProgram.methods
+        .updateMetadata(existingPower, DEVICE_TYPE, LOCATION)
+        .accounts({ authority: operator.publicKey, profile: profilePda })
+        .rpc();
+      stepLog(
+        "update_metadata (rated_power сохранён, type/location обновлены)",
+        true,
+        existingPower.toString()
+      );
+    } else {
+      console.warn(
+        `   ⚠️ update_metadata пропущен: профиль содержит legacy ` +
+          `rated_power=${existingPower.toString()} (> лимита 1 MW). ` +
+          `Значение иммутабельно (M-4) и не может быть понижено. ` +
+          `Минт продолжится с существующей мощностью.`
+      );
+      stepLog(
+        "update_metadata (пропущен — legacy rated_power > 1 MW)",
+        false,
+        existingPower.toString()
+      );
+    }
+  } else {
+    await profileProgram.methods
+      .updateMetadata(RATED_POWER, DEVICE_TYPE, LOCATION)
+      .accounts({ authority: operator.publicKey, profile: profilePda })
+      .rpc();
+    stepLog("update_metadata (rated_power)", true, RATED_POWER.toString());
+  }
 }
 
 
