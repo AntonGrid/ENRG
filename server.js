@@ -1019,12 +1019,22 @@ app.post('/api/v1/proof/submit', async (req, res) => {
 
         // CR-3: on-chain-совместимая (binary) подпись → каждый proof минтится
         // отдельной транзакцией mint_energy (как в devnet_e2e_lifecycle.ts).
+        // Если mint временно невозможен (не задан ORACLE_KEY, устройство ещё не
+        // зарегистрировано on-chain, профиль не создан, RPC недоступен) — proof
+        // ПРИНИМАЕТСЯ, энергия накапливается, mint откладывается. Это деградация,
+        // а не отказ: proof'ы не должны теряться из-за недоступности mint.
         if (proof.sig_mode === 'binary') {
             const mintRes = await mintEnergy(proof);
             if (mintRes.success) {
                 return res.json({ ok: true, minted: proof.energy_wh, tx: mintRes.tx, accumulated: newEnergy });
             }
-            return res.status(500).json({ error: 'mint_failed', reason: mintRes.error });
+            logger.warn(`⚠️ mint_energy отложен для ${device_id}: ${mintRes.error}. Энергия накоплена: ${newEnergy}Wh`);
+            return res.json({
+                ok: true,
+                accumulated: newEnergy,
+                mint: 'deferred',
+                mint_reason: mintRes.error,
+            });
         }
 
         // legacy-подпись (строковый формат) несовместима с on-chain mint — только накопление.

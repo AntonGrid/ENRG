@@ -140,6 +140,56 @@ pio device monitor --port /dev/ttyUSB0 --baud 115200
   `secure_version` в eFuse. **Это необратимо.** Не смешивайте env'ы на одной
   плате (не заливайте `esp32dev` поверх `esp32dev-ota` и наоборот).
 
+### Регистрация устройства в оракуле (PoP-подпись через Serial-команду `SIGN`)
+
+Оракул принимает proof'ы только от зарегистрированных устройств
+(`POST /api/v1/proof/submit` → `400 unknown device` иначе). Регистрация —
+по proof-of-possession: устройство подписывает строку
+`` `${device_id}|${public_key}` `` **своим** Ed25519-ключом (ADR-0001: ключ
+не покидает устройство, наружу уходит только подпись).
+
+Прошивка v3 поддерживает Serial-команды (в `pio device monitor`):
+
+```text
+HELP              — список команд
+INFO              — device_id, public_key (base64/hex), хранилище ключа
+SIGN <hex>        — подписать сообщение (hex, max 256 байт) ключом устройства
+                    → вывод [SIGN] sig_base64 / sig_hex
+```
+
+**Шаг 1 — подготовка (утилита):**
+
+```bash
+node scripts/register-device.js --prepare --device-id 0xcbec5afc...
+# → выводит public_key (base64) и hex PoP-сообщения для команды SIGN
+```
+
+**Шаг 2 — подпись на устройстве:**
+
+```text
+# в pio device monitor:
+SIGN <hex из шага 1>
+# скопировать строку [SIGN] sig_base64 = <...>
+```
+
+**Шаг 3 — регистрация (утилита):**
+
+```bash
+node scripts/register-device.js --send --device-id 0xcbec5afc... --signature <sig_base64> \
+    --url http://192.168.1.123:3000
+# → ✅ Device registered successfully (HTTP 200)
+```
+
+После этого ESP32 отправляет proof'ы и получает `200 OK`; энергия
+накапливается в `energyStore`, при binary-подписи оракул вызывает
+`mint_energy` (если mint временно невозможен — proof принимается,
+`mint: "deferred"`, энергия не теряется).
+
+> ⚠️ On-chain регистрация (`register_device`/`claim_device` на Solana) —
+> отдельный шаг: для него устройство подписывает бинарные сообщения
+> (`enrg:device:register ‖ device_id ‖ ts` и `enrg:device:claim ‖ …`),
+> которые также можно получить через `SIGN <hex>` и передать оператору.
+
 ### Device Manifest (ADR-0004)
 
 Устройство получает конфигурацию от оракула в виде **подписанного манифеста**:
