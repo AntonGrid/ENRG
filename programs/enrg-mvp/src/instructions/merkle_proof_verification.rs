@@ -113,6 +113,20 @@ pub fn compute_merkle_root(leaf_hash: &[u8; 32], proof_path: &[[u8; 32]], positi
     current
 }
 
+/// Детерминированный leaf-хэш манифеста (ADR-0004/0007, docs/merkle-proof-verification.md):
+/// `leaf = SHA-256(manifest_id(16) || content_hash(32))`.
+///
+/// Этот же лист обязан использовать офф-чейн паблишер (oracle/registry/app.js),
+/// иначе proof не сойдётся с опубликованным корнем. Привязка leaf к содержимому
+/// манифеста устраняет «доказательство принадлежности произвольного leaf»
+/// (аудит 2026-08-18, P0-1).
+pub fn manifest_leaf_hash(manifest_id: &[u8; 16], content_hash: &[u8; 32]) -> [u8; 32] {
+    let mut buf = [0u8; 48];
+    buf[..16].copy_from_slice(manifest_id);
+    buf[16..48].copy_from_slice(content_hash);
+    sha256::hash(&buf)
+}
+
 #[derive(Accounts)]
 #[instruction(manifest_id: [u8; 16], proof_path: Vec<[u8; 32]>, leaf_hash: [u8; 32], position: u8)]
 pub struct VerifyMerkleProof<'info> {
@@ -155,6 +169,13 @@ pub fn verify_merkle_proof(
     require!(manifest.manifest_id == manifest_id, ErrorCode::ManifestIdMismatch);
 
     require!(proof_path.len() <= 32, ErrorCode::ProofPathTooLong);
+
+    // ══ C-4 (P0-1): leaf обязан быть детерминирован от ЗАРЕГИСТРИРОВАННОГО
+    // манифеста: leaf = SHA-256(manifest_id || content_hash). Это связывает
+    // Merkle-членство с реальным содержимым манифеста, а не с произвольным
+    // leaf, переданным вызывающим.
+    let expected_leaf = manifest_leaf_hash(&manifest_id, &manifest.content_hash);
+    require!(leaf_hash == expected_leaf, ErrorCode::InvalidManifestLeaf);
 
     // ══ C-3: реально вычисляем root из leaf + proof_path и сверяем ══
     let computed_root = compute_merkle_root(&leaf_hash, &proof_path, position);
@@ -200,4 +221,33 @@ pub struct MerkleProofVerified {
     pub verified_root: [u8; 32],
     pub verified_by: Pubkey,
     pub timestamp: i64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn manifest_leaf_is_deterministic_and_binds_content() {
+        let mid = [1u8; 16];
+        let ch = [2u8; 32];
+        let leaf = manifest_leaf_hash(&mid, &ch);
+
+        // Тот же вход → тот же leaf.
+        assert_eq!(leaf, manifest_leaf_hash(&mid, &ch));
+        // Изменение content_hash меняет leaf.
+        assert_ne!(leaf, manifest_leaf_hash(&mid, &[3u8; 32]));
+        // Изменение manifest_id меняет leaf.
+        assert_ne!(leaf, manifest_leaf_hash(&[4u8; 16], &ch));
+        // Ненулевой leaf.
+        assert!(!leaf.iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn compute_merkle_root_matches_manual_hash_chain() {
+        // Тривиальное дерево из одного листа: root == leaf_hash.
+        let leaf = [7u8; 32];
+        let root = compute_merkle_root(&leaf, &[], 0);
+        assert_eq!(root, leaf);
+    }
 }

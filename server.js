@@ -405,7 +405,7 @@ async function createProducerIfNeeded() {
 // Принимает proof (уже верифицированную подпись УСТРОЙСТВА в on-chain бинарном
 // формате) и подписывает OracleReport ключом основателя (оракул = FOUNDER_KEY).
 // Образец: scripts/devnet_e2e_lifecycle.ts (oracleMint, v0+LUT, 2× ed25519).
-async function mintEnergy(proof) {
+async function mintEnergy(proof, producerOverride = null) {
     if (!oracleKeypair) return { success: false, error: 'oracle_key_missing' };
     if (!proof || proof.sig_mode !== 'binary') return { success: false, error: 'device_signature_not_onchain_compatible' };
     const deviceIdPubkey = proof.device_id_pubkey;
@@ -461,11 +461,18 @@ async function mintEnergy(proof) {
         );
 
         // Пре-проверка: producer существует; из него берём ВЛАДЕЛЬЦА (authority).
+        // P0-2 (ADR-0002): если producer уже получен из on-chain Registry в
+        // /proof/submit — переиспользуем его (одна RPC-проверка на запрос),
+        // иначе читаем реестр здесь.
         let producer;
-        try {
-            producer = await program.account.energyProducer.fetch(producerPda);
-        } catch (e) {
-            return { success: false, error: 'producer_not_registered_on_chain' };
+        if (producerOverride) {
+            producer = producerOverride;
+        } else {
+            try {
+                producer = await program.account.energyProducer.fetch(producerPda);
+            } catch (e) {
+                return { success: false, error: 'producer_not_registered_on_chain' };
+            }
         }
         const ownerPubkey = new PublicKey(producer.authority.toBytes());
 
@@ -689,6 +696,12 @@ app.get('/api/v1/manifest/:device_id', (req, res) => {
         oracle_url,
         public_key,
         timestamp: Math.floor(Date.now() / 1000),
+        // ADR-0004 (аудит 2026-08-18, P1-12): обязательные поля манифеста.
+        trust_level: 'basic',
+        heartbeat_interval: 60, // сек
+        proof_threshold: 1,     // Wh, порог формирования proof
+        policy_version: 1,
+        verifier_endpoint: oracle_url,
     };
 
     const signature = policy.signManifest(manifest, founderKeypair.secretKey);
@@ -818,6 +831,15 @@ function anchorProgram(connection) {
     const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(founderKeypair), {
         commitment: 'confirmed',
         preflightCommitment: 'confirmed',
+    });
+    return new anchor.Program(IDL, provider);
+}
+
+/** Read-only Anchor-клиент для fetch аккаунтов без подписи транзакций. */
+function readOnlyProgram(connection) {
+    const wallet = new anchor.Wallet(Keypair.generate());
+    const provider = new anchor.AnchorProvider(connection, wallet, {
+        commitment: 'confirmed',
     });
     return new anchor.Program(IDL, provider);
 }
@@ -974,14 +996,49 @@ app.post('/api/v1/pool/create', async (req, res) => {
 
 app.post('/api/v1/proof/submit', async (req, res) => {
     try {
+        // P0-2 (ADR-0002): источник истины для верификации proof — on-chain
+        // Device Registry (EnergyProducer PDA), а НЕ локальная БД оракула.
+        // Локальные таблицы (devices/energyStore) остаются только для
+        // статистики/истории и не определяют доверие.
+        const device_id = req.body && req.body.device_id;
+        const d = policy.validateDeviceId(device_id);
+        if (!d.ok) return res.status(d.status).json({ error: d.error });
+        if (!d.deviceIdPubkey) {
+            return res.status(400).json({ error: 'device_id must be a 32-byte Ed25519 public key (base58)' });
+        }
+        if (!IDL) return res.status(500).json({ error: 'idl_missing' });
+
+        // Читаем устройство из on-chain Registry.
+        let producer;
+        try {
+            const connection = new Connection(RPC_ENDPOINT, 'confirmed');
+            const program = readOnlyProgram(connection);
+            producer = await program.account.energyProducer.fetch(findProducerPda(d.deviceIdPubkey));
+        } catch (e) {
+            return res.status(404).json({
+                error: 'device_not_registered_on_chain',
+                reason: (e && e.message) || '',
+            });
+        }
+
+        // ADR-0007: отозванное устройство не принимает proof'ы.
+        if (producer.revoked) {
+            return res.status(403).json({ error: 'device_revoked_on_chain' });
+        }
+        const devicePubkey = new PublicKey(producer.device_id.toBytes());
+        if (!devicePubkey.equals(d.deviceIdPubkey)) {
+            return res.status(400).json({ error: 'device_id mismatch with on-chain registry' });
+        }
+
         // CR-1/CR-2/CR-3/M-3/M-5: ВСЕ проверки входящего proof выполняет Policy
         // Engine — policy.validateProof(): формат device_id, energyWh, свежесть
-        // timestamp, unknown device (ctx.getPublicKey), монотонный nonce
-        // (ctx.getLastNonce) и Ed25519-подпись (binary/legacy).
-        // L-3: политика возвращает готовый HTTP-код и строку ошибки.
+        // timestamp, unknown device, монотонный nonce и Ed25519-подпись.
+        // Ключ и nonce берём из on-chain Registry (единый источник истины).
+        const onChainNonce = producer.nonce ? producer.nonce.toNumber() : 0;
+        const localNonce = (energyStore[device_id] || { nonce: 0 }).nonce;
         const v = policy.validateProof(req.body, {
-            getPublicKey: (id) => devices[id] || null,
-            getLastNonce: (id) => (energyStore[id] || { nonce: 0 }).nonce,
+            getPublicKey: () => Buffer.from(devicePubkey.toBytes()).toString('base64'),
+            getLastNonce: () => Math.max(onChainNonce, localNonce),
         });
         if (!v.ok) {
             return res.status(v.status).json({ error: v.error });
@@ -989,7 +1046,6 @@ app.post('/api/v1/proof/submit', async (req, res) => {
 
         // ── Накопление энергии (целые Wh) + сохранение proof для on-chain mint ──
         const proof = v.proof;
-        const { device_id } = proof;
         const pool_id = v.pool_id;
         const energyWhInt = proof.energy_wh;
         const stored = energyStore[device_id] || { energy_wh: 0, nonce: 0 };
@@ -1006,11 +1062,17 @@ app.post('/api/v1/proof/submit', async (req, res) => {
             await storage.savePool(pool_id, pool.threshold, pool.total_energy, pool.device_energy, pool.created_at);
             logger.info(`📊 Pool ${pool_id}: +${energyWhInt}Wh, total: ${pool.total_energy}Wh`);
             if (pool.total_energy >= pool.threshold) {
-                logger.info(`🎯 Pool ${pool_id} threshold reached! Distributing tokens...`);
-                pool.total_energy = 0;
-                pool.device_energy = {};
-                await storage.savePool(pool_id, pool.threshold, 0, {}, pool.created_at);
-                return res.json({ ok: true, message: 'Pool threshold reached, tokens distributed' });
+                // P1 (аудит 2026-08-18): off-chain пул НЕ распределяет токены —
+                // прежний код «сбросил счётчик и ответил tokens distributed» был
+                // заглушкой. Реальное распределение выполняется on-chain
+                // (instructions/pool.rs::distribute_pool); оракул передаёт pool=null
+                // в mintEnergy. Накопление продолжаем, но не выдаём ложь.
+                logger.warn(`⚠️ Pool ${pool_id}: threshold reached, но off-chain распределение НЕ реализовано (требуется on-chain distribute_pool)`);
+                return res.json({
+                    ok: true,
+                    pool_total: pool.total_energy,
+                    warning: 'pool_threshold_reached_offchain_distribution_not_implemented',
+                });
             }
             return res.json({ ok: true, pool_total: pool.total_energy });
         }
@@ -1024,7 +1086,7 @@ app.post('/api/v1/proof/submit', async (req, res) => {
         // ПРИНИМАЕТСЯ, энергия накапливается, mint откладывается. Это деградация,
         // а не отказ: proof'ы не должны теряться из-за недоступности mint.
         if (proof.sig_mode === 'binary') {
-            const mintRes = await mintEnergy(proof);
+            const mintRes = await mintEnergy(proof, producer);
             if (mintRes.success) {
                 return res.json({ ok: true, minted: proof.energy_wh, tx: mintRes.tx, accumulated: newEnergy });
             }

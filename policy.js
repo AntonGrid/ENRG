@@ -25,7 +25,7 @@
 const fs = require('fs');
 const path = require('path');
 const nacl = require('tweetnacl');
-const bs58 = require('bs58');
+const bs58 = require('bs58').default;
 const { Keypair, PublicKey } = require('@solana/web3.js');
 
 // ════════════════════════════════════════════════════════════════
@@ -238,16 +238,22 @@ function parseDevicePubkey(device_id) {
  *
  * Формат (должен побайтово совпадать в оракуле и в прошивке ESP32):
  *   `device_id|rated_power|oracle_url|public_key|timestamp`
+ *   `|trust_level|heartbeat_interval|proof_threshold|policy_version|verifier_endpoint`
+ *
+ * Поля ADR-0004 (trust_level, heartbeat_interval, proof_threshold,
+ * policy_version, verifier_endpoint) добавлены в 2026-08-18 (аудит, P1-12).
  *
  * Ограничение: поля НЕ должны содержать символ '|'. Оракул гарантирует это
  * для oracle_url (валидируется в эндпоинте), остальные поля — base58/hex/
  * base64/число, в которых '|' невозможен.
  *
- * @param {object} m { device_id, rated_power, oracle_url, public_key, timestamp }
+ * @param {object} m { device_id, rated_power, oracle_url, public_key, timestamp,
+ *                     trust_level, heartbeat_interval, proof_threshold,
+ *                     policy_version, verifier_endpoint }
  * @returns {string}
  */
 function buildManifestMessage(m) {
-    return `${m.device_id}|${m.rated_power}|${m.oracle_url}|${m.public_key}|${m.timestamp}`;
+    return `${m.device_id}|${m.rated_power}|${m.oracle_url}|${m.public_key}|${m.timestamp}|${m.trust_level}|${m.heartbeat_interval}|${m.proof_threshold}|${m.policy_version}|${m.verifier_endpoint}`;
 }
 
 /**
@@ -276,7 +282,7 @@ function verifyManifest(manifest, signature, publicKey) {
     if (!manifest || typeof manifest !== 'object') {
         return { ok: false, error: 'manifest_missing' };
     }
-    const required = ['device_id', 'rated_power', 'oracle_url', 'public_key', 'timestamp'];
+    const required = ['device_id', 'rated_power', 'oracle_url', 'public_key', 'timestamp', 'trust_level', 'heartbeat_interval', 'proof_threshold', 'policy_version', 'verifier_endpoint'];
     for (const f of required) {
         if (manifest[f] === undefined || manifest[f] === null || manifest[f] === '') {
             return { ok: false, error: `manifest_field_missing:${f}` };

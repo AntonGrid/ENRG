@@ -14,8 +14,15 @@ export interface MerkleTree {
   root: Buffer;
 }
 
+/**
+ * Строит Merkle-дерево. ВАЖНО (аудит 2026-08-18, P0-1): rawLeaves УЖЕ
+ * являются 32-байт хэшами (leaf = SHA-256(manifest_id || content_hash)) и
+ * повторно не хэшируются — согласовано с on-chain compute_merkle_root
+ * (merkle_proof_verification.rs) и oracle/registry/app.js. Иначе корень
+ * никогда не совпадёт с on-chain.
+ */
 export function buildMerkleTree(rawLeaves: Buffer[]): MerkleTree {
-  const leaves = rawLeaves.map((l) => sha256(l));
+  const leaves = rawLeaves;
   const levels: Buffer[][] = [leaves];
   let level = leaves;
   while (level.length > 1) {
@@ -41,6 +48,7 @@ export function getProof(tree: MerkleTree, index: number): Buffer[] {
   return proof;
 }
 
+/** Лист уже является 32-байт хэшем — возвращаем как есть (единая схема). */
 export function leafHash(rawLeaf: Buffer): Buffer {
-  return sha256(rawLeaf);
+  return rawLeaf;
 }

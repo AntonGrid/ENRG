@@ -33,7 +33,7 @@ function deviceIdToBytes(deviceId) {
     }
     try {
         // base58 (bs58 доступен в node_modules ENRG — используется policy.js).
-        const bs58 = require(path.join(__dirname, '..', 'node_modules', 'bs58'));
+        const bs58 = require(path.join(__dirname, '..', 'node_modules', 'bs58')).default;
         const b = bs58.decode(deviceId);
         if (b.length === 32) return Buffer.from(b);
     } catch (_) { /* not base58 */ }

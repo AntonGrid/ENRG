@@ -90,7 +90,7 @@ describe("ENRG Key Rotation & Revocation (ADR-0007)", () => {
     commitment: "confirmed", preflightCommitment: "confirmed",
   });
   anchor.setProvider(provider);
-  const program = new Program(patchIdl(rawIdl), provider);
+  const program = new Program(patchIdl(rawIdl), provider) as any;
 
   const operator = Keypair.generate();
   const owner = Keypair.generate();

@@ -41,8 +41,7 @@ ENRG Protocol исторически развивался как монолит�
 - Криптографическую идентичность устройств (Ed25519 ключи на ESP32).
 - Device Lifecycle (ADR-0005): 8 состояний и переходы между ними.
 - Device Registry (ADR-0002): реестр устройств, их публичные ключи и метаданные.
-- Oracle Registry (ADR-0003): реестр доверенных Oracle.
-- Policy Engine (ADR-0004): правила верификации Proof-of-Production.
+- Oracle Registry и Policy Engine (ADR-0003): реестр доверенных Oracle и правила верификации Proof.
 - Доверенную передачу данных от устройства через Oracle в блокчейн.
 
 Core Protocol **не знает** о токенах, эмиссии, комиссиях.
@@ -52,7 +51,7 @@ Core Protocol **не знает** о токенах, эмиссии, комис�
 
 Отвечает за:
 - SRC Mint и TokenMint (конфигурация минта).
-- Асимптотическую эмиссионную модель (ADR-0001).
+- Асимптотическую эмиссионную модель (ENRG_Technical_Specification_v7.0, §17).
 - Динамическую сложность для крупных производителей.
 - Комиссии (15%), распределение (buyback, staking, DAO, emergency).
 - Buyback & Burn.
@@ -141,11 +140,11 @@ programs/enrg-mvp/src/ core/ mod.rs device_lifecycle.rs # ADR-0005 device_regist
 
 ## Связь с другими ADR
 
-- ADR-0001: Эмиссионная модель → часть Energy Profile
-- ADR-0002: Device Registry → часть Core Protocol
-- ADR-0003: Oracle Registry → часть Core Protocol
-- ADR-0004: Policy Engine → часть Core Protocol
-- ADR-0005: Device States → часть Core Protocol
+- ADR-0001: Ключ никогда не покидает устройство → часть Core Protocol (identity).
+- ADR-0002: Device Registry → часть Core Protocol.
+- ADR-0003: Oracle Registry / Policy Engine → часть Core Protocol.
+- ADR-0004: Device Manifest → часть Core Protocol.
+- ADR-0005: Device States → часть Core Protocol.
 
 ## Заключение
 

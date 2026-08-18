@@ -10,13 +10,22 @@ This server receives signed energy proofs from IoT devices, verifies Ed25519 sig
 
 ## API
 - `POST /api/v1/device/register` — register a device (proof-of-possession: Ed25519 signature over `device_id|public_key`)
+  - **P0-2 (ADR-0002):** локальный реестр оракула НЕ является источником истины —
+    для приёма proof'ов устройство должно быть зарегистрировано on-chain
+    (`EnergyProducer` PDA, `register_device`).
 - `POST /api/v1/proof/submit` — submit a signed energy proof
   - Body: `{ device_id, timestamp, energyWh, nonce, signature }`
+  - `device_id` — base58 Ed25519 публичный ключ (32 байта)
+  - Публичный ключ и nonce берутся из **on-chain Device Registry**
+    (EnergyProducer PDA). Устройство без on-chain-регистрации отклоняется
+    (`404 device_not_registered_on_chain`).
   - `signature` — base64 Ed25519-подпись в **binary** (on-chain) либо **legacy** (строковый) формате
 - `GET /api/v1/manifest/:device_id` — подписанный **Device Manifest** (ADR-0004)
-  - Ответ: `{ device_id, rated_power, oracle_url, public_key, timestamp, signature }`
+  - Ответ: `{ device_id, rated_power, oracle_url, public_key, timestamp,
+    trust_level, heartbeat_interval, proof_threshold, policy_version,
+    verifier_endpoint, signature }`
   - Подпись: Ed25519 ключом основателя (`FOUNDER_KEY`) над канонической строкой
-    `device_id|rated_power|oracle_url|public_key|timestamp`
+    `device_id|rated_power|oracle_url|public_key|timestamp|trust_level|heartbeat_interval|proof_threshold|policy_version|verifier_endpoint`
     (см. `policy.buildManifestMessage` / `verifyManifest`)
   - Устройство проверяет подпись вшитым публичным ключом основателя ДО
     использования манифеста; при невалидном манифесте proof'ы не отправляются
@@ -44,6 +53,11 @@ This server receives signed energy proofs from IoT devices, verifies Ed25519 sig
     новая запись наследует состояние (owner, nonce, энергия, tier)
 - `GET /api/v1/device/:id/status` | `GET /api/v1/device/:id/balance` | `GET /api/v1/device/:id/history`
 - `POST /api/v1/pool/create`, `GET /api/v1/stats`
+  - ⚠️ **Пул (аудит 2026-08-18, P1):** off-chain пул ведёт накопление энергии,
+    но НЕ распределяет токены. Реальное распределение выполняется on-chain
+    (`instructions/pool.rs::distribute_pool`); оракул передаёт `pool=null` в
+    `mint_energy`. При достижении порога возвращается честный ответ
+    `pool_threshold_reached_offchain_distribution_not_implemented`.
 
 ## Policy Engine (ADR-0003)
 

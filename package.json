@@ -2,7 +2,7 @@
   "name": "enrg-protocol",
   "version": "1.0.0",
   "scripts": {
-    "start": "node oracle/server.js",
+    "start": "node server.js",
     "test": "TS_NODE_TRANSPILE_ONLY=1 ts-mocha -p tsconfig.json \"tests/**/*.test.ts\"",
     "test:policy": "mocha tests/policy.test.js",
     "test:manifest": "mocha tests/manifest.test.js",
@@ -22,7 +22,7 @@
     "@types/chai": "^5.2.3",
     "@types/mocha": "^10.0.10",
     "better-sqlite3": "^12.11.1",
-    "bs58": "^5.0.0",
+    "bs58": "^6.0.0",
     "chai": "^6.2.2",
     "cors": "^2.8.6",
     "express": "^4.22.2",
@@ -42,6 +42,7 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "esm": "^3.2.25",
+    "qrcode": "^1.5.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   },

@@ -9,6 +9,8 @@
     "resolveJsonModule": true,
     "moduleResolution": "node",
     "strict": false,
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
     "types": ["mocha", "chai", "node"]
   },
   "include": ["tests/**/*.ts"],

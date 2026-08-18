@@ -33,26 +33,48 @@
 //  КОНФИГУРАЦИЯ (заполните перед прошивкой)
 // ════════════════════════════════════════════════════════════════
 
-#ifndef WIFI_SSID
-#define WIFI_SSID "YOUR_WIFI_SSID"
+// ⚠️ БЕЗОПАСНОСТЬ (аудит 2026-08-18, P1 + Plug & Play): WiFi-креды НИКОГДА
+// не задаются в исходнике/compile-time. Они хранятся ТОЛЬКО в NVS
+// (Preferences, namespace "enrg", ключи wifi_ssid/wifi_pass) и вводятся
+// пользователем через Captive Portal "Axis-Device-XXXX" (см. setup_wifi()).
+//
+// ── Plug & Play: локальный HTTP-signer (Axis-connect) ──
+// Порт локального signer'а: GET /api/device/info, POST /api/device/sign.
+#ifndef ENRG_SIGNER_PORT
+#define ENRG_SIGNER_PORT 8080
 #endif
-#ifndef WIFI_PASSWORD
-#define WIFI_PASSWORD "YOUR_WIFI_PASSWORD"
+// 1 — принимать запросы signer'а ТОЛЬКО из локальных подсетей
+// (RFC1918 10/8, 172.16/12, 192.168/16, loopback, link-local).
+#ifndef ENRG_SIGNER_LAN_ONLY
+#define ENRG_SIGNER_LAN_ONLY 1
+#endif
+// Максимальный размер сообщения, которое можно подписать через HTTP (байт).
+#ifndef ENRG_SIGNER_MAX_MSG
+#define ENRG_SIGNER_MAX_MSG 256
+#endif
+// Таймаут подключения к сохранённой Wi-Fi сети (мс) — 30 секунд.
+#ifndef ENRG_WIFI_CONNECT_TIMEOUT_MS
+#define ENRG_WIFI_CONNECT_TIMEOUT_MS 30000UL
+#endif
+// Таймаут Captive Portal (сек). По истечении устройство продолжает без WiFi.
+#ifndef ENRG_AP_TIMEOUT_SEC
+#define ENRG_AP_TIMEOUT_SEC 600
 #endif
 
 // HTTP(S)-эндпоинт оракула. Прошивка поддерживает оба режима: http://
-// (локальная сеть / dev) и https:// (с проверкой корневого CA, ENRG_CA_CERT).
-// Используется по умолчанию (обратная совместимость). Если получен валидный
-// Device Manifest (ADR-0004), реальный URL берётся из manifest.oracle_url.
-// ⚠️ Если IP ноутбука с оракулом изменится — обновите этот адрес и перепрошейте.
+// (локальная сеть / dev, только при ENRG_ALLOW_HTTP=1) и https:// (с проверкой
+// корневого CA, ENRG_CA_CERT). По умолчанию — ТОЛЬКО HTTPS (ADR-0008: TLS 1.3
+// для доставки proof/manifest/OTA). Если получен валидный Device Manifest
+// (ADR-0004), реальный URL берётся из manifest.oracle_url.
+// ⚠️ Замените дефолтный адрес на ваш оракул перед прошивкой.
 #ifndef ENRG_ORACLE_URL
-#define ENRG_ORACLE_URL "http://192.168.1.123:3000/api/v1/proof/submit"
+#define ENRG_ORACLE_URL "https://oracle.enrg.network/api/v1/proof/submit"
 #endif
 
 // ── Device Manifest (ADR-0004) ──
 // База URL эндпоинта манифестов: к ней добавляется "/<device_id>".
 #ifndef ENRG_MANIFEST_URL_BASE
-#define ENRG_MANIFEST_URL_BASE "http://192.168.1.123:3000/api/v1/manifest"
+#define ENRG_MANIFEST_URL_BASE "https://oracle.enrg.network/api/v1/manifest"
 #endif
 
 // Публичный ключ ОРАКУЛА (основателя, Ed25519, 32 байта) — вшивается в прошивку.
@@ -98,7 +120,15 @@
 
 // База URL эндпоинтов firmware оракула: к ней добавляется /latest и /latest/image.
 #ifndef ENRG_FIRMWARE_URL_BASE
-#define ENRG_FIRMWARE_URL_BASE "http://192.168.1.123:3000/api/v1/firmware"
+#define ENRG_FIRMWARE_URL_BASE "https://oracle.enrg.network/api/v1/firmware"
+#endif
+
+// ⚠️ БЕЗОПАСНОСТЬ (аудит 2026-08-18, P0-3): по умолчанию прошивка ОТКАЗЫВАЕТСЯ
+// работать по открытому HTTP (ADR-0008 требует TLS 1.3). Для локальной
+// разработки задайте ENRG_ALLOW_HTTP=1 в build_flags — и только вместе с
+// ENRG_MANIFEST_REQUIRED=0 для явного dev-режима.
+#ifndef ENRG_ALLOW_HTTP
+#define ENRG_ALLOW_HTTP 0
 #endif
 
 // Модель устройства (оракул кладёт её в метаданные; устройство пропускает
@@ -199,6 +229,9 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
+#include <WebServer.h>   // Plug & Play: локальный HTTP-signer (порт ENRG_SIGNER_PORT)
+#include <ESPmDNS.h>     // Plug & Play: mDNS axis-device-XXXX.local
+#include <WiFiManager.h> // Plug & Play: Captive Portal (AP Axis-Device-XXXX)
 #include <Preferences.h>
 #include <ArduinoJson.h>   // ADR-0004: разбор подписанного Device Manifest
 #include <LittleFS.h>      // ADR-0008: staging-область для OTA-образа
@@ -491,6 +524,59 @@ bool identity_init_v3(uint8_t privateKey[32], uint8_t publicKey[32]) {
     return true;
 }
 
+// ════════════════════════════════════════════════════════════════
+//  ОБЩИЙ ПУТЬ ПОДПИСИ (Serial SIGN / локальный HTTP-signer)
+//  ADR-0001: приватный ключ никогда не покидает устройство; наружу —
+//  только подпись. CPU Ed25519 (NVS/ATECC seed) или аппаратный SE050.
+// ════════════════════════════════════════════════════════════════
+
+static bool sign_with_device_key(const uint8_t *msg, size_t msgLen, uint8_t signature[64]) {
+#if ENRG_USE_SE050
+    if (g_se050_ready) return se050_sign(msg, msgLen, signature);
+#endif
+    Ed25519::sign(signature, g_privateKey, g_publicKey, msg, msgLen);
+    return true;
+}
+
+// Канонический префикс сообщений, которые устройство подписывает ПО СЕТИ
+// (зеркалит security/lifecycle.rs: enrg:device:register/claim/rotate).
+static const uint8_t ENRG_DEVICE_SIGN_PREFIX[] = "enrg:device:";
+static const size_t ENRG_DEVICE_SIGN_PREFIX_LEN = sizeof(ENRG_DEVICE_SIGN_PREFIX) - 1; // 12
+
+/**
+ * Доменная валидация для HTTP-signer'а (обязательная):
+ *  - сообщение начинается с "enrg:device:" (только протокольные домены);
+ *  - встроенный device_id (байты 12..44) == наш публичный ключ.
+ * Произвольные сообщения HTTP-эндпоинт НЕ подписывает — только Serial
+ * (физический доступ к устройству).
+ */
+static bool signer_message_allowed(const uint8_t *msg, size_t len) {
+    if (len < ENRG_DEVICE_SIGN_PREFIX_LEN + 32) return false;
+    if (memcmp(msg, ENRG_DEVICE_SIGN_PREFIX, ENRG_DEVICE_SIGN_PREFIX_LEN) != 0) return false;
+    if (memcmp(msg + ENRG_DEVICE_SIGN_PREFIX_LEN, g_publicKey, 32) != 0) return false;
+    return true;
+}
+
+/** RFC1918 / loopback / link-local — "локальный контур" для signer'а. */
+static bool is_private_ipv4(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
+    (void)c; (void)d;
+    if (a == 10) return true;               // 10/8
+    if (a == 172 && b >= 16 && b <= 31) return true; // 172.16/12
+    if (a == 192 && b == 168) return true;  // 192.168/16
+    if (a == 127) return true;              // loopback
+    if (a == 169 && b == 254) return true;  // link-local 169.254/16
+    return false;
+}
+
+static bool signer_client_allowed(const IPAddress &ip) {
+#if ENRG_SIGNER_LAN_ONLY
+    return is_private_ipv4(ip[0], ip[1], ip[2], ip[3]);
+#else
+    (void)ip;
+    return true;
+#endif
+}
+
 // Монотонный nonce, персистентный между перезагрузками (анти-replay).
 uint32_t next_nonce() {
     uint32_t n = g_prefs.getUInt("nonce", 0) + 1;
@@ -557,11 +643,48 @@ bool time_is_synced() {
 //  WIFI
 // ════════════════════════════════════════════════════════════════
 
-bool connect_wifi(unsigned long timeoutMs) {
+// ── Credentials: ТОЛЬКО NVS (Preferences, namespace "enrg") ──
+static const char WIFI_PREF_SSID[] = "wifi_ssid";
+static const char WIFI_PREF_PASS[] = "wifi_pass";
+
+static String wifi_ssid_from_nvs() { return g_prefs.getString(WIFI_PREF_SSID, ""); }
+static String wifi_pass_from_nvs() { return g_prefs.getString(WIFI_PREF_PASS, ""); }
+
+static void wifi_save_creds(const String &ssid, const String &pass) {
+    g_prefs.putString(WIFI_PREF_SSID, ssid);
+    g_prefs.putString(WIFI_PREF_PASS, pass);
+    Serial.printf("[WIFI] креды сохранены в NVS: %s\n", ssid.c_str());
+}
+
+static void wifi_clear_creds() {
+    g_prefs.remove(WIFI_PREF_SSID);
+    g_prefs.remove(WIFI_PREF_PASS);
+    Serial.println("[WIFI] креды стёрты из NVS");
+}
+
+// ── Plug & Play: имена выводятся из deviceId (последние hex pubkey), ──
+//    чтобы Axis-connect мог вычислить hostname прямо из QR-пейлоада.
+static String device_tail_hex(size_t n) {
+    String id = device_id_from_pubkey(g_publicKey); // "0x" + 64 hex
+    return id.substring(id.length() - n);
+}
+// AP "Axis-Device-XXXX": XXXX = последние 4 hex deviceId.
+static String ap_name() { return "Axis-Device-" + device_tail_hex(4); }
+// Пароль AP: последние 8 hex deviceId (не хардкод, печатается в Serial).
+static String ap_password() { return device_tail_hex(8); }
+// mDNS: axis-device-xxxx.local (RFC 6763: только [a-z0-9-]).
+static String mdns_hostname() {
+    String tail = device_tail_hex(4);
+    tail.toLowerCase();
+    return "axis-device-" + tail;
+}
+
+/** Подключение к Wi-Fi по явным кредам с таймаутом. */
+bool connect_wifi_creds(const String &ssid, const String &pass, unsigned long timeoutMs) {
     if (WiFi.status() == WL_CONNECTED) return true;
     WiFi.mode(WIFI_STA);
-    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-    Serial.printf("[WIFI] connecting to %s ...\n", WIFI_SSID);
+    WiFi.begin(ssid.c_str(), pass.c_str());
+    Serial.printf("[WIFI] connecting to %s ...\n", ssid.c_str());
     unsigned long start = millis();
     while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeoutMs) {
         delay(200);
@@ -572,6 +695,67 @@ bool connect_wifi(unsigned long timeoutMs) {
     }
     Serial.println("[WIFI] connect FAILED");
     return false;
+}
+
+/** Подключение по кредам из NVS. */
+bool connect_wifi_from_nvs(unsigned long timeoutMs) {
+    if (WiFi.status() == WL_CONNECTED) return true;
+    String ssid = wifi_ssid_from_nvs();
+    if (ssid.length() == 0) return false;
+    return connect_wifi_creds(ssid, wifi_pass_from_nvs(), timeoutMs);
+}
+
+/**
+ * Captive Portal (WiFiManager): защищённая AP "Axis-Device-XXXX".
+ * Пользователь подключается к AP, попадает на портал (DNS-редирект),
+ * вводит SSID/пароль домашней сети. Креды сохраняем САМИ в NVS.
+ * Возвращает true, если пользователь настроил сеть (нужен ESP.restart()).
+ */
+static bool start_captive_portal() {
+    String apName = ap_name();
+    String apPass = ap_password();
+    Serial.printf("[PORTAL] AP: %s (пароль: %s)\n", apName.c_str(), apPass.c_str());
+    Serial.printf("[PORTAL] подключитесь к %s, откройте http://192.168.4.1\n", apName.c_str());
+
+    WiFiManager wm;
+    // Не полагаемся на собственную персистентность WiFiManager'а — креды
+    // читаются/пишутся только через наш Preferences (namespace "enrg").
+    wm.setConfigPortalTimeout((unsigned long)ENRG_AP_TIMEOUT_SEC);
+    wm.setConnectTimeout(30);
+
+    if (!wm.startConfigPortal(apName.c_str(), apPass.c_str())) {
+        Serial.println("[PORTAL] пользователь не настроил сеть (таймаут/отмена)");
+        return false;
+    }
+
+    String ssid = wm.getWiFiSSID();
+    String pass = wm.getWiFiPass();
+    if (ssid.length() == 0) {
+        Serial.println("[PORTAL] WiFiManager не вернул SSID — продолжаю без WiFi");
+        return false;
+    }
+    wifi_save_creds(ssid, pass);
+    return true;
+}
+
+/** Оркестрация: NVS-креды → 30s connect → иначе Captive Portal. */
+static bool setup_wifi() {
+    String ssid = wifi_ssid_from_nvs();
+    if (ssid.length() > 0) {
+        if (connect_wifi_creds(ssid, wifi_pass_from_nvs(), ENRG_WIFI_CONNECT_TIMEOUT_MS)) {
+            return true;
+        }
+        Serial.println("[WIFI] сохранённая сеть недоступна — запускаю Captive Portal");
+    } else {
+        Serial.println("[WIFI] креды не найдены в NVS — запускаю Captive Portal (первая настройка)");
+    }
+
+    if (start_captive_portal()) {
+        Serial.println("[WIFI] настройка завершена — перезагрузка для чистого старта в STA");
+        delay(1000);
+        ESP.restart();
+    }
+    return WiFi.status() == WL_CONNECTED;
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -587,9 +771,65 @@ static uint64_t g_rated_power = 0;
 // true — манифест получен и подпись проверена.
 static bool g_manifest_valid = false;
 
+/** Извлечь host из URL (http://host[:port]/path). */
+static String url_host(const String &url) {
+    int schemeEnd = url.indexOf("://");
+    if (schemeEnd < 0) return "";
+    int hostStart = schemeEnd + 3;
+    int slash = url.indexOf('/', hostStart);
+    int colon = url.indexOf(':', hostStart);
+    int end = slash < 0 ? (int)url.length() : slash;
+    if (colon > 0 && colon < end) end = colon;
+    return url.substring(hostStart, end);
+}
+
+/** Локальный ли узел: loopback / RFC1918 / link-local / mDNS .local. */
+static bool host_is_local(const String &host) {
+    if (host == "localhost") return true;
+    if (host.endsWith(".local")) return true;
+    int a = -1, b = -1, c = -1, d = -1;
+    if (sscanf(host.c_str(), "%d.%d.%d.%d", &a, &b, &c, &d) == 4) {
+        return is_private_ipv4((uint8_t)a, (uint8_t)b, (uint8_t)c, (uint8_t)d);
+    }
+    return false;
+}
+
+/**
+ * Защита транспорта от открытого HTTP (P0-3, ADR-0008: TLS 1.3).
+ * https:// — всегда разрешено. http:// — разрешено ТОЛЬКО для локального
+ * контура (loopback/LAN/mDNS: локальный оракул, подпись через signer'а);
+ * http:// к УДАЛЁННОМУ узлу блокируется всегда. ENRG_ALLOW_HTTP=1 — явный
+ * dev-обход (полностью открывает http).
+ * Возвращает false, если запрос блокируется.
+ */
+static bool transport_allowed(const String &url) {
+    if (url.startsWith("https://")) return true;
+    if (url.startsWith("http://")) {
+#if ENRG_ALLOW_HTTP
+        Serial.println("[TLS] WARNING: http:// (без шифрования) — только DEV (ENRG_ALLOW_HTTP=1)");
+        return true;
+#else
+        String host = url_host(url);
+        if (host_is_local(host)) {
+            Serial.printf("[TLS] WARNING: http:// к локальному узлу %s (только локальный контур)\n",
+                          host.c_str());
+            return true;
+        }
+        Serial.printf("[TLS] BLOCKED http:// к удалённому узлу (ADR-0008): %.80s\n", url.c_str());
+        return false;
+#endif
+    }
+    Serial.printf("[TLS] BLOCKED неизвестная схема URL: %.80s\n", url.c_str());
+    return false;
+}
+
 int send_proof_http(const String &body) {
     int code = -1;
     String resp = "";
+
+    if (!transport_allowed(g_proof_url)) {
+        return -1;
+    }
 
     if (g_proof_url.startsWith("https://")) {
         // TLS с проверкой корневого CA (ENRG_CA_CERT); mTLS опционально.
@@ -642,6 +882,10 @@ int send_proof_http(const String &body) {
 String http_get(const String &url) {
     String body = "";
     int code;
+
+    if (!transport_allowed(url)) {
+        return "";
+    }
 
     if (url.startsWith("https://")) {
         WiFiClientSecure client;
@@ -734,8 +978,18 @@ bool verify_manifest(const String &body, const String &deviceId,
     const char *m_oracle = doc["oracle_url"];
     const char *m_pub = doc["public_key"];
     const char *m_ts = doc["timestamp"];
+    const char *m_trust = doc["trust_level"];
+    const char *m_hb = doc["heartbeat_interval"];
+    const char *m_pt = doc["proof_threshold"];
+    const char *m_pv = doc["policy_version"];
+    const char *m_ve = doc["verifier_endpoint"];
     const char *m_sig = doc["signature"];
-    if (!m_id || !m_rated || !m_oracle || !m_pub || !m_ts || !m_sig) return false;
+    // ADR-0004: все поля обязательны (аудит 2026-08-18, P1-12).
+    if (!m_id || !m_rated || !m_oracle || !m_pub || !m_ts || !m_sig ||
+        !m_trust || !m_hb || !m_pt || !m_pv || !m_ve) {
+        Serial.println("[MANIFEST] отсутствует одно из обязательных полей ADR-0004");
+        return false;
+    }
 
     // Привязка к этому устройству (манифест нельзя подменить/переадресовать).
     if (String(m_id) != deviceId) return false;
@@ -743,7 +997,9 @@ bool verify_manifest(const String &body, const String &deviceId,
 
     // Каноническое сообщение — побайтово как в policy.js::buildManifestMessage.
     String msg = String(m_id) + "|" + String(m_rated) + "|" +
-                 String(m_oracle) + "|" + String(m_pub) + "|" + String(m_ts);
+                 String(m_oracle) + "|" + String(m_pub) + "|" + String(m_ts) + "|" +
+                 String(m_trust) + "|" + String(m_hb) + "|" + String(m_pt) + "|" +
+                 String(m_pv) + "|" + String(m_ve);
 
     uint8_t sig[64];
     if (base64_decode(String(m_sig), sig, sizeof(sig)) != 64) return false;
@@ -883,7 +1139,7 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
                   (unsigned long long)energyWh, nonce);
 
     if (WiFi.status() != WL_CONNECTED) {
-        if (!connect_wifi(20000)) return;
+        if (!connect_wifi_from_nvs(20000)) return;
     }
     send_proof_http(body);
 }
@@ -1025,9 +1281,12 @@ static int hex_to_bytes_serial(const String &hex, uint8_t *out, size_t maxOut) {
 static void print_help_serial() {
     Serial.println("[HELP] Команды:");
     Serial.println("  HELP              — этот список");
-    Serial.println("  INFO              — device_id, public_key (base64/hex), хранилище ключа");
-    Serial.println("  SIGN <hex>        — подписать сообщение (hex, max 256 байт)");
-    Serial.println("                      ключом устройства; вывод sig_base64/sig_hex");
+    Serial.println("  INFO              — device_id, public_key, WiFi/mDNS/signer, хранилище");
+    Serial.println("  SIGN <hex>        — подписать ПРОИЗВОЛЬНОЕ сообщение (hex, max 256 байт)");
+    Serial.println("                      ключом устройства (только физический доступ);");
+    Serial.println("                      вывод sig_base64/sig_hex");
+    Serial.println("  CLEARWIFI         — стереть WiFi-креды из NVS и перезагрузиться");
+    Serial.println("                      (устройство поднимет Captive Portal Axis-Device-XXXX)");
     Serial.println("  Примеры:");
     Serial.println("    SIGN 68656c6c6f           (подписать 'hello')");
     Serial.println("    SIGN <hex(device_id|public_key)>   (PoP для оракула)");
@@ -1041,6 +1300,23 @@ static void print_device_info_serial() {
                   g_key_in_secure_element ? "Secure Element (SE050/ATECC608A)" : "NVS (flash)");
     Serial.printf("[INFO] fw_version    = %s\n",
                   g_prefs.getString("fw_version", ENRG_FW_VERSION).c_str());
+    Serial.printf("[INFO] wifi          = %s\n",
+                  (WiFi.status() == WL_CONNECTED) ? ("connected (" + WiFi.localIP().toString() + ")").c_str()
+                                                  : "not connected");
+    Serial.printf("[INFO] mDNS          = %s.local\n", mdns_hostname().c_str());
+    Serial.printf("[INFO] signer        = :%d (LAN-only: %d)\n",
+                  (int)ENRG_SIGNER_PORT, (int)ENRG_SIGNER_LAN_ONLY);
+    Serial.printf("[INFO] wifi_ssid_nvs = %s\n",
+                  wifi_ssid_from_nvs().length() > 0 ? "<saved>" : "<none>");
+}
+
+/** CLEARWIFI: полное стирание WiFi-кредов из NVS + перезагрузка в AP-режим. */
+static void cmd_clear_wifi() {
+    wifi_clear_creds();
+    Serial.println("[WIFI] креды полностью стёрты из Preferences (NVS)");
+    Serial.println("[WIFI] перезагрузка — устройство поднимет Captive Portal Axis-Device-XXXX");
+    delay(500);
+    ESP.restart();
 }
 
 static void cmd_sign(const String &hexArg) {
@@ -1056,19 +1332,7 @@ static void cmd_sign(const String &hexArg) {
     }
 
     uint8_t signature[64];
-    bool ok = false;
-#if ENRG_USE_SE050
-    if (g_se050_ready) {
-        ok = se050_sign(msg, (size_t)msgLen, signature);
-    } else {
-        Ed25519::sign(signature, g_privateKey, g_publicKey, msg, msgLen);
-        ok = true;
-    }
-#else
-    Ed25519::sign(signature, g_privateKey, g_publicKey, msg, msgLen);
-    ok = true;
-#endif
-    if (!ok) {
+    if (!sign_with_device_key(msg, (size_t)msgLen, signature)) {
         Serial.println("[SIGN] ERR: подпись не удалась (SE050)");
         return;
     }
@@ -1090,6 +1354,7 @@ static void process_serial_command(const String &line) {
     if (cmd == "HELP" || cmd == "?") { print_help_serial(); return; }
     if (cmd == "INFO") { print_device_info_serial(); return; }
     if (cmd == "SIGN") { cmd_sign(arg); return; }
+    if (cmd == "CLEARWIFI" || cmd == "WIFIRESET") { cmd_clear_wifi(); return; }
 
     Serial.printf("[SERIAL] неизвестная команда: %s (HELP — список)\n", cmd.c_str());
 }
@@ -1106,6 +1371,102 @@ static void handle_serial_input() {
             if (g_serialLine.length() < 640) g_serialLine += c; // 512 hex + запас
         }
     }
+}
+
+
+// ════════════════════════════════════════════════════════════════
+//  ЛОКАЛЬНЫЙ HTTP-SIGNER + mDNS (Plug & Play, связь с Axis-connect)
+// ════════════════════════════════════════════════════════════════
+
+static WebServer g_signerServer(ENRG_SIGNER_PORT);
+static const char SIGNER_JSON[] = "application/json";
+
+static void signer_reject(int code, const char *error) {
+    g_signerServer.send(code, SIGNER_JSON, String("{\"error\":\"") + error + "\"}");
+}
+
+/** GET /api/device/info → {deviceId, schema, firmware, state}. */
+static void handle_device_info() {
+    if (!signer_client_allowed(g_signerServer.client().remoteIP())) {
+        signer_reject(403, "forbidden");
+        return;
+    }
+    String state = (WiFi.status() == WL_CONNECTED) ? "ready" : "no-wifi";
+    if (state == "ready" && ENRG_MANIFEST_REQUIRED && !g_manifest_valid) state = "no-manifest";
+
+    String json = String("{\"deviceId\":\"") + device_id_from_pubkey(g_publicKey) + "\",";
+    json += "\"schema\":\"axis-energy-v1\",";
+    json += "\"firmware\":\"" ENRG_FW_VERSION "\",";
+    json += "\"state\":\"" + state + "\"}";
+    g_signerServer.send(200, SIGNER_JSON, json);
+}
+
+/**
+ * POST /api/device/sign.
+ * Тело: {"hex":"<message hex>"} (JSON, формат Axis-connect) или сырой
+ * бинарный payload (application/octet-stream). Ответ: {"signature":"<hex>"}.
+ * Безопасность:
+ *  - ENRG_SIGNER_LAN_ONLY — только локальные подсети (RFC1918);
+ *  - доменная валидация signer_message_allowed(): только "enrg:device:*"
+ *    и только с НАШИМ device_id внутри. Произвольный SIGN — только Serial.
+ */
+static void handle_device_sign() {
+    if (!signer_client_allowed(g_signerServer.client().remoteIP())) {
+        signer_reject(403, "forbidden");
+        return;
+    }
+
+    String body = g_signerServer.arg("plain");
+    if (body.length() == 0) { signer_reject(400, "empty body"); return; }
+
+    uint8_t msg[ENRG_SIGNER_MAX_MSG];
+    size_t msgLen = 0;
+    String contentType = g_signerServer.header("Content-Type");
+
+    if (contentType.indexOf("json") >= 0) {
+        // {"hex":"..."} — формат Axis-connect
+        JsonDocument doc;
+        DeserializationError err = deserializeJson(doc, body);
+        if (err) { signer_reject(400, "invalid json"); return; }
+        const char *hex = doc["hex"] | "";
+        int n = hex_to_bytes_serial(String(hex), msg, sizeof(msg));
+        if (n <= 0) { signer_reject(400, "invalid hex"); return; }
+        msgLen = (size_t)n;
+    } else {
+        // Сырое бинарное тело (payload/hash)
+        if (body.length() > sizeof(msg)) { signer_reject(413, "message too large"); return; }
+        memcpy(msg, body.c_str(), body.length());
+        msgLen = body.length();
+    }
+
+    if (!signer_message_allowed(msg, msgLen)) {
+        Serial.printf("[SIGNER] BLOCKED non-protocol message (%u bytes) from %s\n",
+                      (unsigned)msgLen,
+                      g_signerServer.client().remoteIP().toString().c_str());
+        signer_reject(403, "message not allowed: prefix enrg:device: and own device_id required");
+        return;
+    }
+
+    uint8_t signature[64];
+    if (!sign_with_device_key(msg, msgLen, signature)) {
+        signer_reject(500, "sign failed");
+        return;
+    }
+
+    String resp = String("{\"signature\":\"") + to_hex(signature, 64) + "\",";
+    resp += "\"deviceId\":\"" + device_id_from_pubkey(g_publicKey) + "\"}";
+    g_signerServer.send(200, SIGNER_JSON, resp);
+    Serial.printf("[SIGNER] signed %u bytes for %s\n",
+                  (unsigned)msgLen,
+                  g_signerServer.client().remoteIP().toString().c_str());
+}
+
+static void signer_server_start() {
+    g_signerServer.on("/api/device/info", HTTP_GET, handle_device_info);
+    g_signerServer.on("/api/device/sign", HTTP_POST, handle_device_sign);
+    g_signerServer.begin();
+    Serial.printf("[SIGNER] HTTP-signer на порту %d (LAN-only: %d)\n",
+                  (int)ENRG_SIGNER_PORT, (int)ENRG_SIGNER_LAN_ONLY);
 }
 
 
@@ -1163,9 +1524,21 @@ void setup() {
         Serial.println("[OTA] WARN: LittleFS не смонтирован — OTA недоступен");
     }
 
-    if (!connect_wifi(30000)) {
-        Serial.println("[WARN] WiFi не подключён — жду в loop");
+    // Plug & Play: NVS-креды → 30s connect → иначе Captive Portal.
+    if (setup_wifi()) {
+        // mDNS-респондент + локальный HTTP-signer (связь с Axis-connect).
+        if (MDNS.begin(mdns_hostname().c_str())) {
+            MDNS.addService("axis-connect", "tcp", ENRG_SIGNER_PORT);
+            MDNS.addServiceTxt("axis-connect", "tcp", "schema", "axis-energy-v1");
+            Serial.printf("[MDNS] hostname: %s.local\n", mdns_hostname().c_str());
+        } else {
+            Serial.println("[MDNS] WARN: mDNS не запущен");
+        }
+    } else {
+        Serial.println("[WARN] WiFi не подключён — локальный signer недоступен без сети");
     }
+    // HTTP-signer стартует всегда (в AP-режиме доступен и на 192.168.4.1).
+    signer_server_start();
 
     // ADR-0004: получаем и проверяем подписанный манифест при старте.
     // device_id = "0x" + hex публичного ключа (как при регистрации в оракуле).
@@ -1193,8 +1566,11 @@ void setup() {
 }
 
 void loop() {
-    // Onboarding: обработка Serial-команд (HELP/INFO/SIGN) — без блокировки.
+    // Onboarding: обработка Serial-команд (HELP/INFO/SIGN/CLEARWIFI) — без блокировки.
     handle_serial_input();
+
+    // Plug & Play: обслуживание локального HTTP-signer'а.
+    g_signerServer.handleClient();
 
     // ADR-0008: периодическая проверка обновлений прошивки.
     static unsigned long g_lastUpdateCheckMs = 0;
@@ -1234,6 +1610,13 @@ void loop() {
  * SHA-256. Возвращает true, если размер и хеш совпали с метаданными.
  */
 bool download_firmware(const String &url, long expectedSize, const String &expectedHashHex) {
+    // P0-3 (ADR-0008): загрузка образа прошивки по открытому HTTP запрещена
+    // (кроме явного dev-режима ENRG_ALLOW_HTTP=1).
+    if (!transport_allowed(url)) {
+        Serial.println("[OTA] загрузка образа заблокирована: не TLS-транспорт");
+        return false;
+    }
+
     // Транспорт по схеме URL: https:// → TLS (WiFiClientSecure + проверка CA),
     // http:// → обычный TCP (локальная dev-сеть, порт 3000).
     WiFiClientSecure secureClient;

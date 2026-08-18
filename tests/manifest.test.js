@@ -19,7 +19,7 @@ const fs = require('fs');
 const os = require('os');
 const nacl = require('tweetnacl');
 const util = require('tweetnacl-util');
-const bs58 = require('bs58');
+const bs58 = require('bs58').default;
 
 const policy = require('../policy');
 
@@ -38,13 +38,19 @@ describe('Device Manifest signing (ADR-0004, unit)', function () {
             oracle_url: 'https://oracle.example.com',
             public_key: util.encodeBase64(new Uint8Array(32).fill(7)),
             timestamp: 1700000000,
+            // ADR-0004 (P1-12): обязательные поля манифеста.
+            trust_level: 'basic',
+            heartbeat_interval: 60,
+            proof_threshold: 1,
+            policy_version: 1,
+            verifier_endpoint: 'https://oracle.example.com',
         };
     }
 
     it('buildManifestMessage is deterministic and pipe-separated', function () {
         const m = sampleManifest();
         const msg = policy.buildManifestMessage(m);
-        const expected = `${m.device_id}|${m.rated_power}|${m.oracle_url}|${m.public_key}|${m.timestamp}`;
+        const expected = `${m.device_id}|${m.rated_power}|${m.oracle_url}|${m.public_key}|${m.timestamp}|${m.trust_level}|${m.heartbeat_interval}|${m.proof_threshold}|${m.policy_version}|${m.verifier_endpoint}`;
         assert.strictEqual(msg, expected);
     });
 
@@ -161,17 +167,17 @@ describe('Device Manifest E2E (GET /api/v1/manifest/:device_id)', function () {
         const m = await get(`/api/v1/manifest/${device_id}`);
         assert.strictEqual(m.status, 200, JSON.stringify(m.data));
 
-        const manifest = {
-            device_id: m.data.device_id,
-            rated_power: m.data.rated_power,
-            oracle_url: m.data.oracle_url,
-            public_key: m.data.public_key,
-            timestamp: m.data.timestamp,
-        };
+        const manifest = m.data;
         assert.strictEqual(manifest.device_id, device_id);
         assert.strictEqual(manifest.public_key, publicKeyB64);
         assert.strictEqual(manifest.oracle_url, BASE);
         assert.strictEqual(manifest.rated_power, policy.config.defaultRatedPowerW);
+        // ADR-0004 (P1-12): обязательные поля присутствуют.
+        assert.strictEqual(manifest.trust_level, 'basic');
+        assert.ok(manifest.heartbeat_interval > 0);
+        assert.ok(manifest.proof_threshold > 0);
+        assert.ok(manifest.policy_version >= 1);
+        assert.strictEqual(manifest.verifier_endpoint, BASE);
 
         const v = policy.verifyManifest(manifest, m.data.signature, founderKp.publicKey);
         assert.strictEqual(v.ok, true, JSON.stringify(v));
@@ -183,18 +189,12 @@ describe('Device Manifest E2E (GET /api/v1/manifest/:device_id)', function () {
         const m = await get(`/api/v1/manifest/${device_id}`);
         assert.strictEqual(m.status, 200);
 
-        const tampered = {
-            device_id: m.data.device_id,
-            rated_power: m.data.rated_power + 1,
-            oracle_url: m.data.oracle_url,
-            public_key: m.data.public_key,
-            timestamp: m.data.timestamp,
-        };
+        const tampered = { ...m.data, rated_power: m.data.rated_power + 1 };
         const v = policy.verifyManifest(tampered, m.data.signature, founderKp.publicKey);
         assert.strictEqual(v.ok, false);
     });
 
-    it('device uses oracle_url from the manifest to submit a proof', async function () {
+    it('proof от устройства, не зарегистрированного on-chain, отклоняется (ADR-0002, P0-2)', async function () {
         const dev = nacl.sign.keyPair();
         const device_id = bs58.encode(dev.publicKey);
         const publicKeyB64 = util.encodeBase64(dev.publicKey);
@@ -212,8 +212,11 @@ describe('Device Manifest E2E (GET /api/v1/manifest/:device_id)', function () {
         const proof = await post('/api/v1/proof/submit', {
             device_id, timestamp: now, energyWh: 1000, nonce: 1, signature: lsig,
         });
-        assert.strictEqual(proof.status, 200, JSON.stringify(proof.data));
-        assert.strictEqual(proof.data.accumulated, 1000);
+        // P0-2 (ADR-0002): публичный ключ и nonce берутся ТОЛЬКО из on-chain
+        // Device Registry. Устройство не зарегистрировано on-chain (в этом тесте
+        // нет валидатора) — proof отклоняется, а не «накапливается вслепую».
+        assert.strictEqual(proof.status, 404, JSON.stringify(proof.data));
+        assert.strictEqual(proof.data.error, 'device_not_registered_on_chain');
     });
 
     it('supports rated_power override and works for unregistered devices (backward compat)', async function () {
@@ -224,17 +227,7 @@ describe('Device Manifest E2E (GET /api/v1/manifest/:device_id)', function () {
         assert.strictEqual(m.status, 200);
         assert.strictEqual(m.data.rated_power, 5000);
         assert.strictEqual(m.data.public_key, util.encodeBase64(dev.publicKey));
-        const v = policy.verifyManifest(
-            {
-                device_id: m.data.device_id,
-                rated_power: m.data.rated_power,
-                oracle_url: m.data.oracle_url,
-                public_key: m.data.public_key,
-                timestamp: m.data.timestamp,
-            },
-            m.data.signature,
-            founderKp.publicKey
-        );
+        const v = policy.verifyManifest(m.data, m.data.signature, founderKp.publicKey);
         assert.strictEqual(v.ok, true);
     });
 

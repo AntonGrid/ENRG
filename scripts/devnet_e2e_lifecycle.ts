@@ -189,7 +189,16 @@ async function accountExists(pk: PublicKey): Promise<boolean> {
 }
 
 // ── Моделируемые сущности (генерируются каждый запуск) ──
-const device = nacl.sign.keyPair(); // Ed25519-ключ УСТРОЙСТВА (device_id = publicKey)
+// ТВОЙ УСТРОЙСТВО из логов ESP32 (закомментировал генерацию)
+// const device = nacl.sign.keyPair(); // Ed25519-ключ УСТРОЙСТВА (device_id = publicKey)
+// Используем ТВОЙ device_id из логов ESP32
+// Hex: cbec5afc382549012faf845ab25f593fe8f119d2ceb93f34ed308c283521584a
+// Base58: Ej2oCfDkNFeFY7hcKHFRxtyHkmYUukbcWZXCqxKvih9b
+const deviceId = new PublicKey("Ej2oCfDkNFeFY7hcKHFRxtyHkmYUukbcWZXCqxKvih9b");
+// Для подписи используем сгенерированный ключ (т.к. приватный ключ ESP32 у нас нет)
+// В реальном E2E мы используем подпись от ESP32, но для регистрации используем сгенерированный
+const device = nacl.sign.keyPair(); // Временный ключ для подписи в E2E (реальный ключ ESP32 будет использоваться в продакшене)
+
 const oracle = nacl.sign.keyPair(); // Ed25519-ключ ОРАКУЛА (подписывает OracleReport)
 
 
@@ -659,7 +668,6 @@ async function bootstrap() {
 //  DEVICE LIFECYCLE (ADR-0005)
 // ════════════════════════════════════════════════════════════════
 
-const deviceId = new PublicKey(device.publicKey);
 const oracleId = new PublicKey(oracle.publicKey);
 const producerPda = P.producer(deviceId);
 const profilePda = P.profile(operator.publicKey);
@@ -1038,4 +1046,3 @@ main().then(
     process.exit(1);
   }
 );
-

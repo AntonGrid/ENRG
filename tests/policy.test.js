@@ -18,7 +18,7 @@ const os = require('os');
 const path = require('path');
 const nacl = require('tweetnacl');
 const util = require('tweetnacl-util');
-const bs58 = require('bs58');
+const bs58 = require('bs58').default;
 const { PublicKey } = require('@solana/web3.js');
 
 const policy = require('../policy');

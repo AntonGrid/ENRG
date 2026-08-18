@@ -256,23 +256,23 @@ ENRG‑Core определяет:
 приняты три осознанных компромисса ради стоимости и сложности MVP. Каждый
 компромисс зафиксирован с причиной и планом выноса.
 
-### 7.1. Verifier и Policy Engine совмещены on‑chain (ADR‑0003)
+### 7.1. Verifier и Policy Engine on-chain (ADR-0003) — статус: РАЗДЕЛЕНО (2026-08-17)
 
-- **Спека Axis Core (ADR‑0003):** Verifier отвечает только за криптографию и
-  передачу данных; решения о допустимости Proof, quarantine/state принимает
-  Policy Engine — отдельный компонент.
-- **MVP:** обе роли находятся в одной программе `enrg_mvp`:
-  - *Verifier‑часть:* Ed25519‑проверка подписи устройства и оракула
-    (`security::verify_ed25519_signature`), freshness/nonce
-    (`security::validation`), проверка канонических сообщений
-    (`security::lifecycle`).
-  - *Policy‑часть:* whitelist оракулов (`OracleRegistry`), гейтинг состояния
-    устройства (`can_mint`, ADR‑0005), лимиты tier (v7.0 §15), supply‑cap,
-    распределение фондов.
-- **Причина:** Solana‑MVP — одна программа, детерминизм, минимум деплоев.
-- **План выноса:** Policy Engine как отдельная on‑chain программа (или
-  PolicyRegistry под governance, ADR‑0009) с вызовом через CPI; trust‑конвейер
-  не меняется.
+- **Спека Axis Core (ADR-0003):** Verifier отвечает только за криптографию и
+  передачу данных; решения о допустимости Proof принимает Policy Engine —
+  отдельный компонент.
+- **Статус (после 2026-08-17, закрытие P0-блокера D-2):** разделение ВЫПОЛНЕНО.
+  - On-chain `PolicyRegistry` (PDA `[b"policy-registry"]`) + `PolicyEngine`
+    (`instructions/policy_engine.rs`, `state/policy.rs`).
+  - `mint_energy` — Verifier: Ed25519-проверка подписи устройства и оракула
+    (`security::verify_ed25519_signature`), freshness/nonce (`security::validation`),
+    связка device_id; решения — через PolicyEngine (whitelist оракулов, гейтинг
+    состояния ADR-0005, tier-лимиты, energy-caps, supply-cap, пауза минта).
+  - Off-chain оракул: все решения вынесены в `policy.js` (Policy Engine).
+- **Известное отклонение (аудит 2026-08-18):** PolicyRegistry опционален в
+  `MintEnergy` (при отсутствии PDA применяются дефолтные политики — обратная
+  совместимость). Для mainnet рекомендуется инициализировать реестр и
+  перевести `set_policy_authority` под governance (ADR-0009).
 
 ### 7.2. Core и Domain Profile в одном контракте
 

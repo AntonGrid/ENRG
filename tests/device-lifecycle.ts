@@ -102,7 +102,7 @@ describe("ENRG Device Lifecycle (ADR-0005) — claim требует Ed25519-по
     { commitment: "confirmed", preflightCommitment: "confirmed" }
   );
   anchor.setProvider(provider);
-  const program = new Program(patchIdl(rawIdl), provider);
+  const program = new Program(patchIdl(rawIdl), provider) as any;
 
   const operator = Keypair.generate();
   const authority = Keypair.generate(); // владелец (кошелёк)

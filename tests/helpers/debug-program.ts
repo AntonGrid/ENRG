@@ -16,7 +16,7 @@ function probe(step: string, fn: () => void) {
   catch (e: any) { console.log("FAIL:", step, "→", e?.message); }
 }
 
-probe("coder.instructions", () => { const c = new BorshCoder(idl as any); c.instructions; });
+probe("coder.instruction", () => { const c = new BorshCoder(idl as any); void c.instruction; });
 probe("coder.accounts.size Vault", () => {
   const c = new BorshCoder(idl as any);
   const size = c.accounts.size("Vault");

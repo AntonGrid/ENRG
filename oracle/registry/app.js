@@ -22,19 +22,34 @@ const SERVICE_NAME = process.env.SERVICE_NAME || 'enrg-manifest-registry';
 const manifests = new Map();
 const snapshots = [];
 
+// ══════════════════════════════════════════════════════════════════
+//  Каноническая сериализация (аудит 2026-08-18, P1):
+//  JSON.stringify не каноничен (порядок ключей зависит от порядка вставки),
+//  что делает подписи и leaf-хэши недетерминированными. Используем
+//  RFC-8785-совместимый подход: рекурсивная сортировка ключей + детерминированное
+//  экранирование строк. Применяется и к подписям, и к leaf-хэшам манифестов.
+// ══════════════════════════════════════════════════════════════════
+function canonicalize(value) {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map((v) => canonicalize(v)).join(',') + ']';
+  }
+  const keys = Object.keys(value).sort();
+  return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalize(value[k])).join(',') + '}';
+}
+
 function verifySignature(payload, signature, publicKey) {
   try {
-    const msg = Buffer.from(JSON.stringify(payload));
+    // Подпись над КАНОНИЧЕСКИМ представлением payload (детерминизм).
+    const msg = Buffer.from(canonicalize(payload), 'utf8');
     const sig = util.decodeBase64(signature);
     const pub = util.decodeBase64(publicKey);
     return nacl.sign.detached.verify(msg, sig, pub);
   } catch (e) {
     return false;
   }
-}
-
-function canonicalize(data) {
-  return typeof data === 'string' ? data : JSON.stringify(data);
 }
 
 // SHA-256 — single hash, per AXIS docs/merkle-proof-verification.md.
@@ -46,6 +61,11 @@ function hash(data) {
  * Build a Merkle tree bottom-up exactly as specified in
  * docs/merkle-proof-verification.md ("Create Merkle Tree (Off-chain)"):
  *   parent = hash(left || right); odd node is duplicated.
+ *
+ * ВАЖНО (аудит 2026-08-18, P0-1): листья УЖЕ являются 32-байт хэшами
+ * (leaf = SHA-256(manifest_id || content_hash)) и повторно НЕ хэшируются —
+ * это согласовано с on-chain compute_merkle_root (merkle_proof_verification.rs),
+ * иначе off-chain корень никогда не совпадёт с on-chain.
  * Returns the root (Buffer, 32 bytes).
  */
 function buildMerkleRoot(leaves) {
@@ -53,7 +73,7 @@ function buildMerkleRoot(leaves) {
     return Buffer.alloc(32, 0);
   }
 
-  let currentLevel = leaves.map((leaf) => hash(leaf));
+  let currentLevel = leaves;
 
   while (currentLevel.length > 1) {
     const nextLevel = [];
@@ -69,20 +89,33 @@ function buildMerkleRoot(leaves) {
 }
 
 /**
- * Compute the canonical leaf hash for a manifest.
- * On-chain verification compares proved leaves against this scheme, so the
- * leaf input MUST be deterministic across implementations.
+ * Детерминированный content_hash манифеста (SHA-256 от канонического payload).
+ * Используется и для подписи издателя, и для Merkle-листьев.
  */
-function manifestLeafHash(manifest_id, entry) {
-  return hash(Buffer.concat([
-    Buffer.from(manifest_id, 'utf8'),
-    Buffer.from(canonicalize(entry.payload || entry)),
-  ]));
+function manifestContentHash(payload) {
+  return hash(Buffer.from(canonicalize(payload), 'utf8'));
+}
+
+/**
+ * Канонический leaf-хэш манифеста — СОГЛАСОВАН с on-chain
+ * (`programs/enrg-mvp/src/instructions/merkle_proof_verification.rs`,
+ * `manifest_leaf_hash`): leaf = SHA-256(manifest_id(16) || content_hash(32)).
+ * On-chain verify_merkle_proof проверяет именно эту формулу (аудит 2026-08-18, P0-1).
+ */
+function manifestLeafHash(manifest_id, content_hash) {
+  const mid = Buffer.from(manifest_id, 'utf8');
+  if (mid.length !== 16) {
+    throw new Error(`manifest_id must be exactly 16 bytes, got ${mid.length}`);
+  }
+  return hash(Buffer.concat([mid, Buffer.from(content_hash, 'hex')]));
 }
 
 function createSnapshot() {
   const ids = Array.from(manifests.keys());
-  const leaves = ids.map((id) => manifestLeafHash(id, manifests.get(id)));
+  const leaves = ids.map((id) => {
+    const entry = manifests.get(id);
+    return manifestLeafHash(id, entry.content_hash);
+  });
   const root = buildMerkleRoot(leaves);
 
   return {
@@ -102,13 +135,24 @@ app.post('/api/v1/manifests', (req, res) => {
   if (!manifest_id || !payload || !signature || !public_key) {
     return res.status(400).json({ error: 'Missing fields' });
   }
+  if (Buffer.from(manifest_id, 'utf8').length !== 16) {
+    return res.status(400).json({ error: 'manifest_id must be exactly 16 bytes (utf8)' });
+  }
 
   if (!verifySignature(payload, signature, public_key)) {
     return res.status(400).json({ error: 'Invalid signature' });
   }
 
-  manifests.set(manifest_id, { payload, signature, public_key, created_at: new Date().toISOString() });
-  res.status(201).json({ manifest_id, status: 'published' });
+  // Сохраняем content_hash для детерминированных Merkle-листьев (P0-1).
+  const content_hash = manifestContentHash(payload);
+  manifests.set(manifest_id, {
+    payload,
+    content_hash: content_hash.toString('hex'),
+    signature,
+    public_key,
+    created_at: new Date().toISOString()
+  });
+  res.status(201).json({ manifest_id, status: 'published', content_hash: content_hash.toString('hex') });
 });
 
 app.get('/api/v1/manifests/:id', (req, res) => {

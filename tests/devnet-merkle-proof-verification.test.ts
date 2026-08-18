@@ -3,7 +3,8 @@ import { Program } from "@coral-xyz/anchor";
 import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
 import { createHash } from "crypto";
-import type EnrgMvp from "../target/types/enrg_mvp";
+import type { EnrgMvp } from "../target/types/enrg_mvp";
+import rawIdl from "../target/idl/enrg_mvp.json";
 
 /**
  * Devnet test: Merkle Proof Verification (Variant A).
@@ -15,7 +16,8 @@ describe.skip("devnet-merkle-proof-verification", () => {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  // TEMP disabled devnet program binding - const program = anchor.workspace.EnrgMvp as Program<EnrgMvp>;
+  // Devnet-зависимый тест (describe.skip): привязка программы через IDL.
+  const program = new anchor.Program(rawIdl as any, provider) as Program<EnrgMvp>;
 
   const singleSha256 = (data: Buffer): Buffer =>
     createHash("sha256").update(data).digest();

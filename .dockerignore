@@ -1,0 +1,15 @@
+node_modules
+.anchor
+target/deploy
+target/types
+.yarn
+tests
+tools
+scripts
+landing
+books
+onchain
+*.log
+*.db
+enrg.db
+.git

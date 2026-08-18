@@ -58,6 +58,10 @@ pub enum ErrorCode {
     InvalidProof,
     #[msg("Leaf hash is invalid (all zeros)")]
     InvalidLeafHash,
+    #[msg("Manifest publisher is not trusted by the Manifest Registry")]
+    UntrustedManifestPublisher,
+    #[msg("Leaf hash does not match the registered manifest content")]
+    InvalidManifestLeaf,
     #[msg("Mint only allowed into the token account owned by the producer's owner")]
     UnauthorizedTokenAccountOwner,
     #[msg("Report device_id does not match the producer's registered device")]

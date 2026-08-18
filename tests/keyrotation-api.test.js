@@ -17,7 +17,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const nacl = require('tweetnacl');
-const bs58 = require('bs58');
+const bs58 = require('bs58').default;
 
 const PORT = 4040;
 const BASE = `http://127.0.0.1:${PORT}`;

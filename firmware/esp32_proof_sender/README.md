@@ -48,8 +48,9 @@ pio run -t upload -e esp32dev
 ```
 
 Конфигурация — в шапке `src/esp32_proof_sender_v3/esp32_proof_sender_v3.ino`:
-`WIFI_SSID`, `WIFI_PASSWORD`, `ENRG_ORACLE_URL`, `ENRG_CA_CERT`,
-`ENRG_NTP_SERVER`, `ENRG_USE_ATECC608`, `ENRG_USE_PZEM`.
+`ENRG_ORACLE_URL`, `ENRG_CA_CERT`, `ENRG_NTP_SERVER`, `ENRG_USE_ATECC608`,
+`ENRG_USE_PZEM` + Plug & Play (`ENRG_SIGNER_PORT`, `ENRG_SIGNER_LAN_ONLY`).
+**Wi-Fi-креды здесь не настраиваются** — только через Captive Portal (см. ниже).
 
 > ⚠️ Системный `pio` может быть сломан (несовместимость с `click`). В этом
 > workspace используйте PlatformIO из виртуального окружения:
@@ -121,15 +122,69 @@ pio device monitor --port /dev/ttyUSB0 --baud 115200
 **Что должно появиться в логах при успешном старте:**
 
 - `[KEY]` / `device_id: 0x...` — публичный ключ устройства (32 байта hex).
-  Его нужно зарегистрировать в оракуле (`POST /api/v1/device/register`).
-- `[WIFI] connecting to ...` → `[WIFI] connected` — подключение к Wi-Fi.
+- `[WIFI] connecting to ...` → `[WIFI] connected` — подключение к Wi-Fi
+  **по кредам из NVS** (вводятся через Captive Portal, см. ниже).
+- `[MDNS]` / `[SIGNER]` — mDNS `axis-device-XXXX.local` и локальный
+  HTTP-signer на `:8080` (Plug & Play, см. ниже).
 - `[MANIFEST]` — загрузка и проверка Device Manifest (ADR-0004), если включён.
 - `[OTA]` — проверка обновлений / анти-откат (`ota_mark_boot_ok()`).
 - `[PROOF] sent` — отправка подписанного proof на оракул
   (интервал — `ENRG_REPORT_INTERVAL_MS`, по умолчанию 60 с).
 
-Если логов нет — проверьте baud (115200), порт и наличие конфигурации
-`WIFI_SSID`/`WIFI_PASSWORD` в шапке `.ino` (сейчас там плейсхолдеры).
+Если логов нет — проверьте baud (115200), порт и состояние NVS.
+
+### ⚠️ Plug & Play онбординг (Wi-Fi через Captive Portal, без хардкода)
+
+Wi-Fi-креды **никогда** не зашиваются в прошивку — они хранятся только в
+защищённой NVS (`Preferences`, namespace `enrg`, ключи `wifi_ssid`/`wifi_pass`).
+При старте устройство:
+
+1. Читает креды из NVS и пытается подключиться **30 секунд**.
+2. Если сети нет / подключение не удалось — поднимает **защищённую AP**
+   `Axis-Device-XXXX` (XXXX = последние 4 hex **deviceId**, пароль = последние
+   8 hex deviceId, печатается в Serial) и Captive Portal (WiFiManager).
+3. Пользователь подключается к AP → портал открывается автоматически
+   (DNS-редирект) → вводит SSID/пароль домашней сети.
+4. Креды сохраняются в NVS, устройство перезагружается в STA-режиме.
+
+Сброс настроек сети (переезд в другой дом):
+
+```text
+# в pio device monitor:
+CLEARWIFI
+# → креды полностью стираются из NVS, устройство перезагружается в AP-режим
+```
+
+> ⚠️ «Защищённость» NVS на уровне физического доступа требует включения
+> **flash-encryption** в eFuse (`CONFIG_SECURE_FLASH_ENC_ENABLED`) для
+> production-прошивок. Без него NVS читается при физическом доступе к чипу —
+> это документированный компромисс MVP (см. SE050-HARDWARE-SIGNING.md).
+
+### Локальный HTTP-signer + mDNS (связь с Axis-connect, порт 8080)
+
+После подключения к Wi-Fi устройство отвечает по mDNS на
+`axis-device-XXXX.local` (`XXXX` — последние 4 hex deviceId) и поднимает
+HTTP-signer на порту `8080`:
+
+```text
+GET  /api/device/info → { "deviceId": "0x…", "schema": "axis-energy-v1",
+                          "firmware": "1.0.0", "state": "ready|no-wifi" }
+POST /api/device/sign → тело {"hex":"<message hex>"} (или raw binary)
+                     → { "signature": "<0x-hex 64 bytes>", "deviceId": "0x…" }
+```
+
+Безопасность signer'а (обязательно):
+
+- **`ENRG_SIGNER_LAN_ONLY=1`** — запросы принимаются только из локальных
+  подсетей RFC1918 / loopback / link-local; внешние IP отклоняются `403`.
+- **Доменная валидация**: по HTTP подписываются только сообщения с префиксом
+  `enrg:device:` (register/claim/rotate) и встроенным `device_id == наш ключ`.
+  Произвольный SIGN доступен **только** через Serial-кабель (физический доступ).
+
+Транспорт исходящих запросов (`transport_allowed`): `https://` — всегда
+разрешён; `http://` — только для локального контура (loopback/LAN/`.local`,
+напр. локальный оракул `http://192.168.1.123:3000`); `http://` к **удалённому**
+узлу блокируется (ADR-0008). `ENRG_ALLOW_HTTP=1` — явный dev-обход.
 
 ### ⚠️ ВАЖНО (ADR-0008) — env `esp32dev-ota`
 
@@ -152,9 +207,10 @@ pio device monitor --port /dev/ttyUSB0 --baud 115200
 
 ```text
 HELP              — список команд
-INFO              — device_id, public_key (base64/hex), хранилище ключа
-SIGN <hex>        — подписать сообщение (hex, max 256 байт) ключом устройства
-                    → вывод [SIGN] sig_base64 / sig_hex
+INFO              — device_id, public_key (base64/hex), WiFi/mDNS/signer, хранилище
+SIGN <hex>        — подписать ПРОИЗВОЛЬНОЕ сообщение (hex, max 256 байт) ключом
+                    устройства → вывод [SIGN] sig_base64 / sig_hex
+CLEARWIFI         — стереть WiFi-креды из NVS и перезагрузиться в AP-режим
 ```
 
 **Шаг 1 — подготовка (утилита):**
@@ -176,7 +232,7 @@ SIGN <hex из шага 1>
 
 ```bash
 node scripts/register-device.js --send --device-id 0xcbec5afc... --signature <sig_base64> \
-    --url http://192.168.1.123:3000
+    --url https://oracle.enrg.network
 # → ✅ Device registered successfully (HTTP 200)
 ```
 

@@ -2,9 +2,11 @@ version: '3.9'
 
 services:
   oracle:
+    # P1 (аудит 2026-08-18): build context — корень репозитория, т.к. server.js
+    # лежит в корне, а не в oracle/.
     build:
-      context: ./oracle
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: oracle/Dockerfile
     container_name: enrg-oracle
     ports:
       - "3000:3000"
@@ -12,7 +14,14 @@ services:
       PORT: 3000
       PROGRAM_ID: ${PROGRAM_ID:-}
       MINT_ADDRESS: ${MINT_ADDRESS:-}
+      # H-1: предпочтительнее передавать ПУТЬ к ключу, а не сам ключ в env.
+      FOUNDER_KEY_PATH: ${FOUNDER_KEY_PATH:-}
       FOUNDER_KEY: ${FOUNDER_KEY:-}
+      RPC_ENDPOINT: ${RPC_ENDPOINT:-}
+    volumes:
+      # Персистентность SQLite-хранилища и OTA-образов (ADR-0008).
+      - ./enrg.db:/app/enrg.db
+      - ./firmware/updates:/app/firmware/updates
     restart: unless-stopped
 
   manifest-registry:
