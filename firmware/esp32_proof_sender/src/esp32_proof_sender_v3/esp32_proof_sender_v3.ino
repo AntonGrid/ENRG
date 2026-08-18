@@ -982,6 +982,133 @@ static void ota_mark_app_invalid() {
 #endif // ENRG_ENABLE_HW_ANTI_ROLLBACK
 
 
+// ════════════════════════════════════════════════════════════════
+//  SERIAL-КОМАНДЫ (onboarding / регистрация)
+//
+//  ADR-0001: приватный ключ НИКОГДА не покидает устройство. Команда
+//  SIGN подписывает произвольное сообщение ЛОКАЛЬНЫМ ключом и выдаёт
+//  наружу только подпись (64 байта). Это нужно для:
+//    * PoP-регистрации в оракуле: подпись над `${device_id}|${public_key}`;
+//    * on-chain register/claim: подпись над бинарными сообщениями
+//      (`enrg:device:register ‖ device_id ‖ ts`, etc.).
+//
+//  Формат:
+//    HELP             — список команд
+//    INFO             — device_id, public_key (base64/hex), хранилище
+//    SIGN <hex>       — подписать сообщение (hex) Ed25519-ключом устройства
+//                       (max 256 байт); вывод: sig_base64 / sig_hex
+// ════════════════════════════════════════════════════════════════
+
+static String g_serialLine = "";
+
+static int hex_val_serial(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    return -1;
+}
+
+/** hex-строка → байты. Возвращает число байт или -1 при ошибке/переполнении. */
+static int hex_to_bytes_serial(const String &hex, uint8_t *out, size_t maxOut) {
+    if (hex.length() == 0 || hex.length() % 2 != 0) return -1;
+    size_t n = hex.length() / 2;
+    if (n > maxOut) return -1;
+    for (size_t i = 0; i < n; i++) {
+        int hi = hex_val_serial(hex[i * 2]);
+        int lo = hex_val_serial(hex[i * 2 + 1]);
+        if (hi < 0 || lo < 0) return -1;
+        out[i] = (uint8_t)((hi << 4) | lo);
+    }
+    return (int)n;
+}
+
+static void print_help_serial() {
+    Serial.println("[HELP] Команды:");
+    Serial.println("  HELP              — этот список");
+    Serial.println("  INFO              — device_id, public_key (base64/hex), хранилище ключа");
+    Serial.println("  SIGN <hex>        — подписать сообщение (hex, max 256 байт)");
+    Serial.println("                      ключом устройства; вывод sig_base64/sig_hex");
+    Serial.println("  Примеры:");
+    Serial.println("    SIGN 68656c6c6f           (подписать 'hello')");
+    Serial.println("    SIGN <hex(device_id|public_key)>   (PoP для оракула)");
+}
+
+static void print_device_info_serial() {
+    Serial.printf("[INFO] device_id     = %s\n", device_id_from_pubkey(g_publicKey).c_str());
+    Serial.printf("[INFO] public_key    = %s\n", base64_encode(g_publicKey, 32).c_str());
+    Serial.printf("[INFO] public_key_hex= %s\n", to_hex(g_publicKey, 32).c_str());
+    Serial.printf("[INFO] storage       = %s\n",
+                  g_key_in_secure_element ? "Secure Element (SE050/ATECC608A)" : "NVS (flash)");
+    Serial.printf("[INFO] fw_version    = %s\n",
+                  g_prefs.getString("fw_version", ENRG_FW_VERSION).c_str());
+}
+
+static void cmd_sign(const String &hexArg) {
+    if (hexArg.length() == 0) {
+        Serial.println("[SIGN] ERR: укажите сообщение в hex (SIGN <hex>), max 256 байт");
+        return;
+    }
+    uint8_t msg[256];
+    int msgLen = hex_to_bytes_serial(hexArg, msg, sizeof(msg));
+    if (msgLen < 0) {
+        Serial.println("[SIGN] ERR: невалидный hex (чётная длина, 0-9a-fA-F, <= 256 байт)");
+        return;
+    }
+
+    uint8_t signature[64];
+    bool ok = false;
+#if ENRG_USE_SE050
+    if (g_se050_ready) {
+        ok = se050_sign(msg, (size_t)msgLen, signature);
+    } else {
+        Ed25519::sign(signature, g_privateKey, g_publicKey, msg, msgLen);
+        ok = true;
+    }
+#else
+    Ed25519::sign(signature, g_privateKey, g_publicKey, msg, msgLen);
+    ok = true;
+#endif
+    if (!ok) {
+        Serial.println("[SIGN] ERR: подпись не удалась (SE050)");
+        return;
+    }
+
+    // ADR-0001: наружу уходит ТОЛЬКО подпись — приватный ключ не покидает устройство.
+    Serial.printf("[SIGN] device_id    = %s\n", device_id_from_pubkey(g_publicKey).c_str());
+    Serial.printf("[SIGN] msg_len      = %d\n", msgLen);
+    Serial.printf("[SIGN] sig_base64   = %s\n", base64_encode(signature, 64).c_str());
+    Serial.printf("[SIGN] sig_hex      = %s\n", to_hex(signature, 64).c_str());
+}
+
+static void process_serial_command(const String &line) {
+    int sp = line.indexOf(' ');
+    String cmd = (sp < 0) ? line : line.substring(0, sp);
+    String arg = (sp < 0) ? "" : line.substring(sp + 1);
+    cmd.toUpperCase();
+    arg.trim();
+
+    if (cmd == "HELP" || cmd == "?") { print_help_serial(); return; }
+    if (cmd == "INFO") { print_device_info_serial(); return; }
+    if (cmd == "SIGN") { cmd_sign(arg); return; }
+
+    Serial.printf("[SERIAL] неизвестная команда: %s (HELP — список)\n", cmd.c_str());
+}
+
+/** Опрос Serial: накапливает строку до '\n' и разбирает команду. */
+static void handle_serial_input() {
+    while (Serial.available() > 0) {
+        char c = (char)Serial.read();
+        if (c == '\n') {
+            g_serialLine.trim();
+            if (g_serialLine.length() > 0) process_serial_command(g_serialLine);
+            g_serialLine = "";
+        } else if (c != '\r') {
+            if (g_serialLine.length() < 640) g_serialLine += c; // 512 hex + запас
+        }
+    }
+}
+
+
 //  SETUP / LOOP
 // ════════════════════════════════════════════════════════════════
 
@@ -1066,6 +1193,9 @@ void setup() {
 }
 
 void loop() {
+    // Onboarding: обработка Serial-команд (HELP/INFO/SIGN) — без блокировки.
+    handle_serial_input();
+
     // ADR-0008: периодическая проверка обновлений прошивки.
     static unsigned long g_lastUpdateCheckMs = 0;
     unsigned long nowMs = millis();
