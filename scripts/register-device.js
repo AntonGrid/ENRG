@@ -1,38 +1,38 @@
 #!/usr/bin/env node
 /**
- * ENRG — регистрация устройства в оракуле (PoP-подпись через Serial-команду SIGN).
+ * ENRG — register a device with the oracle (PoP signature via the Serial SIGN command).
  *
- * Flow (ADR-0001: приватный ключ остаётся на устройстве, наружу — только подпись):
+ * Flow (ADR-0001: the private key stays on the device; only the signature leaves it):
  *   1. `node register-device.js --prepare --device-id 0x...`
- *        → выводит public_key (base64) и hex PoP-сообщения `${device_id}|${public_key}`.
- *   2. В мониторе ESP32 (`pio device monitor`) выполнить:
- *        SIGN <hex из шага 1>
- *        → скопировать строку `[SIGN] sig_base64   = <...>`.
+ *        → prints public_key (base64) and the hex PoP message `${device_id}|${public_key}`.
+ *   2. In the ESP32 monitor (`pio device monitor`) run:
+ *        SIGN <hex from step 1>
+ *        → copy the line `[SIGN] sig_base64   = <...>`.
  *   3. `node register-device.js --send --device-id 0x... --signature <sig_base64> [--url ...]`
- *        → POST /api/v1/device/register; после этого ESP32 получает 200 OK на proof'ы.
+ *        → POST /api/v1/device/register; afterwards the ESP32 gets 200 OK on proofs.
  *
- * Опции:
- *   --device-id  <0x-hex|base58>  device_id устройства (из INFO / логов / манифеста)
- *   --prepare                     вывести hex сообщения для команды SIGN (без сети)
- *   --send                        отправить POST /api/v1/device/register
- *   --signature <base64>          подпись от ESP32 (строка [SIGN] sig_base64)
- *   --public-key <base64>         (опц.) не вычислять из device_id
- *   --url <http://host:3000>      адрес оракула (по умолчанию http://192.168.1.123:3000)
- *   --json                        выводить ответы в JSON
- *   --help                        эта справка
+ * Options:
+ *   --device-id  <0x-hex|base58>  device_id of the device (from INFO / logs / manifest)
+ *   --prepare                     print hex messages for the SIGN command (offline)
+ *   --send                        send POST /api/v1/device/register
+ *   --signature <base64>          signature from the ESP32 (the [SIGN] sig_base64 line)
+ *   --public-key <base64>         (opt.) do not derive from device_id
+ *   --url <http://host:3000>      oracle address (default http://192.168.1.123:3000)
+ *   --json                        print responses as JSON
+ *   --help                        this help
  */
 'use strict';
 
 const path = require('path');
 
-// device_id → 32 байта (hex 0x… или base58).
+// device_id → 32 bytes (hex 0x… or base58).
 function deviceIdToBytes(deviceId) {
     if (typeof deviceId !== 'string' || !deviceId) return null;
     if (/^0x[0-9a-fA-F]{64}$/.test(deviceId)) {
         return Buffer.from(deviceId.slice(2), 'hex');
     }
     try {
-        // base58 (bs58 доступен в node_modules ENRG — используется policy.js).
+        // base58 (bs58 is available in the ENRG node_modules — used by policy.js).
         const bs58 = require(path.join(__dirname, '..', 'node_modules', 'bs58')).default;
         const b = bs58.decode(deviceId);
         if (b.length === 32) return Buffer.from(b);
@@ -41,17 +41,17 @@ function deviceIdToBytes(deviceId) {
 }
 
 function usage() {
-    console.log(`Использование: node register-device.js <--prepare|--send> --device-id <0x-hex|base58> [опции]
+    console.log(`Usage: node register-device.js <--prepare|--send> --device-id <0x-hex|base58> [options]
 
-  --prepare        вывести hex PoP-сообщения для команды SIGN (без сети)
-  --send           отправить POST /api/v1/device/register
+  --prepare        print hex PoP messages for the SIGN command (offline)
+  --send           send POST /api/v1/device/register
 
-  --device-id      device_id устройства (напр. 0xcbec5afc...)
-  --signature      (для --send) подпись от ESP32 — строка [SIGN] sig_base64
-  --public-key     (опц.) base64 публичного ключа; иначе вычисляется из device_id
-  --url            адрес оракула (default: http://192.168.1.123:3000)
-  --json           выводить JSON-ответы
-  --help           эта справка`);
+  --device-id      device_id of the device (e.g. 0xcbec5afc...)
+  --signature      (for --send) the ESP32 signature — the [SIGN] sig_base64 line
+  --public-key     (opt.) base64 public key; otherwise derived from device_id
+  --url            oracle address (default: http://192.168.1.123:3000)
+  --json           print JSON responses
+  --help           this help`);
 }
 
 function parseArgs(argv) {
@@ -67,7 +67,7 @@ function parseArgs(argv) {
         else if (k === '--url') a.url = next();
         else if (k === '--json') a.json = true;
         else if (k === '--help' || k === '-h') { usage(); process.exit(0); }
-        else { console.error(`Неизвестная опция: ${k} (--help)`); process.exit(2); }
+        else { console.error(`Unknown option: ${k} (--help)`); process.exit(2); }
     }
     return a;
 }
@@ -76,38 +76,38 @@ async function main() {
     const a = parseArgs(process.argv.slice(2));
 
     if (!a.deviceId) {
-        console.error('Ошибка: укажите --device-id (--help)');
+        console.error('Error: specify --device-id (--help)');
         process.exit(2);
     }
     const pubBytes = deviceIdToBytes(a.deviceId);
     if (!pubBytes) {
-        console.error('Ошибка: невалидный device_id (ожидается 0x + 64 hex или base58 32 байта)');
+        console.error('Error: invalid device_id (expected 0x + 64 hex or base58 32 bytes)');
         process.exit(2);
     }
     const publicKeyB64 = a.publicKeyB64 || pubBytes.toString('base64');
 
-    // PoP-сообщение (точно как policy.js validateRegister):
-    //   подпись над UTF-8 строкой `${device_id}|${public_key}`.
+    // PoP message (exactly as policy.js validateRegister):
+    //   signature over the UTF-8 string `${device_id}|${public_key}`.
     const popMessage = `${a.deviceId}|${publicKeyB64}`;
     const popHex = Buffer.from(popMessage, 'utf8').toString('hex');
 
     if (a.prepare) {
-        console.log('── PoP-регистрация: подготовка (команда SIGN) ──────────────');
+        console.log('── PoP registration: preparation (SIGN command) ──────────────');
         console.log(`  device_id  : ${a.deviceId}`);
         console.log(`  public_key : ${publicKeyB64}`);
         console.log(`  PoP message: ${popMessage}`);
         console.log('');
-        console.log('В мониторе ESP32 (pio device monitor) выполните:');
+        console.log('In the ESP32 monitor (pio device monitor) run:');
         console.log(`  SIGN ${popHex}`);
         console.log('');
-        console.log('Затем скопируйте подпись из строки `[SIGN] sig_base64   = <...>`');
-        console.log('и передайте её в --send --signature <sig_base64>.');
+        console.log('Then copy the signature from the line `[SIGN] sig_base64   = <...>`');
+        console.log('and pass it to --send --signature <sig_base64>.');
         return;
     }
 
     if (a.send) {
         if (!a.signature) {
-            console.error('Ошибка: для --send укажите --signature <base64> (подпись от ESP32)');
+            console.error('Error: for --send provide --signature <base64> (the ESP32 signature)');
             process.exit(2);
         }
         const body = { device_id: a.deviceId, public_key: publicKeyB64, signature: a.signature };
@@ -125,17 +125,17 @@ async function main() {
             if (a.json || resp.status >= 400) {
                 console.log(JSON.stringify({ status: resp.status, body: parsed || text }, null, 2));
             } else {
-                console.log(`✅ Регистрация успешна (HTTP ${resp.status}): ${parsed?.message || text}`);
-                console.log('   Теперь ESP32 может отправлять proof\'ы — оракул вернёт 200 OK.');
+                console.log(`✅ Registration successful (HTTP ${resp.status}): ${parsed?.message || text}`);
+                console.log('   Now the ESP32 can send proofs — the oracle will return 200 OK.');
             }
             process.exit(resp.ok ? 0 : 1);
         } catch (e) {
-            console.error(`❌ Не удалось отправить регистрацию: ${e.message}`);
+            console.error(`❌ Failed to send the registration: ${e.message}`);
             process.exit(1);
         }
     }
 
-    console.error('Укажите --prepare или --send (--help)');
+    console.error('Specify --prepare or --send (--help)');
     process.exit(2);
 }
 

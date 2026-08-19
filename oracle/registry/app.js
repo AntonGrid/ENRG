@@ -11,8 +11,8 @@ app.use(cors());
 app.use(bodyParser.json());
 
 const PORT = process.env.PORT || 4000;
-// H-5: дефолтного admin-ключа больше нет. REGISTRY_ADMIN_KEY обязателен
-// и должен быть достаточно длинным (≥32 символов) — иначе сервер не стартует.
+// H-5: there is no default admin key anymore. REGISTRY_ADMIN_KEY is required
+// and must be long enough (≥32 characters) — otherwise the server does not start.
 const ADMIN_KEY = process.env.REGISTRY_ADMIN_KEY;
 if (!ADMIN_KEY || ADMIN_KEY.length < 32) {
   throw new Error('REGISTRY_ADMIN_KEY is required and must be at least 32 characters long');
@@ -23,11 +23,11 @@ const manifests = new Map();
 const snapshots = [];
 
 // ══════════════════════════════════════════════════════════════════
-//  Каноническая сериализация (аудит 2026-08-18, P1):
-//  JSON.stringify не каноничен (порядок ключей зависит от порядка вставки),
-//  что делает подписи и leaf-хэши недетерминированными. Используем
-//  RFC-8785-совместимый подход: рекурсивная сортировка ключей + детерминированное
-//  экранирование строк. Применяется и к подписям, и к leaf-хэшам манифестов.
+//  Canonical serialization (audit 2026-08-18, P1):
+//  JSON.stringify is not canonical (key order depends on insertion order),
+//  which makes signatures and leaf hashes non-deterministic. We use an
+//  RFC-8785-compatible approach: recursive key sorting + deterministic string
+//  escaping. Applied to both signatures and manifest leaf hashes.
 // ══════════════════════════════════════════════════════════════════
 function canonicalize(value) {
   if (value === null || typeof value !== 'object') {
@@ -42,7 +42,7 @@ function canonicalize(value) {
 
 function verifySignature(payload, signature, publicKey) {
   try {
-    // Подпись над КАНОНИЧЕСКИМ представлением payload (детерминизм).
+    // Signature over the CANONICAL payload representation (determinism).
     const msg = Buffer.from(canonicalize(payload), 'utf8');
     const sig = util.decodeBase64(signature);
     const pub = util.decodeBase64(publicKey);
@@ -62,10 +62,10 @@ function hash(data) {
  * docs/merkle-proof-verification.md ("Create Merkle Tree (Off-chain)"):
  *   parent = hash(left || right); odd node is duplicated.
  *
- * ВАЖНО (аудит 2026-08-18, P0-1): листья УЖЕ являются 32-байт хэшами
- * (leaf = SHA-256(manifest_id || content_hash)) и повторно НЕ хэшируются —
- * это согласовано с on-chain compute_merkle_root (merkle_proof_verification.rs),
- * иначе off-chain корень никогда не совпадёт с on-chain.
+ * IMPORTANT (audit 2026-08-18, P0-1): the leaves ARE ALREADY 32-byte hashes
+ * (leaf = SHA-256(manifest_id || content_hash)) and are NOT hashed again —
+ * this is consistent with the on-chain compute_merkle_root (merkle_proof_verification.rs);
+ * otherwise the off-chain root would never match the on-chain one.
  * Returns the root (Buffer, 32 bytes).
  */
 function buildMerkleRoot(leaves) {
@@ -89,18 +89,18 @@ function buildMerkleRoot(leaves) {
 }
 
 /**
- * Детерминированный content_hash манифеста (SHA-256 от канонического payload).
- * Используется и для подписи издателя, и для Merkle-листьев.
+ * Deterministic manifest content_hash (SHA-256 of the canonical payload).
+ * Used both for the publisher signature and for the Merkle leaves.
  */
 function manifestContentHash(payload) {
   return hash(Buffer.from(canonicalize(payload), 'utf8'));
 }
 
 /**
- * Канонический leaf-хэш манифеста — СОГЛАСОВАН с on-chain
+ * Canonical manifest leaf hash — CONSISTENT with on-chain
  * (`programs/enrg-mvp/src/instructions/merkle_proof_verification.rs`,
  * `manifest_leaf_hash`): leaf = SHA-256(manifest_id(16) || content_hash(32)).
- * On-chain verify_merkle_proof проверяет именно эту формулу (аудит 2026-08-18, P0-1).
+ * The on-chain verify_merkle_proof checks exactly this formula (audit 2026-08-18, P0-1).
  */
 function manifestLeafHash(manifest_id, content_hash) {
   const mid = Buffer.from(manifest_id, 'utf8');
@@ -143,7 +143,7 @@ app.post('/api/v1/manifests', (req, res) => {
     return res.status(400).json({ error: 'Invalid signature' });
   }
 
-  // Сохраняем content_hash для детерминированных Merkle-листьев (P0-1).
+  // Store content_hash for deterministic Merkle leaves (P0-1).
   const content_hash = manifestContentHash(payload);
   manifests.set(manifest_id, {
     payload,

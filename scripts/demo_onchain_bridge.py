@@ -2,7 +2,7 @@ import json
 import sys
 from pathlib import Path
 
-# Добавляем корень репозитория в sys.path, чтобы можно было импортировать app.*
+# Add the repository root to sys.path so app.* can be imported.
 BASE_DIR = Path(__file__).resolve().parent.parent
 if str(BASE_DIR) not in sys.path:
     sys.path.insert(0, str(BASE_DIR))
@@ -19,7 +19,7 @@ def main():
     with att_path.open("r", encoding="utf-8") as f:
         att = json.load(f)
 
-    # Обеспечиваем наличие schema_version для совместимости с новой схемой
+    # Ensure schema_version is present for compatibility with the schema.
     att.setdefault("schema_version", "1.0")
 
     params = build_attestation_params(att)

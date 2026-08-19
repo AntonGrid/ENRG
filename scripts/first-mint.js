@@ -27,7 +27,7 @@ const crypto = require("crypto");
   console.log("Vault:", vaultPda.toBase58());
   console.log("Funds: OK");
 
-  // Producer с паузой
+  // Producer with a pause
   const producerInfo = await connection.getAccountInfo(producerPda);
   if (!producerInfo) {
     const deviceId = new PublicKey("11111111111111111111111111111111");
@@ -47,7 +47,7 @@ const crypto = require("crypto");
     });
     const txSig = await require("@solana/web3.js").sendAndConfirmTransaction(connection, new Transaction().add(cpIx), [walletKeypair]);
     console.log("Producer created:", producerPda.toBase58());
-    // Пауза 3 секунды для подтверждения
+    // 3-second pause for confirmation
     await new Promise(r => setTimeout(r, 3000));
   } else {
     console.log("Producer already exists:", producerPda.toBase58());

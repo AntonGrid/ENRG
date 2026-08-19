@@ -9,10 +9,23 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// Mirror of the server's canonical serialization (oracle/registry/app.js):
+// recursive key sorting so signatures and leaf hashes are deterministic.
+function canonicalize(value) {
+  if (value === null || typeof value !== 'object') {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return '[' + value.map((v) => canonicalize(v)).join(',') + ']';
+  }
+  const keys = Object.keys(value).sort();
+  return '{' + keys.map((k) => JSON.stringify(k) + ':' + canonicalize(value[k])).join(',') + '}';
+}
+
 describe('Manifest Registry API', function () {
   this.timeout(20000);
   let server;
-  // H-5: ключ обязан быть ≥32 символов (тест — на длинном ключе).
+  // H-5: the key must be ≥32 characters (the test uses a long key).
   const TEST_ADMIN_KEY = 'test-key-0123456789abcdef0123456789abcdef';
 
   before(async function () {
@@ -37,20 +50,20 @@ describe('Manifest Registry API', function () {
   it('publishes and retrieves a manifest', async function () {
     const payload = { manifest_version: '1.0', device_type: 'sensor', manufacturer: 'ENRG' };
     const keyPair = nacl.sign.keyPair();
-    const signature = util.encodeBase64(nacl.sign.detached(Buffer.from(JSON.stringify(payload)), keyPair.secretKey));
+    const signature = util.encodeBase64(nacl.sign.detached(Buffer.from(canonicalize(payload)), keyPair.secretKey));
     const publicKey = util.encodeBase64(keyPair.publicKey);
 
     const publishRes = await fetch('http://127.0.0.1:4101/api/v1/manifests', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ manifest_id: 'manifest-test-1', payload, signature, public_key: publicKey })
+      body: JSON.stringify({ manifest_id: 'manifest-test-01', payload, signature, public_key: publicKey })
     });
 
     assert.strictEqual(publishRes.status, 201);
     const published = await publishRes.json();
     assert.strictEqual(published.status, 'published');
 
-    const getRes = await fetch('http://127.0.0.1:4101/api/v1/manifests/manifest-test-1');
+    const getRes = await fetch('http://127.0.0.1:4101/api/v1/manifests/manifest-test-01');
     assert.strictEqual(getRes.status, 200);
     const data = await getRes.json();
     assert.strictEqual(data.payload.manifest_version, '1.0');

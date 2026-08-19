@@ -11,9 +11,9 @@ const publicKey = util.encodeBase64(keypair.publicKey);
 const privateKey = keypair.secretKey;
 
 /**
- * Каноническая сериализация — зеркало oracle/registry/app.js (аудит 2026-08-18):
- * рекурсивная сортировка ключей. Без неё подпись над JSON.stringify ломается
- * при переупорядочивании полей.
+ * Canonical serialization — a mirror of oracle/registry/app.js (audit 2026-08-18):
+ * recursive key sorting. Without it, a signature over JSON.stringify breaks
+ * when fields are reordered.
  */
 function canonicalize(value) {
   if (value === null || typeof value !== 'object') {
@@ -38,8 +38,8 @@ const msg = Buffer.from(canonicalize(payload), 'utf8');
 const sig = nacl.sign.detached(msg, privateKey);
 const signature = util.encodeBase64(sig);
 
-// manifest_id: ровно 16 байт (on-chain register_manifest_verification принимает [u8; 16]).
-// uuidv4() без дефисов = 32 hex = 16 байт.
+// manifest_id: exactly 16 bytes (on-chain register_manifest_verification accepts [u8; 16]).
+// uuidv4() without dashes = 32 hex = 16 bytes.
 const manifest_id = uuidv4().replace(/-/g, '');
 if (Buffer.from(manifest_id, 'utf8').length !== 16) {
   throw new Error('manifest_id must be 16 bytes');
