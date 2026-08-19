@@ -37,6 +37,8 @@ hex = "0.4"
 solana-instructions-sysvar = "2.2.2"
 
 [dev-dependencies]
+# anchor-lang is reused by integration tests (tests/) for OracleReport/Pubkey.
+anchor-lang = "0.32.1"
 # Типы BorrowedInstruction для host-side unit-тестов sysvar.
 solana-instruction = "2.3.3"
 
