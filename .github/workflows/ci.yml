@@ -19,8 +19,12 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          # The ENRG python tests import the shared axis_core package.
+          pip install git+https://github.com/AntonGrid/Axis-core.git
           # anchorpy's pytest plugin needs pytest-asyncio and pytest-xprocess.
           pip install pytest jsonschema eth-abi eth-utils pytest-asyncio pytest-xprocess
 
       - name: Run tests
-        run: pytest -q -p no:anchorpy
+        # AXIS_ALLOW_MOCK=1 enables the dev-only mock signature algorithm used
+        # by the legacy test fixtures (production mode stays mock_disabled).
+        run: AXIS_ALLOW_MOCK=1 pytest -q -p no:anchorpy
