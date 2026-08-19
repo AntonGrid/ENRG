@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * Тесты Device Manifest (ADR-0004).
+ * Device Manifest tests (ADR-0004).
  *
- * 1) UNIT: подпись/проверка манифеста (policy.buildManifestMessage /
- *    signManifest / verifyManifest) — зеркалирует verifyManifest прошивки ESP32.
- * 2) E2E: устройство регистрируется → запрашивает подписанный манифест
- *    GET /api/v1/manifest/:device_id → проверяет подпись ключом основателя →
- *    отправляет proof на oracle_url из манифеста.
+ * 1) UNIT: manifest signing/verification (policy.buildManifestMessage /
+ *    signManifest / verifyManifest) — mirrors verifyManifest in the ESP32 firmware.
+ * 2) E2E: the device registers → requests a signed manifest
+ *    GET /api/v1/manifest/:device_id → verifies the founder signature →
+ *    sends a proof to the oracle_url from the manifest.
  *
- * Запуск: npx mocha tests/manifest.test.js
+ * Run: npx mocha tests/manifest.test.js
  */
 
 const assert = require('assert');
@@ -23,7 +23,7 @@ const bs58 = require('bs58').default;
 
 const policy = require('../policy');
 
-// ── UNIT: подпись манифеста ──
+// ── UNIT: manifest signing ──
 describe('Device Manifest signing (ADR-0004, unit)', function () {
     let kp;
 
@@ -38,7 +38,7 @@ describe('Device Manifest signing (ADR-0004, unit)', function () {
             oracle_url: 'https://oracle.example.com',
             public_key: util.encodeBase64(new Uint8Array(32).fill(7)),
             timestamp: 1700000000,
-            // ADR-0004 (P1-12): обязательные поля манифеста.
+            // ADR-0004 (P1-12): required manifest fields.
             trust_level: 'basic',
             heartbeat_interval: 60,
             proof_threshold: 1,
@@ -92,7 +92,7 @@ describe('Device Manifest signing (ADR-0004, unit)', function () {
     });
 });
 
-// ── E2E: манифест → проверка подписи → proof ──
+// ── E2E: manifest → signature check → proof ──
 describe('Device Manifest E2E (GET /api/v1/manifest/:device_id)', function () {
     this.timeout(30000);
 
@@ -143,7 +143,7 @@ describe('Device Manifest E2E (GET /api/v1/manifest/:device_id)', function () {
             try {
                 const res = await fetch(`${BASE}/health`);
                 if (res.ok) return;
-            } catch (e) { /* ещё не готов */ }
+            } catch (e) { /* not ready yet */ }
             await wait(250);
         }
         throw new Error('server did not start in time');
@@ -172,7 +172,7 @@ describe('Device Manifest E2E (GET /api/v1/manifest/:device_id)', function () {
         assert.strictEqual(manifest.public_key, publicKeyB64);
         assert.strictEqual(manifest.oracle_url, BASE);
         assert.strictEqual(manifest.rated_power, policy.config.defaultRatedPowerW);
-        // ADR-0004 (P1-12): обязательные поля присутствуют.
+        // ADR-0004 (P1-12): the required fields are present.
         assert.strictEqual(manifest.trust_level, 'basic');
         assert.ok(manifest.heartbeat_interval > 0);
         assert.ok(manifest.proof_threshold > 0);
@@ -183,7 +183,7 @@ describe('Device Manifest E2E (GET /api/v1/manifest/:device_id)', function () {
         assert.strictEqual(v.ok, true, JSON.stringify(v));
     });
 
-    it('rejects a tampered manifest (устройство отклоняет невалидный манифест)', async function () {
+    it('rejects a tampered manifest (the device rejects an invalid manifest)', async function () {
         const dev = nacl.sign.keyPair();
         const device_id = bs58.encode(dev.publicKey);
         const m = await get(`/api/v1/manifest/${device_id}`);
@@ -194,7 +194,7 @@ describe('Device Manifest E2E (GET /api/v1/manifest/:device_id)', function () {
         assert.strictEqual(v.ok, false);
     });
 
-    it('proof от устройства, не зарегистрированного on-chain, отклоняется (ADR-0002, P0-2)', async function () {
+    it('a proof from a device not registered on-chain is rejected (ADR-0002, P0-2)', async function () {
         const dev = nacl.sign.keyPair();
         const device_id = bs58.encode(dev.publicKey);
         const publicKeyB64 = util.encodeBase64(dev.publicKey);
@@ -212,9 +212,9 @@ describe('Device Manifest E2E (GET /api/v1/manifest/:device_id)', function () {
         const proof = await post('/api/v1/proof/submit', {
             device_id, timestamp: now, energyWh: 1000, nonce: 1, signature: lsig,
         });
-        // P0-2 (ADR-0002): публичный ключ и nonce берутся ТОЛЬКО из on-chain
-        // Device Registry. Устройство не зарегистрировано on-chain (в этом тесте
-        // нет валидатора) — proof отклоняется, а не «накапливается вслепую».
+        // P0-2 (ADR-0002): the public key and nonce come ONLY from the on-chain
+        // Device Registry. The device is not registered on-chain (in this test
+        // there is no validator) — the proof is rejected, not "blindly accumulated".
         assert.strictEqual(proof.status, 404, JSON.stringify(proof.data));
         assert.strictEqual(proof.data.error, 'device_not_registered_on_chain');
     });

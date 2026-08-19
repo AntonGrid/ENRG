@@ -1,7 +1,7 @@
 const express = require('express');
 const path = require('path');
 const nacl = require('tweetnacl');
-const util = require('tweetnacl-util'); // encodeBase64/decodeBase64 (манифесты, подписи)
+const util = require('tweetnacl-util'); // encodeBase64/decodeBase64 (manifests, signatures)
 const storage = require('./storage');
 const policy = require('./policy'); // Policy Engine (ADR-0003)
 const winston = require('winston');
@@ -14,7 +14,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const cors = require('cors');
 
-// Настройка winston
+// winston configuration
 const logger = winston.createLogger({
     level: 'info',
     format: winston.format.combine(
@@ -30,38 +30,38 @@ const logger = winston.createLogger({
     ]
 });
 
-// Хранилище (M-2): Postgres при DATABASE_URL, иначе SQLite — см. storage.js.
-// Таблицы создаются в storage.init() при старте (bootstrap).
+// Storage (M-2): Postgres when DATABASE_URL is set, otherwise SQLite — see storage.js.
+// Tables are created in storage.init() at startup (bootstrap).
 
 const PROGRAM_ID = new PublicKey('HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb');
 const MINT_ADDRESS = '3PDsZUDQwgx1SV4dSTtyKDEoL9HYCdt4GN63UBYpLvwB';
 const FOUNDER_WALLET = '6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8';
 
-// CR-3: RPC-эндпоинт (env RPC_ENDPOINT, по умолчанию devnet) и enrg-profile program id
-// (см. programs/enrg-profile/src/lib.rs, declare_id).
+// CR-3: RPC endpoint (env RPC_ENDPOINT, devnet by default) and enrg-profile program id
+// (see programs/enrg-profile/src/lib.rs, declare_id).
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || clusterApiUrl('devnet');
 const PROFILE_PROGRAM_ID = new PublicKey('78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt');
 
 // ── OTA (ADR-0008) ──
-// Директория для образов прошивки (по умолчанию firmware/updates/).
+// Directory for firmware images (default firmware/updates/).
 const FIRMWARE_UPDATES_DIR =
     process.env.FIRMWARE_UPDATES_DIR || path.join(__dirname, 'firmware', 'updates');
-// Админ-ключ для публикации прошивки (POST /api/v1/firmware/update).
-// Обязателен: публикация образа без аутентификации = подпись оракулом
-// произвольного (возможно враждебного) контента.
+// Admin key for publishing firmware (POST /api/v1/firmware/update).
+// Required: publishing an image without authentication = signing
+// arbitrary (potentially hostile) content.
 const FIRMWARE_ADMIN_KEY = process.env.FIRMWARE_ADMIN_KEY;
 
-// Функции load*/save* вынесены в storage.js (M-2: Postgres/SQLite).
-// В памяти держим копии (devices/energyStore/pools) для быстрого доступа,
-// персистентность — через storage.save*() в каждом эндпоинте.
+// The load*/save* functions live in storage.js (M-2: Postgres/SQLite).
+// In-memory copies (devices/energyStore/pools) for fast access,
+// persistence — via storage.save*() in each endpoint.
 
 let devices = {};
 let energyStore = {};
 let pools = {};
 
-// Загрузка ключа основателя (H-1).
-// Приоритет: FOUNDER_KEY (env) → FOUNDER_KEY_PATH (файл с правами 0600).
-// Рекомендуется FOUNDER_KEY_PATH: секрет не попадает в окружение (/proc/<pid>/environ).
+// Founder key loading (H-1).
+// Priority: FOUNDER_KEY (env) → FOUNDER_KEY_PATH (file with 0600 perms).
+// FOUNDER_KEY_PATH is recommended: the secret never enters the environment (/proc/<pid>/environ).
 let founderKeypair = null;
 function loadFounderKeypair() {
     if (process.env.FOUNDER_KEY) {
@@ -85,10 +85,10 @@ if (!founderKeypair) {
     logger.warn('⚠️ Founder keypair not found. Minting will not work.');
 }
 
-// ХОЛОДНЫЙ ключ подписи прошивок (ADR-0008, D-5): ОТДЕЛЬНЫЙ от founder.
-// Образы OTA подписываются ЭТИМ ключом; приватный ключ хранится в
-// офлайн-хранилище (HSM/холодный кошелёк). Публичный ключ вшит в прошивку
-// как ENRG_FIRMWARE_PUBKEY_HEX. Dev-копия: firmware/firmware-signing-keypair.json.
+// COLD firmware-signing key (ADR-0008, D-5): SEPARATE from the founder.
+// OTA images are signed with THIS key; the private key lives in
+// offline storage (HSM/cold wallet). The public key is baked into the firmware
+// as ENRG_FIRMWARE_PUBKEY_HEX. Dev copy: firmware/firmware-signing-keypair.json.
 let firmwareSigningKeypair = null;
 function loadFirmwareSigningKeypair() {
     const p = process.env.FIRMWARE_SIGNING_KEY_PATH ||
@@ -107,10 +107,10 @@ try {
         'set FIRMWARE_SIGNING_KEY_PATH) — FALLBACK to founder key for OTA signing.');
 }
 
-// Мульти-владельческий mint (ADR-0003): для подписи OracleReport используется
-// ОТДЕЛЬНЫЙ ключ оракула (ORACLE_KEY / ORACLE_KEY_PATH), а не founder.
-// Публичный ключ оракула обязан быть в on-chain OracleRegistry (addOracle).
-// Транзакцию mint подписывает сам оракул; награда идёт владельцу устройства.
+// Multi-owner mint (ADR-0003): the OracleReport is signed with
+// a SEPARATE oracle key (ORACLE_KEY / ORACLE_KEY_PATH), not the founder.
+// The oracle public key must be in the on-chain OracleRegistry (addOracle).
+// The mint transaction is signed by the oracle; the reward goes to the device owner.
 let oracleKeypair = null;
 try {
     oracleKeypair = policy.getOracleKeypair();
@@ -127,22 +127,22 @@ if (!oracleKeypair) {
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
-// M-6: доверяем заголовкам reverse proxy (TLS-терминация на прокси),
-// чтобы rate-limit корректно считал реальные IP клиентов.
+// M-6: we trust reverse proxy headers (TLS termination at the proxy)
+// so the rate limit sees real client IPs.
 app.set('trust proxy', 1);
 
-// M-6: глобальный rate-limit (защита от DoS). Лимит задаётся в Policy Engine:
-// policy-config.json / RATE_LIMIT_PER_MINUTE (по умолчанию 100 запросов/мин на IP).
+// M-6: global rate limit (DoS protection). The limit is set in the Policy Engine:
+// policy-config.json / RATE_LIMIT_PER_MINUTE (default 100 requests/min per IP).
 const limiter = rateLimit(policy.rateLimitOptions());
 app.use(limiter);
 
-// L-1: health-эндпоинт (используется для проверки живости оракула).
+// L-1: health endpoint (used to probe oracle liveness).
 app.get('/health', (req, res) => {
     res.status(200).json({ status: 'ok' });
 });
 
-// === ВКЛЮЧАЕМ CORS (для доступа с сайта) ===
-// M-6: origin 'null' удалён — разрешены только явные источники.
+// === ENABLE CORS (for website access) ===
+// M-6: origin 'null' removed — only explicit origins are allowed.
 app.use(cors({
     origin: [
         'https://enrg.network',
@@ -185,11 +185,11 @@ if (founderKeypair) {
 const getDisc = (name) => crypto.createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
 
 // ════════════════════════════════════════════════════════════════
-//  CR-3: on-chain mint (Anchor-клиент) — хелперы
+//  CR-3: on-chain mint (Anchor client) — helpers
 // ════════════════════════════════════════════════════════════════
 
-// Чинит IDL Anchor 1.x для @coral-xyz/anchor 0.32.x: подставляет type.fields
-// аккаунтам и вычисляет size (по образцу tests/helpers/patch-idl.ts).
+// Patches Anchor 1.x IDLs for @coral-xyz/anchor 0.32.x: fills in type.fields
+// for accounts and computes size (modeled on tests/helpers/patch-idl.ts).
 const SIZE_OF = { u8: 1, i8: 1, bool: 1, u16: 2, i16: 2, u32: 4, i32: 4, u64: 8, i64: 8, f64: 8, publicKey: 8, u128: 16, i128: 16 };
 function computeSpace(fields, defs) {
     let total = 0;
@@ -230,15 +230,15 @@ function patchIdl(idl) {
     return idl;
 }
 
-// IDL enrg_mvp (по умолчанию target/idl/enrg_mvp.json, override через ENRG_IDL_PATH).
-// target/ в .gitignore — при деплое нужно положить IDL рядом с server.js (или указать ENRG_IDL_PATH).
+// enrg_mvp IDL (default target/idl/enrg_mvp.json, override via ENRG_IDL_PATH).
+// target/ is in .gitignore — on deploy, put the IDL next to server.js (or set ENRG_IDL_PATH).
 const ENRG_IDL_PATH =
     process.env.ENRG_IDL_PATH ||
     path.join(__dirname, 'target', 'idl', 'enrg_mvp.json');
 let IDL = null;
 try {
     IDL = patchIdl(JSON.parse(fs.readFileSync(ENRG_IDL_PATH, 'utf8')));
-    // Anchor 0.32: programId берётся из idl.address (форма вызова new Program(idl, provider)).
+    // Anchor 0.32: programId comes from idl.address (new Program(idl, provider) call form).
     IDL.address = PROGRAM_ID.toBase58();
     IDL.metadata = IDL.metadata || {};
     IDL.metadata.address = PROGRAM_ID.toBase58();
@@ -247,9 +247,9 @@ try {
     logger.warn('⚠️ Cannot load enrg_mvp IDL (' + ENRG_IDL_PATH + '):', e.message);
 }
 
-// Канонические сообщения подписи (buildDeviceMessage/buildOracleMessage) и
-// разбор device_id (parseDevicePubkey) вынесены в Policy Engine (policy.js,
-// ADR-0003) — единый источник правды для server.js и policy.js.
+// Canonical signing messages (buildDeviceMessage/buildOracleMessage) and
+// device_id parsing (parseDevicePubkey) live in the Policy Engine (policy.js,
+// ADR-0003) — a single source of truth for server.js and policy.js.
 
 async function accountExists(connection, pk) {
     const info = await connection.getAccountInfo(pk);
@@ -282,8 +282,8 @@ async function sendAndConfirmLegacy(connection, signer, tx, label) {
     return sig;
 }
 
-// Address Lookup Table: mint-транзакция (2× ed25519 + 16 аккаунтов) не помещается
-// в legacy-лимит (1232 байта) — используем v0-транзакцию (как devnet_e2e_lifecycle.ts).
+// Address Lookup Table: the mint transaction (2× ed25519 + 16 accounts) does not fit
+// in the legacy limit (1232 bytes) — we use a v0 transaction (like devnet_e2e_lifecycle.ts).
 async function ensureLookupTable(connection, signer, addresses) {
     const offsets = [0, -50, -100, -150, -250, -400, -600];
     for (let attempt = 0; attempt < 4; attempt++) {
@@ -317,12 +317,12 @@ async function ensureLookupTable(connection, signer, addresses) {
                 else await sleep(400);
             }
             if (!lutAccount) {
-                throw new Error(`Address Lookup Table ${lut.toBase58()} не содержит всех адресов после extend`);
+                throw new Error(`Address Lookup Table ${lut.toBase58()} does not contain all addresses after extend`);
             }
             return lutAccount;
         }
     }
-    throw new Error('Не удалось создать Address Lookup Table');
+    throw new Error('Failed to create Address Lookup Table');
 }
 
 async function sendVersioned(connection, signer, instructions, lut) {
@@ -366,7 +366,7 @@ async function sendVersioned(connection, signer, instructions, lut) {
             throw e;
         }
     }
-    throw new Error('v0-транзакция с LUT не прошла после повторных попыток');
+    throw new Error('v0 transaction with LUT did not pass after retries');
 }
 
 
@@ -401,10 +401,10 @@ async function createProducerIfNeeded() {
     return true;
 }
 
-// CR-3: on-chain mint через Anchor-клиент.
-// Принимает proof (уже верифицированную подпись УСТРОЙСТВА в on-chain бинарном
-// формате) и подписывает OracleReport ключом основателя (оракул = FOUNDER_KEY).
-// Образец: scripts/devnet_e2e_lifecycle.ts (oracleMint, v0+LUT, 2× ed25519).
+// CR-3: on-chain mint via the Anchor client.
+// Takes a proof (an already verified DEVICE signature in the on-chain binary
+// format) and signs the OracleReport with the founder key (oracle = FOUNDER_KEY).
+// Reference: scripts/devnet_e2e_lifecycle.ts (oracleMint, v0+LUT, 2× ed25519).
 async function mintEnergy(proof, producerOverride = null) {
     if (!oracleKeypair) return { success: false, error: 'oracle_key_missing' };
     if (!proof || proof.sig_mode !== 'binary') return { success: false, error: 'device_signature_not_onchain_compatible' };
@@ -425,13 +425,13 @@ async function mintEnergy(proof, producerOverride = null) {
         const verifiedAt = new anchor.BN(nowSec);
         const energyWh = new anchor.BN(proof.energy_wh);
 
-        // Сообщения для ed25519-precompile (совпадают с state/oracle.rs).
+        // Messages for the ed25519 precompile (match state/oracle.rs).
         const deviceMsg = policy.buildDeviceMessage(deviceIdPubkey, proof.nonce, proof.device_timestamp, proof.energy_wh);
         const oracleMsg = policy.buildOracleMessage(deviceIdPubkey, proof.nonce, proof.device_timestamp, nowSec, proof.energy_wh);
-        // Мульти-владельческий mint: отчёт подписывает ОРАКУЛ (ORACLE_KEY), не founder.
+        // Multi-owner mint: the report is signed by the ORACLE (ORACLE_KEY), not the founder.
         const oracleSignature = nacl.sign.detached(new Uint8Array(oracleMsg), oracleKeypair.secretKey);
 
-        // OracleReport (borsh, как в state/oracle.rs): oracle(32) device_id(32) nonce(8)
+        // OracleReport (borsh, as in state/oracle.rs): oracle(32) device_id(32) nonce(8)
         // device_timestamp(8) verified_at(8) energy_wh(8) device_signature(64) oracle_signature(64).
         const report = {
             oracle: oracleKeypair.publicKey,
@@ -444,7 +444,7 @@ async function mintEnergy(proof, producerOverride = null) {
             oracleSignature: Array.from(oracleSignature),
         };
 
-        // ── PDA (как pdas() в devnet_e2e_lifecycle.ts) ──
+        // ── PDA (as in pdas() in devnet_e2e_lifecycle.ts) ──
         const find = (seed) => PublicKey.findProgramAddressSync([Buffer.from(seed)], PROGRAM_ID)[0];
         const vaultPda = find('vault');
         const tokenMintPda = find('token-mint');
@@ -460,10 +460,10 @@ async function mintEnergy(proof, producerOverride = null) {
             [Buffer.from('producer'), deviceIdPubkey.toBuffer()], PROGRAM_ID
         );
 
-        // Пре-проверка: producer существует; из него берём ВЛАДЕЛЬЦА (authority).
-        // P0-2 (ADR-0002): если producer уже получен из on-chain Registry в
-        // /proof/submit — переиспользуем его (одна RPC-проверка на запрос),
-        // иначе читаем реестр здесь.
+        // Pre-check: the producer exists; take the OWNER (authority) from it.
+        // P0-2 (ADR-0002): if the producer was already fetched from the on-chain Registry in
+        // /proof/submit — reuse it (one RPC check per request)
+        // otherwise read the registry here.
         let producer;
         if (producerOverride) {
             producer = producerOverride;
@@ -476,8 +476,8 @@ async function mintEnergy(proof, producerOverride = null) {
         }
         const ownerPubkey = new PublicKey(producer.authority.toBytes());
 
-        // Награда идёт ВЛАДЕЛЬЦУ устройства: profile/reputation/ATA привязаны к
-        // producer.authority (а не к подписанту-оракулу).
+        // The reward goes to the device OWNER: profile/reputation/ATA are bound to
+        // producer.authority (not to the oracle signer).
         const [profilePda] = PublicKey.findProgramAddressSync(
             [Buffer.from('profile'), ownerPubkey.toBuffer()], PROFILE_PROGRAM_ID
         );
@@ -494,19 +494,19 @@ async function mintEnergy(proof, producerOverride = null) {
             emergency: getAssociatedTokenAddressSync(srcMintPda, fundEmergencyPda, true),
         };
 
-        // Пре-проверка: без profile транзакция заведомо упадёт.
+        // Pre-check: without a profile the transaction is bound to fail.
         if (!(await accountExists(connection, profilePda))) {
             return { success: false, error: 'energy_profile_missing_on_chain' };
         }
 
-        // ADR-0003: Policy Registry (PDA [b"policy-registry"]). Если реестр
-        // не инициализирован — передаём null (дефолтные политики протокола,
-        // полная обратная совместимость). После инициализации политики
-        // управляются через update_policy (authority реестра).
+        // ADR-0003: Policy Registry (PDA [b"policy-registry"]). If the registry
+        // is not initialized — pass null (protocol default policies,
+        // full backward compatibility). Once initialized, policies
+        // are managed via update_policy (registry authority).
         const policyRegistryExists = await accountExists(connection, policyRegistryPda);
         const policyRegistry = policyRegistryExists ? policyRegistryPda : null;
 
-        // ── mint_energy через Anchor-клиент ──
+        // ── mint_energy via the Anchor client ──
         const mintIx = await program.methods.mintEnergy(report).accounts({
             producer: producerPda,
             vault: vaultPda,
@@ -530,7 +530,7 @@ async function mintEnergy(proof, producerOverride = null) {
             policyRegistry,
         }).instruction();
 
-        // ── Две ed25519-precompile-инструкции ПЕРЕД mint_energy ──
+        // ── Two ed25519 precompile instructions BEFORE mint_energy ──
         const edDeviceIx = Ed25519Program.createInstructionWithPublicKey({
             publicKey: deviceIdPubkey.toBytes(),
             message: deviceMsg,
@@ -542,13 +542,13 @@ async function mintEnergy(proof, producerOverride = null) {
             signature: Buffer.from(oracleSignature),
         });
 
-        // v0-транзакция с Address Lookup Table (2× ed25519 + 16 аккаунтов > legacy-лимит).
+        // v0 transaction with an Address Lookup Table (2× ed25519 + 16 accounts > legacy limit).
         const lutAddresses = [
             producerPda, vaultPda, tokenMintPda, srcMintPda, mintAuthorityPda, userAta,
             fundAtas.buyback, fundAtas.staking, fundAtas.dao, fundAtas.emergency,
             SYSVAR_INSTRUCTIONS_PUBKEY, oracleRegistryPda, TOKEN_PROGRAM_ID, PROFILE_PROGRAM_ID,
             oracleKeypair.publicKey, profilePda, Ed25519Program.programId,
-            // Policy Registry — только если инициализирован (ADR-0003).
+            // Policy Registry — only if initialized (ADR-0003).
             ...(policyRegistry ? [policyRegistry] : []),
         ];
         const lut = await ensureLookupTable(connection, oracleKeypair, lutAddresses);
@@ -561,10 +561,10 @@ async function mintEnergy(proof, producerOverride = null) {
     }
 }
 
-// Формат device_id (base58/hex) и все проверки входящих данных вынесены
-// в Policy Engine — policy.validateDeviceId() / policy.validateProof() (ADR-0003).
+// The device_id format (base58/hex) and all input validation live
+// in the Policy Engine — policy.validateDeviceId() / policy.validateProof() (ADR-0003).
 
-// === Регистрация устройства ===
+// === Device registration ===
 app.post('/api/v1/device/register', [
     body('device_id').isString().notEmpty().trim(),
     body('public_key').isString().isLength({ min: 44, max: 44 }),
@@ -576,8 +576,8 @@ app.post('/api/v1/device/register', [
     }
     const { device_id, public_key, signature } = req.body;
 
-    // CR-1: Policy Engine — формат device_id, длины ключа/подписи и
-    // proof-of-possession по сообщению `${device_id}|${public_key}` (ADR-0003).
+    // CR-1: Policy Engine — device_id format, key/signature lengths and
+    // proof-of-possession over the message `${device_id}|${public_key}` (ADR-0003).
     const v = policy.validateRegister(device_id, public_key, signature);
     if (!v.ok) {
         if (v.status === 403) {
@@ -586,8 +586,8 @@ app.post('/api/v1/device/register', [
         return res.status(v.status).json({ error: v.error });
     }
 
-    // CR-1: запрет перезаписи чужого device_id. Если устройство существует,
-    // ключ обязан совпадать с сохранённым; иначе — 403 Forbidden.
+    // CR-1: forbid overwriting someone else's device_id. If the device exists,
+    // the key must match the stored one; otherwise — 403 Forbidden.
     if (devices[device_id]) {
         if (devices[device_id] !== public_key) {
             logger.warn(`⛔ Register blocked: device ${device_id} already registered with a different public key`);
@@ -603,7 +603,7 @@ app.post('/api/v1/device/register', [
     res.json({ ok: true, message: 'Device registered successfully' });
 });
 
-// M-5: валидация формата device_id во всех read-эндпоинтах
+// M-5: device_id format validation in all read endpoints
 // (/status, /balance, /history) — Policy Engine (ADR-0003).
 app.param('id', (req, res, next, id) => {
     if (!policy.validateDeviceId(id).ok) {
@@ -612,7 +612,7 @@ app.param('id', (req, res, next, id) => {
     next();
 });
 
-// === СТАТУС УСТРОЙСТВА ===
+// === DEVICE STATUS ===
 app.get('/api/v1/device/:id/status', (req, res) => {
     const deviceId = req.params.id;
     if (!devices[deviceId]) {
@@ -627,35 +627,35 @@ app.get('/api/v1/device/:id/status', (req, res) => {
     });
 });
 
-// === БАЛАНС (заглушка) ===
+// === BALANCE (stub) ===
 app.get('/api/v1/device/:id/balance', (req, res) => {
     const deviceId = req.params.id;
     if (!devices[deviceId]) {
         return res.status(404).json({ error: 'device not found' });
     }
-    // Здесь можно запросить реальный баланс с Solana, пока заглушка
+    // A real Solana balance could be fetched here; for now a stub
     res.json({ balance: 0, device_id: deviceId });
 });
 
-// === ИСТОРИЯ (заглушка) ===
+// === HISTORY (stub) ===
 app.get('/api/v1/device/:id/history', (req, res) => {
     const deviceId = req.params.id;
     if (!devices[deviceId]) {
         return res.status(404).json({ error: 'device not found' });
     }
-    // Пока возвращаем пустой массив, позже можно добавить историю минтов
+    // For now return an empty array; mint history can be added later
     res.json({ history: [] });
 });
 
-// === ПОДПИСАННЫЙ DEVICE MANIFEST (ADR-0004) ===
-// Устройство запрашивает конфигурацию (rated_power, oracle_url) у оракула и
-// проверяет подпись ключом основателя (FOUNDER_KEY) перед использованием.
-// Каноническое сообщение подписи — policy.buildManifestMessage() (policy.js),
-// оно же воспроизводится в прошивке ESP32 (verifyManifest).
+// === SIGNED DEVICE MANIFEST (ADR-0004) ===
+// The device requests configuration (rated_power, oracle_url) from the oracle and
+// verifies the founder (FOUNDER_KEY) signature before using it.
+// Canonical signing message — policy.buildManifestMessage() (policy.js),
+// reproduced in the ESP32 firmware too (verifyManifest).
 app.get('/api/v1/manifest/:device_id', (req, res) => {
     const deviceId = req.params.device_id;
 
-    // Формат device_id (base58/hex) — через Policy Engine.
+    // device_id format (base58/hex) — via the Policy Engine.
     const d = policy.validateDeviceId(deviceId);
     if (!d.ok) {
         return res.status(d.status).json({ error: d.error });
@@ -667,14 +667,14 @@ app.get('/api/v1/manifest/:device_id', (req, res) => {
         return res.status(500).json({ error: 'founder_key_missing' });
     }
 
-    // public_key: ключ из реестра, либо (для незарегистрированных устройств)
-    // сам device_id (обратная совместимость с flow «манифест до регистрации»).
+    // public_key: the registry key, or (for unregistered devices)
+    // the device_id itself (backward compatibility with the "manifest before registration" flow).
     const public_key =
         devices[deviceId] ||
         util.encodeBase64(d.deviceIdPubkey.toBytes());
 
-    // rated_power: опциональный query-параметр (только доверенный вызывающий),
-    // иначе — defaultRatedPowerW из конфигурации политик.
+    // rated_power: optional query parameter (trusted callers only),
+    // otherwise — defaultRatedPowerW from the policy configuration.
     let rated_power = policy.config.defaultRatedPowerW;
     if (req.query.rated_power !== undefined) {
         const rp = Number(req.query.rated_power);
@@ -684,7 +684,7 @@ app.get('/api/v1/manifest/:device_id', (req, res) => {
         rated_power = Math.round(rp);
     }
 
-    // oracle_url: публичный URL оракула (куда устройству слать proof'ы).
+    // oracle_url: the public oracle URL (where the device sends proofs).
     const oracle_url = policy.config.oracleUrl;
     if (typeof oracle_url !== 'string' || !/^https?:\/\//.test(oracle_url) || oracle_url.includes('|')) {
         return res.status(500).json({ error: 'oracle_url misconfigured' });
@@ -696,10 +696,10 @@ app.get('/api/v1/manifest/:device_id', (req, res) => {
         oracle_url,
         public_key,
         timestamp: Math.floor(Date.now() / 1000),
-        // ADR-0004 (аудит 2026-08-18, P1-12): обязательные поля манифеста.
+        // ADR-0004 (audit 2026-08-18, P1-12): required manifest fields.
         trust_level: 'basic',
-        heartbeat_interval: 60, // сек
-        proof_threshold: 1,     // Wh, порог формирования proof
+        heartbeat_interval: 60, // seconds
+        proof_threshold: 1,     // Wh, proof formation threshold
         policy_version: 1,
         verifier_endpoint: oracle_url,
     };
@@ -709,17 +709,17 @@ app.get('/api/v1/manifest/:device_id', (req, res) => {
     res.json({ ...manifest, signature });
 });
 
-// === OTA-ОБНОВЛЕНИЯ ПРОШИВКИ (ADR-0008) ===
-// Образ подписывается ключом основателя (FOUNDER_KEY) по схеме
+// === FIRMWARE OTA UPDATES (ADR-0008) ===
+// The image is signed with the founder key (FOUNDER_KEY) using the
 //   version|image_hash|image_size  (policy.buildFirmwareMessage)
-// Устройство проверяет подпись + SHA-256(образ) перед установкой.
+// The device verifies the signature + SHA-256(image) before installing.
 
-/** Санитизировать имя файла версии (без путей и спецсимволов). */
+/** Sanitize the version file name (no paths or special characters). */
 function sanitizeVersion(v) {
     return String(v).replace(/[^A-Za-z0-9._-]/g, '_');
 }
 
-/** Загрузить latest.json (метаданные текущей прошивки) или null. */
+/** Load latest.json (current firmware metadata) or null. */
 function loadFirmwareMeta() {
     try {
         const p = path.join(FIRMWARE_UPDATES_DIR, 'latest.json');
@@ -732,7 +732,7 @@ function loadFirmwareMeta() {
 }
 
 // POST /api/v1/firmware/update?version=1.2.0[&model=ENRG-ESP32-v1]
-// Body: raw binary образ прошивки. Требует x-api-key == FIRMWARE_ADMIN_KEY.
+// Body: raw binary firmware image. Requires x-api-key == FIRMWARE_ADMIN_KEY.
 app.post('/api/v1/firmware/update', express.raw({
     type: ['application/octet-stream', 'application/json', '*/*'],
     limit: String(policy.config.maxFirmwareSizeBytes),
@@ -789,14 +789,14 @@ app.post('/api/v1/firmware/update', express.raw({
     }
 });
 
-// GET /api/v1/firmware/latest — метаданные текущей прошивки (подпись + хеш).
+// GET /api/v1/firmware/latest — current firmware metadata (signature + hash).
 app.get('/api/v1/firmware/latest', (req, res) => {
     const meta = loadFirmwareMeta();
     if (!meta) return res.status(404).json({ error: 'no firmware published' });
     res.json(meta);
 });
 
-// GET /api/v1/firmware/latest/image — бинарный образ текущей прошивки.
+// GET /api/v1/firmware/latest/image — the current firmware binary image.
 app.get('/api/v1/firmware/latest/image', (req, res) => {
     const meta = loadFirmwareMeta();
     if (!meta) return res.status(404).json({ error: 'no firmware published' });
@@ -809,12 +809,12 @@ app.get('/api/v1/firmware/latest/image', (req, res) => {
 });
 
 
-// === ОТЗЫВ / РОТАЦИЯ КЛЮЧА УСТРОЙСТВА (ADR-0007) ===
-// Оба эндпоинта вызывают on-chain инструкции программы enrg_mvp.
-// Транзакции подписываются ключом основателя (founder), который является
-// vault.authority (протокольный админ) — on-chain это разрешено.
+// === DEVICE REVOKE / KEY ROTATION (ADR-0007) ===
+// Both endpoints call on-chain instructions of the enrg_mvp program.
+// Transactions are signed with the founder key, which is
+// the vault.authority (protocol admin) — allowed on-chain.
 
-/** PDA producer'а: [b"producer", device_id]. */
+/** Producer PDA: [b"producer", device_id]. */
 function findProducerPda(deviceIdPubkey) {
     return PublicKey.findProgramAddressSync(
         [Buffer.from('producer'), deviceIdPubkey.toBuffer()], PROGRAM_ID
@@ -826,7 +826,7 @@ function findVaultPda() {
     return PublicKey.findProgramAddressSync([Buffer.from('vault')], PROGRAM_ID)[0];
 }
 
-/** Поднять Anchor-клиент (как в mintEnergy). */
+/** Bootstrap an Anchor client (as in mintEnergy). */
 function anchorProgram(connection) {
     const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(founderKeypair), {
         commitment: 'confirmed',
@@ -835,7 +835,7 @@ function anchorProgram(connection) {
     return new anchor.Program(IDL, provider);
 }
 
-/** Read-only Anchor-клиент для fetch аккаунтов без подписи транзакций. */
+/** Read-only Anchor client to fetch accounts without signing transactions. */
 function readOnlyProgram(connection) {
     const wallet = new anchor.Wallet(Keypair.generate());
     const provider = new anchor.AnchorProvider(connection, wallet, {
@@ -844,7 +844,7 @@ function readOnlyProgram(connection) {
     return new anchor.Program(IDL, provider);
 }
 
-// POST /api/v1/device/revoke/:device_id — отзыв устройства (только основатель).
+// POST /api/v1/device/revoke/:device_id — revoke a device (founder only).
 app.post('/api/v1/device/revoke/:device_id', async (req, res) => {
     const deviceId = req.params.device_id;
     const d = policy.validateDeviceId(deviceId);
@@ -858,8 +858,8 @@ app.post('/api/v1/device/revoke/:device_id', async (req, res) => {
         const program = anchorProgram(connection);
 
         const producerPda = findProducerPda(d.deviceIdPubkey);
-        // owner_devices — Option-аккаунт; передаём null (админ-отзыв не обязан
-        // иметь owner_devices). on-chain корректно обрабатывает None.
+        // owner_devices — Option account; pass null (admin revoke does not
+        // need owner_devices). on-chain handles None correctly.
         const tx = await program.methods
             .revokeDevice()
             .accounts({
@@ -880,11 +880,11 @@ app.post('/api/v1/device/revoke/:device_id', async (req, res) => {
 
 // POST /api/v1/device/rotate/:device_id
 // Body: { new_device_id, owner_signature, new_device_signature }
-//   owner_signature — Ed25519 подпись владельца (authority producer'а) над
-//     `${device_id}|${new_device_id}` — подтверждение намерения владельца;
-//   new_device_signature — Ed25519 подпись НОВОГО ключа над бинарным сообщением
+//   owner_signature — Ed25519 signature of the owner (producer authority) over
+//     `${device_id}|${new_device_id}` — confirmation of the owner's intent;
+//   new_device_signature — Ed25519 signature of the NEW key over the binary message
 //     b"enrg:device:rotate" || new(32) || owner(32) || nonce(8) || ts(8)
-//     (зеркало on-chain rotate_device_key).
+//     (a mirror of the on-chain rotate_device_key).
 app.post('/api/v1/device/rotate/:device_id', async (req, res) => {
     const deviceId = req.params.device_id;
     const { new_device_id, owner_signature, new_device_signature } = req.body || {};
@@ -908,7 +908,7 @@ app.post('/api/v1/device/rotate/:device_id', async (req, res) => {
         const program = anchorProgram(connection);
         const producerPda = findProducerPda(d.deviceIdPubkey);
 
-        // 1) Владелец устройства — из on-chain producer (authority).
+        // 1) The device owner — from the on-chain producer (authority).
         let producer;
         try {
             producer = await program.account.energyProducer.fetch(producerPda);
@@ -917,7 +917,7 @@ app.post('/api/v1/device/rotate/:device_id', async (req, res) => {
         }
         const ownerPubkey = new PublicKey(producer.authority.toBytes());
 
-        // 2) Подпись владельца над `${device_id}|${new_device_id}`.
+        // 2) The owner's signature over `${device_id}|${new_device_id}`.
         const authMsg = Buffer.from(`${deviceId}|${new_device_id}`, 'utf8');
         const ownerOk = nacl.sign.detached.verify(
             new Uint8Array(authMsg),
@@ -926,9 +926,9 @@ app.post('/api/v1/device/rotate/:device_id', async (req, res) => {
         );
         if (!ownerOk) return res.status(403).json({ error: 'invalid owner signature' });
 
-        // 3) Подпись нового ключа (PoP) над бинарным rotate-сообщением.
+        // 3) The new key's signature (PoP) over the binary rotate message.
         const nowSec = Math.floor(Date.now() / 1000);
-        const rotateNonce = nowSec; // монотонный nonce (unixtime) — > claim_nonce
+        const rotateNonce = nowSec; // monotonic nonce (unixtime) — > claim_nonce
         const rotateTimestamp = nowSec;
         const rmsg = policy.buildDeviceRotateMessage(
             nd.deviceIdPubkey, ownerPubkey, rotateNonce, rotateTimestamp
@@ -940,7 +940,7 @@ app.post('/api/v1/device/rotate/:device_id', async (req, res) => {
         );
         if (!newKeyOk) return res.status(403).json({ error: 'invalid new device signature (proof-of-possession)' });
 
-        // 4) On-chain rotate (подписывает founder как протокольный админ).
+        // 4) On-chain rotate (signed by the founder as protocol admin).
         const newProducerPda = findProducerPda(nd.deviceIdPubkey);
         const tx = await program.methods
             .rotateDeviceKey(
@@ -968,7 +968,7 @@ app.post('/api/v1/device/rotate/:device_id', async (req, res) => {
 });
 
 
-// === СОЗДАНИЕ ПУЛА ===
+// === POOL CREATION ===
 app.post('/api/v1/pool/create', async (req, res) => {
     const { pool_id, threshold } = req.body;
     if (!pool_id || !threshold) {
@@ -989,17 +989,17 @@ app.post('/api/v1/pool/create', async (req, res) => {
     res.json({ ok: true, pool });
 });
 
-// === ОТПРАВКА PROOF ===
-// CR-2 / M-3: лимиты (energyWh, timestamp-свежесть, nonce, подпись) задаются
-// в Policy Engine (policy-config.json, ADR-0003) и синхронизированы с on-chain
+// === PROOF SUBMISSION ===
+// CR-2 / M-3: limits (energyWh, timestamp freshness, nonce, signature) are set
+// in the Policy Engine (policy-config.json, ADR-0003) and synced with on-chain
 // (constants.rs::MAX_CLOCK_SKEW=300, security/validation.rs::MAX_PROOF_AGE=900).
 
 app.post('/api/v1/proof/submit', async (req, res) => {
     try {
-        // P0-2 (ADR-0002): источник истины для верификации proof — on-chain
-        // Device Registry (EnergyProducer PDA), а НЕ локальная БД оракула.
-        // Локальные таблицы (devices/energyStore) остаются только для
-        // статистики/истории и не определяют доверие.
+        // P0-2 (ADR-0002): the source of truth for proof verification is on-chain
+        // Device Registry (EnergyProducer PDA), NOT the oracle's local DB.
+        // Local tables (devices/energyStore) remain only for
+        // stats/history and do not determine trust.
         const device_id = req.body && req.body.device_id;
         const d = policy.validateDeviceId(device_id);
         if (!d.ok) return res.status(d.status).json({ error: d.error });
@@ -1008,7 +1008,7 @@ app.post('/api/v1/proof/submit', async (req, res) => {
         }
         if (!IDL) return res.status(500).json({ error: 'idl_missing' });
 
-        // Читаем устройство из on-chain Registry.
+        // Read the device from the on-chain Registry.
         let producer;
         try {
             const connection = new Connection(RPC_ENDPOINT, 'confirmed');
@@ -1021,7 +1021,7 @@ app.post('/api/v1/proof/submit', async (req, res) => {
             });
         }
 
-        // ADR-0007: отозванное устройство не принимает proof'ы.
+        // ADR-0007: a revoked device does not accept proofs.
         if (producer.revoked) {
             return res.status(403).json({ error: 'device_revoked_on_chain' });
         }
@@ -1030,10 +1030,10 @@ app.post('/api/v1/proof/submit', async (req, res) => {
             return res.status(400).json({ error: 'device_id mismatch with on-chain registry' });
         }
 
-        // CR-1/CR-2/CR-3/M-3/M-5: ВСЕ проверки входящего proof выполняет Policy
-        // Engine — policy.validateProof(): формат device_id, energyWh, свежесть
-        // timestamp, unknown device, монотонный nonce и Ed25519-подпись.
-        // Ключ и nonce берём из on-chain Registry (единый источник истины).
+        // CR-1/CR-2/CR-3/M-3/M-5: ALL incoming proof checks are done by the Policy
+        // Engine — policy.validateProof(): device_id format, energyWh, freshness
+        // timestamp, unknown device, monotonic nonce and Ed25519 signature.
+        // Key and nonce come from the on-chain Registry (single source of truth).
         const onChainNonce = producer.nonce ? producer.nonce.toNumber() : 0;
         const localNonce = (energyStore[device_id] || { nonce: 0 }).nonce;
         const v = policy.validateProof(req.body, {
@@ -1044,7 +1044,7 @@ app.post('/api/v1/proof/submit', async (req, res) => {
             return res.status(v.status).json({ error: v.error });
         }
 
-        // ── Накопление энергии (целые Wh) + сохранение proof для on-chain mint ──
+        // ── Energy accumulation (whole Wh) + storing the proof for the on-chain mint ──
         const proof = v.proof;
         const pool_id = v.pool_id;
         const energyWhInt = proof.energy_wh;
@@ -1062,12 +1062,12 @@ app.post('/api/v1/proof/submit', async (req, res) => {
             await storage.savePool(pool_id, pool.threshold, pool.total_energy, pool.device_energy, pool.created_at);
             logger.info(`📊 Pool ${pool_id}: +${energyWhInt}Wh, total: ${pool.total_energy}Wh`);
             if (pool.total_energy >= pool.threshold) {
-                // P1 (аудит 2026-08-18): off-chain пул НЕ распределяет токены —
-                // прежний код «сбросил счётчик и ответил tokens distributed» был
-                // заглушкой. Реальное распределение выполняется on-chain
-                // (instructions/pool.rs::distribute_pool); оракул передаёт pool=null
-                // в mintEnergy. Накопление продолжаем, но не выдаём ложь.
-                logger.warn(`⚠️ Pool ${pool_id}: threshold reached, но off-chain распределение НЕ реализовано (требуется on-chain distribute_pool)`);
+                // P1 (audit 2026-08-18): the off-chain pool does NOT distribute tokens —
+                // the previous code that "reset the counter and replied tokens distributed" was
+                // a stub. Real distribution happens on-chain
+                // (instructions/pool.rs::distribute_pool); the oracle passes pool=null
+                // to mintEnergy. We keep accumulating but do not lie.
+                logger.warn(`⚠️ Pool ${pool_id}: threshold reached, but off-chain distribution is NOT implemented (on-chain distribute_pool required)`);
                 return res.json({
                     ok: true,
                     pool_total: pool.total_energy,
@@ -1079,18 +1079,18 @@ app.post('/api/v1/proof/submit', async (req, res) => {
 
         logger.info(`📊 Device ${device_id} submitted ${energyWhInt}Wh (nonce=${proof.nonce}, sig=${proof.sig_mode}). Accumulated: ${newEnergy}Wh`);
 
-        // CR-3: on-chain-совместимая (binary) подпись → каждый proof минтится
-        // отдельной транзакцией mint_energy (как в devnet_e2e_lifecycle.ts).
-        // Если mint временно невозможен (не задан ORACLE_KEY, устройство ещё не
-        // зарегистрировано on-chain, профиль не создан, RPC недоступен) — proof
-        // ПРИНИМАЕТСЯ, энергия накапливается, mint откладывается. Это деградация,
-        // а не отказ: proof'ы не должны теряться из-за недоступности mint.
+        // CR-3: on-chain-compatible (binary) signature → each proof is minted
+        // in a separate mint_energy transaction (as in devnet_e2e_lifecycle.ts).
+        // If minting is temporarily impossible (ORACLE_KEY unset, device not yet
+        // registered on-chain, no profile created, RPC unavailable) — the proof
+        // IS ACCEPTED, energy accumulates, minting is deferred. This is graceful
+        // degradation, not a failure: proofs must not be lost because minting is down.
         if (proof.sig_mode === 'binary') {
             const mintRes = await mintEnergy(proof, producer);
             if (mintRes.success) {
                 return res.json({ ok: true, minted: proof.energy_wh, tx: mintRes.tx, accumulated: newEnergy });
             }
-            logger.warn(`⚠️ mint_energy отложен для ${device_id}: ${mintRes.error}. Энергия накоплена: ${newEnergy}Wh`);
+            logger.warn(`⚠️ mint_energy deferred for ${device_id}: ${mintRes.error}. Energy accumulated: ${newEnergy}Wh`);
             return res.json({
                 ok: true,
                 accumulated: newEnergy,
@@ -1099,26 +1099,26 @@ app.post('/api/v1/proof/submit', async (req, res) => {
             });
         }
 
-        // legacy-подпись (строковый формат) несовместима с on-chain mint — только накопление.
+        // legacy signature (string format) is incompatible with on-chain mint — accumulation only.
         if (newEnergy >= ENERGY_THRESHOLD) {
             logger.warn(`⚠️ Device ${device_id} reached threshold but mint requires on-chain-compatible (binary) device signature`);
             return res.json({ ok: true, accumulated: newEnergy, note: 'mint_requires_binary_signature' });
         }
         return res.json({ ok: true, accumulated: newEnergy });
     } catch (e) {
-        // L-3: логируем только сообщение, без stacktrace с путями хоста.
+        // L-3: log only the message, no stacktrace with host paths.
         logger.error('❌ Error handling proof:', e && e.message);
         return res.status(500).json({ error: (e && e.message) || 'internal error' });
     }
 });
 
-// === СТАТИСТИКА ДЛЯ САЙТА ===
+// === WEBSITE STATS ===
 app.get('/api/v1/stats', (req, res) => {
   try {
     const totalEnergyWh = Object.values(energyStore).reduce((sum, e) => sum + (e.energy_wh || 0), 0);
     const totalEnergyMwh = totalEnergyWh / 1000000;
     const activeProducers = Object.keys(devices).length;
-    const totalSupply = 0; // заглушка
+    const totalSupply = 0; // stub
     const stats = {
       total_energy_mwh: Math.round(totalEnergyMwh * 100) / 100,
       active_producers: activeProducers,
@@ -1133,8 +1133,8 @@ app.get('/api/v1/stats', (req, res) => {
 
 const PORT = process.env.PORT || 3000;
 
-// M-2: асинхронный старт — инициализация хранилища (Postgres при DATABASE_URL,
-// иначе SQLite) и загрузка персистентного состояния в память.
+// M-2: async startup — storage init (Postgres when DATABASE_URL is set,
+// otherwise SQLite) and loading persistent state into memory.
 async function bootstrap() {
     await storage.init();
     devices = await storage.loadDevices();

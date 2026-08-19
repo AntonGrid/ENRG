@@ -1,36 +1,36 @@
 #!/usr/bin/env node
 /**
- * ENRG — генерация QR-кода устройства для Plug & Play онбординга (Axis-connect).
+ * ENRG — device QR-code generator for Plug & Play onboarding (Axis-connect).
  *
- * Пейлоад QR строго соответствует парсеру Axis-connect:
+ * The QR payload strictly follows the Axis-connect parser:
  *   { "deviceId": "<base58|0x-hex PUBLIC_KEY>", "schema": "axis-energy-v1" }
  *
- * deviceId — публичный Ed25519-ключ устройства (32 байта): "0x"+64hex (как в
- * [INFO] device_id прошивки ESP32) или base58 (канонический Solana PublicKey).
+ * deviceId — the device's public Ed25519 key (32 bytes): "0x"+64hex (as in
+ * the ESP32 firmware [INFO] device_id) or base58 (canonical Solana PublicKey).
  *
- * Использование:
+ * Usage:
  *   node tools/gen-device-qr.js --device-id 0x<64hex>
  *   node tools/gen-device-qr.js --device-id <base58>
- *   node tools/gen-device-qr.js --from-file device.cfg          # файл: deviceId=...
+ *   node tools/gen-device-qr.js --from-file device.cfg          # file: deviceId=...
  *   node tools/gen-device-qr.js --device-id 0x... --svg --json  # SVG + JSON payload
  *
- * Опции:
- *   --device-id <hex|base58>  публичный ключ устройства
- *   --from-file <path>        прочитать deviceId из файла (строки "deviceId=...",
- *                             "device_id=..."; также ищет "0x"-hex прямо в логе)
- *   --out <path>              путь PNG (по умолчанию docs/assets/qr-<short>.png)
- *   --format base58|hex       формат deviceId внутри QR (по умолчанию base58)
- *   --svg                     дополнительно сохранить SVG
- *   --terminal                вывести QR в терминал
- *   --json                    вывести JSON-пейлоад в stdout
- *   --help                    справка
+ * Options:
+ *   --device-id <hex|base58>  the device public key
+ *   --from-file <path>        read deviceId from a file (lines "deviceId=...",
+ *                             "device_id=..."; also scans the log for "0x"-hex)
+ *   --out <path>              PNG path (default docs/assets/qr-<short>.png)
+ *   --format base58|hex       deviceId format inside the QR (default base58)
+ *   --svg                     also save an SVG
+ *   --terminal                print the QR to the terminal
+ *   --json                    print the JSON payload to stdout
+ *   --help                    help
  */
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 
-// ── base58 (компактная реализация; без внешних зависимостей) ──
+// ── base58 (compact implementation; no external dependencies) ──
 const B58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 function base58Encode(bytes) {
@@ -88,31 +88,31 @@ function deviceIdToBytes(deviceId) {
 
 function readDeviceIdFromFile(filePath) {
   const content = fs.readFileSync(filePath, 'utf8');
-  // 1) строки "deviceId=..." / "device_id=..." / "device-id=..."
+  // 1) lines "deviceId=..." / "device_id=..." / "device-id=..."
   const re = /device[_-]?id\s*=\s*([^\s;,]+)/i;
   const m = content.match(re);
   if (m && deviceIdToBytes(m[1])) return m[1].trim();
-  // 2) "0x" + 64 hex прямо в тексте (напр., вставленный лог [INFO] device_id)
+  // 2) "0x" + 64 hex anywhere in the text (e.g., a pasted [INFO] device_id log)
   const hex = content.match(/0[xX][0-9a-fA-F]{64}/);
   if (hex) return hex[0];
   return null;
 }
 function usage() {
-  console.log(`ENRG QR-генератор для Axis-connect Plug & Play
+  console.log(`ENRG QR generator for Axis-connect Plug & Play
 
-Использование:
-  node tools/gen-device-qr.js --device-id <hex|base58> [опции]
-  node tools/gen-device-qr.js --from-file <файл> [опции]
+Usage:
+  node tools/gen-device-qr.js --device-id <hex|base58> [options]
+  node tools/gen-device-qr.js --from-file <file> [options]
 
-Опции:
-  --device-id <hex|base58>  публичный Ed25519-ключ устройства (32 байта)
-  --from-file <path>        прочитать deviceId из файла/лога (deviceId=..., или 0x-строка)
-  --out <path>              путь PNG (по умолчанию docs/assets/qr-<short>.png)
-  --format base58|hex       формат deviceId внутри QR (по умолчанию base58)
-  --svg                     дополнительно сохранить SVG
-  --terminal                вывести QR в терминал
-  --json                    вывести JSON-пейлоад в stdout
-  --help                    эта справка`);
+Options:
+  --device-id <hex|base58>  the device public Ed25519 key (32 bytes)
+  --from-file <path>        read deviceId from a file/log (deviceId=..., or a 0x string)
+  --out <path>              PNG path (default docs/assets/qr-<short>.png)
+  --format base58|hex       deviceId format inside the QR (default base58)
+  --svg                     also save an SVG
+  --terminal                print the QR to the terminal
+  --json                    print the JSON payload to stdout
+  --help                    this help`);
 }
 
 function parseArgs(argv) {
@@ -128,13 +128,13 @@ function parseArgs(argv) {
     else if (k === '--terminal') a.terminal = true;
     else if (k === '--json') a.json = true;
     else if (k === '--help' || k === '-h') { usage(); process.exit(0); }
-    else { console.error(`Неизвестная опция: ${k} (--help)`); process.exit(2); }
+    else { console.error(`Unknown option: ${k} (--help)`); process.exit(2); }
   }
   return a;
 }
 
 function requireQRCode() {
-  // Ищем `qrcode` локально: tools/node_modules или корневой node_modules ENRG.
+  // Look for `qrcode` locally: tools/node_modules or the ENRG root node_modules.
   const candidates = [
     path.join(__dirname, 'node_modules', 'qrcode'),
     path.join(__dirname, '..', 'node_modules', 'qrcode'),
@@ -145,7 +145,7 @@ function requireQRCode() {
   return null;
 }
 
-/** Псевдо-QR в терминал (fallback, если npm-пакет qrcode недоступен). */
+/** Pseudo-QR for the terminal (fallback when the qrcode npm package is unavailable). */
 function terminalQr(text) {
   let h = 2166136261 >>> 0;
   for (let i = 0; i < text.length; i++) {
@@ -173,18 +173,18 @@ async function main() {
   if (!deviceId && a.fromFile) {
     deviceId = readDeviceIdFromFile(a.fromFile);
     if (!deviceId) {
-      console.error(`❌ Не удалось извлечь deviceId из ${a.fromFile}`);
+      console.error(`❌ Failed to extract deviceId from ${a.fromFile}`);
       process.exit(2);
     }
   }
   if (!deviceId) {
-    console.error('Ошибка: укажите --device-id или --from-file (--help)');
+    console.error('Error: pass --device-id or --from-file (--help)');
     process.exit(2);
   }
 
   const bytes = deviceIdToBytes(deviceId);
   if (!bytes) {
-    console.error('Ошибка: deviceId должен быть 32-байтовым ключом (0x+64hex или base58)');
+    console.error('Error: deviceId must be a 32-byte key (0x+64hex or base58)');
     process.exit(2);
   }
 
@@ -202,12 +202,12 @@ async function main() {
   if (!QRCode) {
     if (a.terminal) {
       console.log(terminalQr(payload));
-      console.log('  (fallback-представление; установите "qrcode" для настоящего PNG/SVG)');
+      console.log('  (fallback rendering; install "qrcode" for real PNG/SVG)');
       console.log(`  ${payload}`);
       process.exit(0);
     }
-    console.error('❌ Пакет "qrcode" не найден. Установите: npm i -D qrcode  (в корне ENRG)');
-    console.error(`   Пейлоад для ручного ввода: ${payload}`);
+    console.error('❌ Package "qrcode" not found. Install it: npm i -D qrcode  (in the ENRG root)');
+    console.error(`   Payload for manual entry: ${payload}`);
     process.exit(1);
   }
 

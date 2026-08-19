@@ -123,7 +123,7 @@ async def main() -> None:
             "profile_program": ENRG_PROFILE_PROGRAM_ID,
             "authority": acc.producer_wallet.pubkey(),
             "profile": acc.profile,
-            # ADR-0003: Policy Registry — опционален (None = дефолтные политики).
+            # ADR-0003: Policy Registry — optional (None = default policies).
             "policy_registry": None,
         },
     ).to_solders()

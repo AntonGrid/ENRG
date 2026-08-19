@@ -1,13 +1,13 @@
-// Универсальное хранилище ENRG-оракула (M-2).
+// Universal storage for the ENRG oracle (M-2).
 //
-//   - Если задана DATABASE_URL (postgres://user:pass@host:5432/enrg) —
-//     используется PostgreSQL (репликация/бэкапы на стороне кластера).
-//   - Иначе — SQLite (better-sqlite3) для обратной совместимости
-//     и локальной разработки.
+//   - When DATABASE_URL is set (postgres://user:pass@host:5432/enrg) —
+//     PostgreSQL is used (replication/backups handled by the cluster).
+//   - Otherwise — SQLite (better-sqlite3) for backward compatibility
+//     and local development.
 //
-// Интерфейс полностью асинхронный, чтобы один и тот же код работал с обоими
-// бэкендами. Таблицы: devices, energy_store, pools (та же схема, что была у
-// SQLite; числовые поля BIGINT, device_energy — JSON-строка).
+// The interface is fully async so the same code works with both
+// backends. Tables: devices, energy_store, pools (the same schema as
+// SQLite; numeric fields BIGINT, device_energy — JSON string).
 
 const { Pool } = require('pg');
 const Database = require('better-sqlite3');

@@ -1,13 +1,13 @@
 'use strict';
 
 /**
- * API-тесты эндпоинтов отзыва/ротации ключа (ADR-0007).
+ * API tests for the revoke/key-rotation endpoints (ADR-0007).
  *
- * Тестируют слой валидации запросов оракула (без реального RPC):
- *  - формат device_id / new_device_id;
- *  - наличие подписей владельца и нового ключа;
- *  - путь «нет RPC» → понятная ошибка (не 500 Internal).
- * Реальная on-chain логика revoke/rotate покрыта tests/key-rotation.ts
+ * They test the oracle request-validation layer (no real RPC):
+ *  - device_id / new_device_id format;
+ *  - presence of the owner and new-key signatures;
+ *  - the "no RPC" path → a clear error (not 500 Internal).
+ * Real on-chain revoke/rotate logic is covered by tests/key-rotation.ts
  * (anchor, solana-test-validator).
  */
 
@@ -46,7 +46,7 @@ describe('Oracle revoke/rotate API (ADR-0007)', function () {
         const keyFile = path.join(tmpDir, 'founder.json');
         fs.writeFileSync(keyFile, JSON.stringify(Array.from(founder.secretKey)));
 
-        // RPC недоступен (порт 1) — тестируем слой валидации запросов.
+        // RPC unavailable (port 1) — we test the request-validation layer.
         server = spawn('node', ['server.js'], {
             cwd: path.join(__dirname, '..'),
             env: {
@@ -65,7 +65,7 @@ describe('Oracle revoke/rotate API (ADR-0007)', function () {
             try {
                 const res = await fetch(`${BASE}/health`);
                 if (res.ok) return;
-            } catch (e) { /* ещё не готов */ }
+            } catch (e) { /* not ready yet */ }
             await wait(250);
         }
         throw new Error('server did not start');
@@ -87,19 +87,19 @@ describe('Oracle revoke/rotate API (ADR-0007)', function () {
     });
 
     it('revoke: non-32-byte device_id → 400', async function () {
-        const r = await post(`${BASE}/api/v1/device/revoke/0xab`, {}); // 1 байт, не 32
+        const r = await post(`${BASE}/api/v1/device/revoke/0xab`, {}); // 1 byte, not 32
         assert.strictEqual(r.status, 400);
         assert.strictEqual(r.data.error, 'invalid device_id (must be a 32-byte key)');
     });
 
-    it('revoke: RPC недоступен → понятная ошибка revoke_onchain_failed (не 500 Internal)', async function () {
+    it('revoke: RPC unavailable → clear revoke_onchain_failed error (not 500 Internal)', async function () {
         const r = await post(`${BASE}/api/v1/device/revoke/${validId()}`, {});
         assert.strictEqual(r.status, 500);
         assert.strictEqual(r.data.error, 'revoke_onchain_failed');
-        assert.ok(r.data.reason, 'reason присутствует');
+        assert.ok(r.data.reason, 'reason must be present');
     });
 
-    it('rotate: new_device_id совпадает с device_id → 400', async function () {
+    it('rotate: new_device_id equals device_id → 400', async function () {
         const id = validId();
         const r = await post(`${BASE}/api/v1/device/rotate/${id}`, {
             new_device_id: id,
@@ -110,7 +110,7 @@ describe('Oracle revoke/rotate API (ADR-0007)', function () {
         assert.strictEqual(r.data.error, 'new_device_id must differ from device_id');
     });
 
-    it('rotate: отсутствуют подписи → 400', async function () {
+    it('rotate: signatures missing → 400', async function () {
         const r = await post(`${BASE}/api/v1/device/rotate/${validId()}`, {
             new_device_id: validId(),
         });
@@ -118,7 +118,7 @@ describe('Oracle revoke/rotate API (ADR-0007)', function () {
         assert.strictEqual(r.data.error, 'owner_signature and new_device_signature are required');
     });
 
-    it('rotate: RPC недоступен → device_not_registered_on_chain (404)', async function () {
+    it('rotate: RPC unavailable → device_not_registered_on_chain (404)', async function () {
         const r = await post(`${BASE}/api/v1/device/rotate/${validId()}`, {
             new_device_id: validId(),
             owner_signature: 'AAAA',

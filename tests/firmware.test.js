@@ -1,16 +1,16 @@
 'use strict';
 
 /**
- * Тесты OTA-обновлений прошивки (ADR-0008).
+ * Firmware OTA-update tests (ADR-0008).
  *
- * 1) UNIT: подпись firmware-метаданных (policy.buildFirmwareMessage /
- *    signFirmware / verifyFirmware) — зеркалирует verifyFirmwareSignature
- *    прошивки ESP32.
- * 2) E2E: устройство проверяет наличие обновления (GET /firmware/latest),
- *    скачивает образ (GET /firmware/latest/image), проверяет подпись и хеш,
- *    применяет (в симуляции; реальный OTA — на плате ESP32).
+ * 1) UNIT: firmware-metadata signing (policy.buildFirmwareMessage /
+ *    signFirmware / verifyFirmware) — mirrors verifyFirmwareSignature
+ *    from the ESP32 firmware.
+ * 2) E2E: the device checks for an update (GET /firmware/latest),
+ *    downloads the image (GET /firmware/latest/image), verifies the signature and hash,
+ *    and installs it (simulated; real OTA runs on the ESP32 board).
  *
- * Запуск: npx mocha tests/firmware.test.js
+ * Run: npx mocha tests/firmware.test.js
  */
 
 const assert = require('assert');
@@ -23,7 +23,7 @@ const nacl = require('tweetnacl');
 
 const policy = require('../policy');
 
-// ── UNIT: подпись образа ──
+// ── UNIT: image signing ──
 describe('Firmware signing (ADR-0008, unit)', function () {
     let kp;
 
@@ -54,13 +54,13 @@ describe('Firmware signing (ADR-0008, unit)', function () {
         assert.strictEqual(policy.verifyFirmware(f, sig, kp.publicKey).ok, true);
     });
 
-    it('rejects a tampered version (анти-откат: версия в подписи)', function () {
+    it('rejects a tampered version (anti-rollback: the version is in the signature)', function () {
         const f = sampleFw();
         const sig = policy.signFirmware(f, kp.secretKey);
         assert.strictEqual(policy.verifyFirmware({ ...f, version: '9.9.9' }, sig, kp.publicKey).ok, false);
     });
 
-    it('rejects a tampered image_hash (образ не соответствует метаданным)', function () {
+    it('rejects a tampered image_hash (image does not match the metadata)', function () {
         const f = sampleFw();
         const sig = policy.signFirmware(f, kp.secretKey);
         assert.strictEqual(policy.verifyFirmware({ ...f, image_hash: 'ab'.repeat(32) }, sig, kp.publicKey).ok, false);
@@ -82,13 +82,13 @@ describe('Firmware signing (ADR-0008, unit)', function () {
     });
 });
 
-// ── E2E: публикация → проверка наличия → скачивание → проверка подписи/хеша ──
+// ── E2E: publish → check for update → download → verify signature/hash ──
 describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
     this.timeout(30000);
 
     let server;
     let founderKp;
-    let fwKp;   // ХОЛОДНЫЙ firmware-signing ключ (ADR-0008, D-5) — отдельный от founder.
+    let fwKp;   // COLD firmware-signing key (ADR-0008, D-5) — separate from the founder.
     let tmpDir;
     const PORT = 4030;
     const BASE = `http://127.0.0.1:${PORT}`;
@@ -110,7 +110,7 @@ describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
         founderKp = nacl.sign.keyPair();
         const keyFile = path.join(tmpDir, 'founder.json');
         fs.writeFileSync(keyFile, JSON.stringify(Array.from(founderKp.secretKey)));
-        // ADR-0008 (D-5): образы подписываются ОТДЕЛЬНЫМ firmware-ключом.
+        // ADR-0008 (D-5): images are signed with a SEPARATE firmware key.
         fwKp = nacl.sign.keyPair();
         const fwKeyFile = path.join(tmpDir, 'fw-signing.json');
         fs.writeFileSync(fwKeyFile, JSON.stringify(Array.from(fwKp.secretKey)));
@@ -137,7 +137,7 @@ describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
             try {
                 const res = await fetch(`${BASE}/health`);
                 if (res.ok) return;
-            } catch (e) { /* ещё не готов */ }
+            } catch (e) { /* not ready yet */ }
             await wait(250);
         }
         throw new Error('server did not start in time');
@@ -161,13 +161,13 @@ describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
         const bin = Buffer.from('ENRG-ESP32-v1.2.0-BUILD-42'.repeat(200));
         await upload(bin, '1.2.0', 'ENRG-ESP32-v1', ADMIN_KEY);
 
-        // Устройство при checkForUpdates() запрашивает метаданные.
+        // The device requests metadata via checkForUpdates().
         const res = await fetch(`${BASE}/api/v1/firmware/latest`);
         assert.strictEqual(res.status, 200);
         const meta = await res.json();
 
-        // Проверка подписи firmware-КЛЮЧОМ (D-5: холодный ключ, не founder),
-        // как verifyFirmwareSignature в прошивке (ENRG_FIRMWARE_PUBKEY_HEX).
+        // Signature verified with the firmware KEY (D-5: cold key, not the founder),
+        // as verifyFirmwareSignature in the firmware (ENRG_FIRMWARE_PUBKEY_HEX).
         const v = policy.verifyFirmware(
             { version: meta.version, image_hash: meta.image_hash, image_size: meta.image_size },
             meta.signature,
@@ -186,7 +186,7 @@ describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
         assert.strictEqual(res.headers.get('x-firmware-version'), '1.3.0');
         const body = Buffer.from(await res.arrayBuffer());
 
-        // Хеш скачанного образа должен совпасть с image_hash из метаданных.
+        // The downloaded image hash must match the image_hash from the metadata.
         const meta = await (await fetch(`${BASE}/api/v1/firmware/latest`)).json();
         assert.strictEqual(crypto.createHash('sha256').update(body).digest('hex'), meta.image_hash);
         assert.strictEqual(body.length, meta.image_size);
@@ -205,13 +205,13 @@ describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
         assert.strictEqual(r.data.error, 'empty firmware image');
     });
 
-    it('anti-rollback: a lower version is rejected by the device (симуляция)', async function () {
-        // Публикуем новую версию.
+    it('anti-rollback: a lower version is rejected by the device (simulation)', async function () {
+        // Publish a new version.
         const bin = Buffer.from('FW-2.0.0');
         await upload(bin, '2.0.0', 'ENRG-ESP32-v1', ADMIN_KEY);
         const meta = await (await fetch(`${BASE}/api/v1/firmware/latest`)).json();
 
-        // Устройство с текущей версией 2.0.0 сравнивает версии.
+        // The device with current version 2.0.0 compares versions.
         const current = '2.0.0';
         const compare = (a, b) => {
             const pa = a.split('.').map(Number);
@@ -222,10 +222,10 @@ describe('Firmware OTA E2E (/api/v1/firmware/*)', function () {
             }
             return 0;
         };
-        // Обновление с 1.0.0 на 0.9.0 (ниже) должно быть отклонено.
+        // An update from 1.0.0 to 0.9.0 (lower) must be rejected.
         assert.strictEqual(compare('0.9.0', current), -1);
         assert.strictEqual(compare(meta.version, current), 0);
-        // Политика устройства: применять только если new > current.
+        // Device policy: apply only when new > current.
         const shouldApply = compare(meta.version, current) > 0;
         assert.strictEqual(shouldApply, false);
     });

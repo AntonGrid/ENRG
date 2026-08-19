@@ -1,25 +1,25 @@
 'use strict';
 
 /**
- * ENRG Policy Engine — отдельный модуль политик (ADR-0003).
+ * ENRG Policy Engine — a standalone policy module (ADR-0003).
  *
- * Axis-спецификация (ADR-0003) требует разделять Verifier (криптография и
- * передача данных) и Policy Engine (решения о допустимости Proof, лимитах,
- * quarantine и т.п.). Этот модуль реализует Policy Engine для off-chain
- * оракула: ВСЕ проверки входящих данных (format / range / freshness / nonce /
- * signature) вынесены из server.js сюда.
+ * The Axis spec (ADR-0003) requires separating the Verifier (cryptography and
+ * data transport) from the Policy Engine (admissibility decisions for Proofs, limits,
+ * quarantine, etc.). This module implements the Policy Engine for the off-chain
+ * oracle: ALL incoming data checks (format / range / freshness / nonce /
+ * signature) were moved from server.js here.
  *
- * Контракт:
- *   - каждая проверка — отдельная чистая функция `validateXxx(...)`;
- *   - результат: `{ ok: true, ...данные }` либо `{ ok: false, status, error }`,
- *     где `status` — HTTP-код, `error` — строка ошибки (обратно совместимы
- *     с прежними ответами server.js);
- *   - `validateProof(proof, ctx)` и `validateRegister(...)` — агрегаты для
- *     маршрутов `/api/v1/proof/submit` и `/api/v1/device/register`.
+ * Contract:
+ *   - each check is a separate pure function `validateXxx(...)`;
+ *   - the result is `{ ok: true, ...data }` or `{ ok: false, status, error }`,
+ *     where `status` is the HTTP code and `error` the error string (backward
+ *     compatible with the previous server.js responses);
+ *   - `validateProof(proof, ctx)` and `validateRegister(...)` — aggregates for
+ *     the `/api/v1/proof/submit` and `/api/v1/device/register` routes.
  *
- * Конфигурация лимитов загружается при старте:
- *   приоритет: переменные окружения > policy-config.json > дефолты.
- *   См. policy-config.json и раздел "Конфигурация политик" в oracle/README.md.
+ * Limit configuration is loaded at startup:
+ *   priority: environment variables > policy-config.json > defaults.
+ *   See policy-config.json and the "Policy configuration" section in oracle/README.md.
  */
 
 const fs = require('fs');
@@ -29,35 +29,35 @@ const bs58 = require('bs58').default;
 const { Keypair, PublicKey } = require('@solana/web3.js');
 
 // ════════════════════════════════════════════════════════════════
-//  КОНФИГУРАЦИЯ ПОЛИТИК (ADR-0003: лимиты — параметры, не хардкод)
+//  POLICY CONFIGURATION (ADR-0003: limits are parameters, not hardcoded)
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Значения по умолчанию. Синхронизированы с on-chain:
+ * Default values. Synced with on-chain:
  *   - constants.rs::MAX_CLOCK_SKEW = 300
  *   - security/validation.rs::MAX_PROOF_AGE = 900
  */
 const DEFAULT_CONFIG = {
-    // Лимит энергии в одном отчёте (Wh) — защита от инфляции (CR-2).
+    // Energy limit per report (Wh) — inflation protection (CR-2).
     maxEnergyPerReportWh: 1_000_000_000,
-    // Метка времени не может быть в будущем более чем на это число секунд (M-3).
+    // The timestamp may not be more than this many seconds in the future (M-3).
     maxTimestampSkewSec: 300,
-    // Доказательство не может быть старше этого числа секунд (M-3).
+    // The proof may not be older than this many seconds (M-3).
     maxProofAgeSec: 900,
-    // Глобальный rate-limit: запросов в минуту на один IP (M-6).
+    // Global rate limit: requests per minute per IP (M-6).
     rateLimitPerMinute: 100,
-    // Публичный URL оракула, который попадает в подписанный Device Manifest
-    // (ADR-0004). Устройство будет слать proof'ы именно на этот адрес.
+    // Public oracle URL that goes into the signed Device Manifest
+    // (ADR-0004). The device sends proofs exactly to this address.
     oracleUrl: 'http://localhost:3000',
-    // Номинальная мощность устройства по умолчанию (Вт) для Device Manifest,
-    // если для устройства не задано иное значение (ADR-0004).
+    // Default device rated power (W) for the Device Manifest,
+    // when the device has no explicit value (ADR-0004).
     defaultRatedPowerW: 10_000,
-    // Максимальный размер образа прошивки для OTA (байт) — защита от DoS
-    // и переполнения OTA-раздела (ADR-0008).
+    // Max firmware image size for OTA (bytes) — protection against DoS
+    // and OTA partition overflow (ADR-0008).
     maxFirmwareSizeBytes: 2_000_000,
 };
 
-/** Маппинг env-переменных → ключей конфигурации (env имеет приоритет). */
+/** Mapping of env vars → config keys (env takes priority). */
 const CONFIG_ENV_KEYS = {
     MAX_ENERGY_PER_REPORT_WH: 'maxEnergyPerReportWh',
     MAX_TIMESTAMP_SKEW_SEC: 'maxTimestampSkewSec',
@@ -68,7 +68,7 @@ const CONFIG_ENV_KEYS = {
     MAX_FIRMWARE_SIZE_BYTES: 'maxFirmwareSizeBytes',
 };
 
-/** Текущая (активная) конфигурация. Мутируется через setConfig/reloadConfig. */
+/** Current (active) configuration. Mutated via setConfig/reloadConfig. */
 let config = { ...DEFAULT_CONFIG };
 
 function _isPositiveNumber(v) {
@@ -80,9 +80,9 @@ function _isNonEmptyString(v) {
 }
 
 /**
- * Привести значение к валидному типу для ключа конфигурации.
- * Числовые ключи принимают number или числовую строку (> 0); строковые —
- * непустую строку. Возвращает значение или undefined, если оно некорректно.
+ * Coerce a value to the valid type for a config key.
+ * Numeric keys accept a number or numeric string (> 0); string keys —
+ * a non-empty string. Returns the value or undefined if invalid.
  */
 function _coerceValue(key, v) {
     if (typeof DEFAULT_CONFIG[key] === 'string') {
@@ -93,12 +93,12 @@ function _coerceValue(key, v) {
 }
 
 /**
- * Загрузить конфигурацию: дефолты → policy-config.json → переменные окружения.
- * Возвращает новый объект конфигурации и кладёт его в `config`.
+ * Load configuration: defaults → policy-config.json → environment variables.
+ * Returns a new config object and stores it in `config`.
  *
  * @param {object} [opts]
- * @param {string} [opts.configPath] путь к JSON-файлу (по умолчанию POLICY_CONFIG_PATH или ./policy-config.json)
- * @returns {object} активная конфигурация
+ * @param {string} [opts.configPath] path to the JSON file (default POLICY_CONFIG_PATH or ./policy-config.json)
+ * @returns {object} the active configuration
  */
 function loadConfig(opts = {}) {
     const cfg = { ...DEFAULT_CONFIG };
@@ -127,8 +127,8 @@ function loadConfig(opts = {}) {
         }
     }
 
-    // Мутируем объект на месте, чтобы внешняя ссылка `module.exports.config`
-    // всегда отражала актуальную конфигурацию (важно для тестов/горячей смены).
+    // Mutate the object in place so the external `module.exports.config` reference
+    // always reflects the live configuration (important for tests/hot reload).
     for (const key of Object.keys(DEFAULT_CONFIG)) {
         config[key] = cfg[key];
     }
@@ -136,16 +136,16 @@ function loadConfig(opts = {}) {
 }
 
 /**
- * Перезагрузить конфигурацию из policy-config.json + env.
- * Полезно при смене файла конфигурации без рестарта, а также в тестах.
+ * Reload the configuration from policy-config.json + env.
+ * Useful when the config file changes without a restart, and in tests.
  */
 function reloadConfig() {
     return loadConfig();
 }
 
 /**
- * Задать/переопределить значения конфигурации в рантайме (в основном для тестов).
- * @param {object} overrides частичные переопределения ключей DEFAULT_CONFIG
+ * Set/override configuration values at runtime (mainly for tests).
+ * @param {object} overrides partial overrides of DEFAULT_CONFIG keys
  */
 function setConfig(overrides = {}) {
     for (const key of Object.keys(DEFAULT_CONFIG)) {
@@ -156,8 +156,8 @@ function setConfig(overrides = {}) {
 }
 
 /**
- * Готовый объект опций для express-rate-limit (RATE_LIMIT_PER_MINUTE).
- * Сервер просто подставляет его в rateLimit(policy.rateLimitOptions()).
+ * Ready-made options object for express-rate-limit (RATE_LIMIT_PER_MINUTE).
+ * The server just plugs it into rateLimit(policy.rateLimitOptions()).
  */
 function rateLimitOptions() {
     return {
@@ -170,10 +170,10 @@ function rateLimitOptions() {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  ХЕЛПЕРЫ (канонические сообщения подписи, on-chain формат)
+//  HELPERS (canonical signing messages, on-chain format)
 // ════════════════════════════════════════════════════════════════
 
-/** little-endian u64 (совпадает с state/oracle.rs device_message_to_sign). */
+/** little-endian u64 (matches device_message_to_sign in state/oracle.rs). */
 function le8(value) {
     const b = Buffer.alloc(8);
     b.writeBigUInt64LE(BigInt(Math.trunc(Number(value))), 0);
@@ -190,12 +190,12 @@ function buildOracleMessage(deviceIdPubkey, nonce, timestamp, verifiedAt, energy
     return Buffer.concat([deviceIdPubkey.toBuffer(), le8(nonce), le8(timestamp), le8(verifiedAt), le8(energyWh)]);
 }
 
-/** Prefix канонического сообщения ротации ключа (совпадает с security/lifecycle.rs). */
+/** Prefix of the canonical key-rotation message (matches security/lifecycle.rs). */
 const DEVICE_ROTATE_MESSAGE_PREFIX = Buffer.from('enrg:device:rotate', 'utf8');
 
 /**
- * Сообщение ротации ключа (ADR-0007), подписываемое НОВЫМ ключом устройства
- * (зеркало security/lifecycle.rs::device_rotate_message):
+ * Key-rotation message (ADR-0007) signed by the device's NEW key
+ * (a mirror of security/lifecycle.rs::device_rotate_message):
  *   b"enrg:device:rotate" || new_device_id(32) || owner(32)
  *                        || rotate_nonce(8 LE) || rotate_timestamp(8 LE)
  */
@@ -210,10 +210,10 @@ function buildDeviceRotateMessage(newDeviceIdPubkey, ownerPubkey, rotateNonce, r
 }
 
 /**
- * Разобрать device_id как Solana Pubkey (32 байта):
- *   - "0x" + 64 hex-символа, либо
- *   - base58-строка, декодирующаяся ровно в 32 байта.
- * Возвращает PublicKey или null.
+ * Parse device_id as a Solana Pubkey (32 bytes):
+ *   - "0x" + 64 hex chars, or
+ *   - a base58 string that decodes to exactly 32 bytes.
+ * Returns a PublicKey or null.
  */
 function parseDevicePubkey(device_id) {
     if (typeof device_id !== 'string' || !device_id) return null;
@@ -230,22 +230,22 @@ function parseDevicePubkey(device_id) {
 
 
 // ════════════════════════════════════════════════════════════════
-//  DEVICE MANIFEST (ADR-0004) — каноническое сообщение и подписи
+//  DEVICE MANIFEST (ADR-0004) — canonical message and signatures
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Каноническая строка для подписи Device Manifest (ADR-0004).
+ * Canonical string for signing the Device Manifest (ADR-0004).
  *
- * Формат (должен побайтово совпадать в оракуле и в прошивке ESP32):
+ * Format (must match byte-for-byte in the oracle and the ESP32 firmware):
  *   `device_id|rated_power|oracle_url|public_key|timestamp`
  *   `|trust_level|heartbeat_interval|proof_threshold|policy_version|verifier_endpoint`
  *
- * Поля ADR-0004 (trust_level, heartbeat_interval, proof_threshold,
- * policy_version, verifier_endpoint) добавлены в 2026-08-18 (аудит, P1-12).
+ * ADR-0004 fields (trust_level, heartbeat_interval, proof_threshold,
+ * policy_version, verifier_endpoint) were added on 2026-08-18 (audit, P1-12).
  *
- * Ограничение: поля НЕ должны содержать символ '|'. Оракул гарантирует это
- * для oracle_url (валидируется в эндпоинте), остальные поля — base58/hex/
- * base64/число, в которых '|' невозможен.
+ * Constraint: fields MUST NOT contain the '|' character. The oracle guarantees this
+ * for oracle_url (validated in the endpoint); the other fields are base58/hex/
+ * base64/number, where '|' is impossible.
  *
  * @param {object} m { device_id, rated_power, oracle_url, public_key, timestamp,
  *                     trust_level, heartbeat_interval, proof_threshold,
@@ -257,11 +257,11 @@ function buildManifestMessage(m) {
 }
 
 /**
- * Подписать Device Manifest ключом оракула (FOUNDER_KEY, Ed25519).
+ * Sign the Device Manifest with the oracle key (FOUNDER_KEY, Ed25519).
  *
- * @param {object} manifest поля манифеста (см. buildManifestMessage)
- * @param {Uint8Array} secretKey Ed25519 secret key (64 байта)
- * @returns {string} base64-подпись (64 байта)
+ * @param {object} manifest manifest fields (see buildManifestMessage)
+ * @param {Uint8Array} secretKey Ed25519 secret key (64 bytes)
+ * @returns {string} base64 signature (64 bytes)
  */
 function signManifest(manifest, secretKey) {
     const msg = Buffer.from(buildManifestMessage(manifest), 'utf8');
@@ -270,12 +270,12 @@ function signManifest(manifest, secretKey) {
 }
 
 /**
- * Проверить подпись Device Manifest публичным ключом оракула (Ed25519).
- * Зеркалит логику прошивки ESP32 (verifyManifest в esp32_proof_sender_v3.ino).
+ * Verify the Device Manifest signature with the oracle public key (Ed25519).
+ * Mirrors the ESP32 firmware logic (verifyManifest in esp32_proof_sender_v3.ino).
  *
- * @param {object} manifest поля манифеста (см. buildManifestMessage)
- * @param {string} signature base64-подпись
- * @param {Uint8Array|string} publicKey публичный ключ оракула (32 байта) или base64
+ * @param {object} manifest manifest fields (see buildManifestMessage)
+ * @param {string} signature base64 signature
+ * @param {Uint8Array|string} publicKey oracle public key (32 bytes) or base64
  * @returns {{ok: true} | {ok: false, error: string}}
  */
 function verifyManifest(manifest, signature, publicKey) {
@@ -313,24 +313,24 @@ function verifyManifest(manifest, signature, publicKey) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  FIRMWARE (ADR-0008) — каноническое сообщение и подписи OTA-образа
+//  FIRMWARE (ADR-0008) — canonical message and signatures for the OTA image
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Каноническая строка для подписи firmware-метаданных (ADR-0008).
+ * Canonical string for signing firmware metadata (ADR-0008).
  *   `version|image_hash|image_size`
- * Должна побайтово совпадать в оракуле и в прошивке ESP32
- * (verify_firmware_signature в esp32_proof_sender_v3.ino).
- * Поля не должны содержать '|' (валидируется на стороне оракула).
+ * Must match byte-for-byte in the oracle and the ESP32 firmware
+ * (verify_firmware_signature in esp32_proof_sender_v3.ino).
+ * Fields must not contain '|' (validated oracle-side).
  */
 function buildFirmwareMessage(f) {
     return `${f.version}|${f.image_hash}|${f.image_size}`;
 }
 
 /**
- * Подписать firmware-метаданные ключом оракула/основателя (Ed25519).
- * Подпись покрывает version + hash + size; подлинность самого образа
- * обеспечивается проверкой SHA-256(image) == image_hash на устройстве.
+ * Sign firmware metadata with the oracle/founder key (Ed25519).
+ * The signature covers version + hash + size; the image's authenticity
+ * is ensured by the device checking SHA-256(image) == image_hash.
  */
 function signFirmware(firmware, secretKey) {
     const msg = Buffer.from(buildFirmwareMessage(firmware), 'utf8');
@@ -339,11 +339,11 @@ function signFirmware(firmware, secretKey) {
 }
 
 /**
- * Проверить подпись firmware-метаданных (зеркалит прошивку ESP32).
+ * Verify the firmware metadata signature (mirrors the ESP32 firmware).
  *
  * @param {object} f { version, image_hash, image_size }
- * @param {string} signature base64-подпись
- * @param {Uint8Array|string} publicKey публичный ключ оракула (32 байта) или base64
+ * @param {string} signature base64 signature
+ * @param {Uint8Array|string} publicKey oracle public key (32 bytes) or base64
  * @returns {{ok: true} | {ok: false, error: string}}
  */
 function verifyFirmware(f, signature, publicKey) {
@@ -383,22 +383,22 @@ function verifyFirmware(f, signature, publicKey) {
 }
 
 
-/** Короткая фабрика результата-ошибки. */
+/** Short error-result factory. */
 function fail(status, error) {
     return { ok: false, status, error };
 }
 
 /**
- * Загрузить ключевую пару ОРАКУЛА для подписи OracleReport в mint (ADR-0003).
+ * Load the ORACLE keypair for signing the OracleReport in mint (ADR-0003).
  *
- * Мульти-владельческий mint: любой оракул из OracleRegistry может подписывать
- * отчёты, НЕ будучи основателем. Ключ оракула задаётся отдельно от founder:
- *   - ORACLE_KEY (env, JSON-массив 64 байт);
- *   - ORACLE_KEY_PATH (файл) — рекомендуется (секрет не в /proc/<pid>/environ).
- * Публичный ключ оракула обязан быть добавлен в on-chain OracleRegistry
- * (addOracle), иначе mint будет отклонён (UntrustedOracle).
+ * Multi-owner mint: any oracle in the OracleRegistry may sign
+ * reports WITHOUT being the founder. The oracle key is set separately from the founder:
+ *   - ORACLE_KEY (env, JSON array of 64 bytes);
+ *   - ORACLE_KEY_PATH (file) — recommended (no secret in /proc/<pid>/environ).
+ * The oracle public key must be added to the on-chain OracleRegistry
+ * (addOracle), otherwise the mint is rejected (UntrustedOracle).
  *
- * @returns {Keypair|null} ключ оракула или null (минт недоступен)
+ * @returns {Keypair|null} the oracle keypair or null (minting unavailable)
  */
 function getOracleKeypair() {
     if (process.env.ORACLE_KEY) {
@@ -413,15 +413,15 @@ function getOracleKeypair() {
 
 
 // ════════════════════════════════════════════════════════════════
-//  ВАЛИДАЦИИ (по одной функции на проверку)
+//  VALIDATIONS (one function per check)
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Проверка формата device_id.
- * Допустимо: base58 (алфавит без 0/O/I/l) или hex с префиксом "0x" (чётная длина).
- * Отклоняет спецсимволы, пробелы, XSS-пейлоады, строки > 128 символов (M-5).
+ * device_id format check.
+ * Allowed: base58 (alphabet without 0/O/I/l) or hex with a "0x" prefix (even length).
+ * Rejects special chars, spaces, XSS payloads, and strings > 128 chars (M-5).
  *
- * @param {*} device_id значение из запроса
+ * @param {*} device_id value from the request
  * @returns {{ok: true, deviceIdPubkey: (PublicKey|null)} | {ok: false, status: number, error: string}}
  */
 function validateDeviceId(device_id) {
@@ -437,12 +437,12 @@ function validateDeviceId(device_id) {
 }
 
 /**
- * Валидация energyWh: тип number/string, конечное значение, строка только
- * цифры с опциональной дробной частью, положительное, ≤ maxEnergyPerReportWh.
- * Отклоняет NaN/Infinity, null (Number(null)=0), отрицательные, нуль и
- * значения выше лимита (CR-2).
+ * energyWh validation: number/string type, finite value, string with only
+ * digits with an optional fraction, positive, ≤ maxEnergyPerReportWh.
+ * Rejects NaN/Infinity, null (Number(null)=0), negatives, zero and
+ * values above the limit (CR-2).
  *
- * @param {*} energyWh значение из запроса
+ * @param {*} energyWh value from the request
  * @returns {{ok: true, energyWhNum: number, energyWhInt: number} | {ok: false, status, error}}
  */
 function validateEnergyWh(energyWh) {
@@ -466,13 +466,13 @@ function validateEnergyWh(energyWh) {
 }
 
 /**
- * Валидация timestamp: тип number/string, конечное значение, свежесть.
- *   - не в будущем более чем на maxTimestampSkewSec (по умолчанию 300 = 5 мин);
- *   - не старше maxProofAgeSec (по умолчанию 900 = 15 мин).
- * Синхронизировано с on-chain verify_timestamp() (M-3).
+ * timestamp validation: number/string type, finite value, freshness.
+ *   - not more than maxTimestampSkewSec in the future (default 300 = 5 min);
+ *   - not older than maxProofAgeSec (default 900 = 15 min).
+ * Synced with the on-chain verify_timestamp() (M-3).
  *
- * @param {*} timestamp значение из запроса
- * @param {number} [nowSec] текущее время в секундах (для тестов; по умолчанию Date.now()/1000)
+ * @param {*} timestamp value from the request
+ * @param {number} [nowSec] current time in seconds (for tests; default Date.now()/1000)
  * @returns {{ok: true, timestamp: number} | {ok: false, status, error}}
  */
 function validateTimestamp(timestamp, nowSec) {
@@ -494,12 +494,12 @@ function validateTimestamp(timestamp, nowSec) {
 }
 
 /**
- * Валидация nonce: положительное целое, строго больше последнего принятого
- * nonce устройства (защита от replay, CR-2). Последний nonce передаётся
- * аргументом либо резолвится в validateProof через ctx.getLastNonce.
+ * nonce validation: a positive integer, strictly greater than the last accepted
+ * device nonce (replay protection, CR-2). The last nonce is passed
+ * as an argument or resolved in validateProof via ctx.getLastNonce.
  *
- * @param {*} nonce значение из запроса
- * @param {number} [lastNonce] последний принятый nonce (по умолчанию 0)
+ * @param {*} nonce value from the request
+ * @param {number} [lastNonce] the last accepted nonce (default 0)
  * @returns {{ok: true, nonce: number} | {ok: false, status, error}}
  */
 function validateNonce(nonce, lastNonce = 0) {
@@ -518,26 +518,26 @@ function validateNonce(nonce, lastNonce = 0) {
 
 
 /**
- * Проверка подписи (proof-of-possession) для proof.
+ * Signature (proof-of-possession) check for a proof.
  *
- * Форматы (CR-3):
- *   - 'binary' (on-chain совместимая): Ed25519 над
+ * Formats (CR-3):
+ *   - 'binary' (on-chain compatible): Ed25519 over
  *       device_id(32) || nonce(le8) || device_timestamp(le8) || energy_wh(le8)
- *     — только её можно использовать для on-chain mint;
- *   - 'legacy' (строковый формат): Ed25519 над
+ *     — only this one can be used for on-chain mint;
+ *   - 'legacy' (string format): Ed25519 over
  *       `${device_id}|${timestamp}|${energyWh}|${nonce}`
- *     — принимается, но mint недоступен (только накопление).
+ *     — accepted, but minting is unavailable (accumulation only).
  *
- * Ошибки обратно совместимы: 400 'invalid signature format' при битой base64,
- * 401 'invalid signature' при неверной длине/невалидной подписи.
+ * Errors are backward compatible: 400 'invalid signature format' on broken base64,
+ * 401 'invalid signature' on a wrong length/invalid signature.
  *
  * @param {object} p
  * @param {string} p.device_id
  * @param {PublicKey|null} p.deviceIdPubkey
- * @param {string} p.publicKeyB64 base64-публичный ключ устройства (из реестра)
- * @param {string} p.signature base64-подпись
- * @param {*} p.rawNonce / p.rawTimestamp / p.rawEnergyWh — исходные значения (для legacy-формата)
- * @param {number} p.nonce / p.timestamp / p.energyWhInt — проверенные числовые значения (для binary-формата)
+ * @param {string} p.publicKeyB64 device base64 public key (from the registry)
+ * @param {string} p.signature base64 signature
+ * @param {*} p.rawNonce / p.rawTimestamp / p.rawEnergyWh — raw values (for the legacy format)
+ * @param {number} p.nonce / p.timestamp / p.energyWhInt — validated numeric values (for the binary format)
  * @returns {{ok: true, sigMode: 'binary'|'legacy', sigBytes: Buffer, pubBytes: Buffer, deviceIdPubkey: PublicKey|null} | {ok: false, status, error}}
  */
 function validateSignature(p) {
@@ -578,17 +578,17 @@ function validateSignature(p) {
 
 
 /**
- * Агрегат: полная валидация входящего proof для /api/v1/proof/submit.
+ * Aggregate: full validation of an incoming proof for /api/v1/proof/submit.
  *
- * Порядок проверок (и HTTP-коды) сохранены такими же, как в прежнем server.js:
+ * The check order (and HTTP codes) match the previous server.js:
  *   missing fields(400) → device_id(400) → energyWh(400) → timestamp(400)
- *   → unknown device(400, через ctx.getPublicKey) → nonce(400) → signature(400/401).
+ *   → unknown device (400, via ctx.getPublicKey) → nonce(400) → signature(400/401).
  *
- * @param {object} proof тело запроса { device_id, timestamp, energyWh, nonce, signature, pool_id? }
+ * @param {object} proof the request body { device_id, timestamp, energyWh, nonce, signature, pool_id? }
  * @param {object} [ctx]
- * @param {(device_id: string) => string|null} [ctx.getPublicKey] резолвер base64-публичного ключа из реестра
- * @param {(device_id: string) => number} [ctx.getLastNonce] резолвер последнего принятого nonce
- * @param {number} [ctx.nowSec] текущее время (сек) для проверки свежести; по умолчанию Date.now()/1000
+ * @param {(device_id: string) => string|null} [ctx.getPublicKey] resolver of the registry base64 public key
+ * @param {(device_id: string) => number} [ctx.getLastNonce] resolver of the last accepted nonce
+ * @param {number} [ctx.nowSec] current time (sec) for the freshness check; default Date.now()/1000
  * @returns {{ok: true, proof: object, pool_id?: string} | {ok: false, status, error}}
  */
 function validateProof(proof, ctx = {}) {
@@ -609,7 +609,7 @@ function validateProof(proof, ctx = {}) {
     const t = validateTimestamp(timestamp, ctx.nowSec);
     if (!t.ok) return t;
 
-    // Реестр: устройство должно быть известно оракулу (registry-состояние).
+    // Registry: the device must be known to the oracle (registry state).
     const publicKeyB64 = ctx.getPublicKey ? ctx.getPublicKey(device_id) : ctx.publicKeyB64;
     if (!publicKeyB64) return fail(400, 'unknown device');
 
@@ -648,13 +648,13 @@ function validateProof(proof, ctx = {}) {
 
 
 /**
- * Агрегат: полная валидация регистрации устройства для /api/v1/device/register.
- * Ошибки обратно совместимы: 400 для формата/длин, 403 при неверной
- * proof-of-possession-подписи.
+ * Aggregate: full device-registration validation for /api/v1/device/register.
+ * Errors are backward compatible: 400 for format/lengths, 403 for an invalid
+ * proof-of-possession signature.
  *
  * @param {string} device_id
- * @param {string} public_key base64 (32 байта)
- * @param {string} signature base64 (64 байта) над сообщением `${device_id}|${public_key}`
+ * @param {string} public_key base64 (32 bytes)
+ * @param {string} signature base64 (64 bytes) over the message `${device_id}|${public_key}`
  * @returns {{ok: true, pubBytes: Buffer, sigBytes: Buffer} | {ok: false, status, error}}
  */
 function validateRegister(device_id, public_key, signature) {
@@ -681,7 +681,7 @@ function validateRegister(device_id, public_key, signature) {
         return fail(400, 'invalid signature format');
     }
 
-    // CR-1: proof-of-possession по детерминированному challenge.
+    // CR-1: proof-of-possession over the deterministic challenge.
     const msgBytes = Buffer.from(`${device_id}|${public_key}`, 'utf8');
     const verified = nacl.sign.detached.verify(
         new Uint8Array(msgBytes),
@@ -694,7 +694,7 @@ function validateRegister(device_id, public_key, signature) {
     return { ok: true, pubBytes, sigBytes };
 }
 
-// Загружаем конфигурацию при импорте модуля (старт оракула).
+// Load the configuration when the module is imported (oracle startup).
 loadConfig();
 
 module.exports = {

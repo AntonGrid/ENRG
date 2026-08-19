@@ -2,8 +2,8 @@ version: '3.9'
 
 services:
   oracle:
-    # P1 (аудит 2026-08-18): build context — корень репозитория, т.к. server.js
-    # лежит в корне, а не в oracle/.
+    # P1 (audit 2026-08-18): build context is the repository root because server.js
+    # lives in the root, not in oracle/.
     build:
       context: .
       dockerfile: oracle/Dockerfile
@@ -14,12 +14,12 @@ services:
       PORT: 3000
       PROGRAM_ID: ${PROGRAM_ID:-}
       MINT_ADDRESS: ${MINT_ADDRESS:-}
-      # H-1: предпочтительнее передавать ПУТЬ к ключу, а не сам ключ в env.
+      # H-1: prefer passing the KEY PATH rather than the key itself in the env.
       FOUNDER_KEY_PATH: ${FOUNDER_KEY_PATH:-}
       FOUNDER_KEY: ${FOUNDER_KEY:-}
       RPC_ENDPOINT: ${RPC_ENDPOINT:-}
     volumes:
-      # Персистентность SQLite-хранилища и OTA-образов (ADR-0008).
+      # Persistence of the SQLite store and OTA images (ADR-0008).
       - ./enrg.db:/app/enrg.db
       - ./firmware/updates:/app/firmware/updates
     restart: unless-stopped
@@ -33,7 +33,7 @@ services:
       - "4000:4000"
     environment:
       PORT: 4000
-      # H-5: ключ обязателен (≥32 символов) — без него сервис упадёт при старте.
+      # H-5: the key is required (≥32 chars) — without it the service fails at startup.
       REGISTRY_ADMIN_KEY: ${REGISTRY_ADMIN_KEY}
       SERVICE_NAME: enrg-manifest-registry
     restart: unless-stopped

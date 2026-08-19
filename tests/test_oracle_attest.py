@@ -29,7 +29,7 @@ def test_oracle_attest_request_ok():
 
 
 def test_oracle_attest_request_invalid_schema():
-    # Отсутствует обязательное поле signature
+    # The required signature field is missing
     payload = {
         "device_id": "dev_9e9c644e1580a83b",
         "nonce": "abc12345xyz",
@@ -52,7 +52,7 @@ def test_oracle_attest_request_invalid_timestamp():
     payload = {
         "device_id": "dev_9e9c644e1580a83b",
         "nonce": "abc12345xyz",
-        # Неверный формат: нет 'Z' на конце
+        # Invalid format: no trailing 'Z'
         "timestamp": "2026-07-25T19:05:00",
         "algo": "mock",
         "payload": {"max_power_kw": 2.5},

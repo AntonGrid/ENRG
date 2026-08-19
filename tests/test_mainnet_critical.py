@@ -42,8 +42,8 @@ def test_deploy_simulation():
         # All critical instructions must be present
         instruction_names = {ix["name"] for ix in idl.get("instructions", [])}
     else:
-        # Fallback: используем snake_case имена (совпадают с IDL-именами
-        # инструкций anchor), чтобы тест проходил и в CI без anchor build.
+        # Fallback: use snake_case names (matching the anchor IDL
+        # instruction names) so the test passes in CI without an anchor build.
         instruction_names = {
             "initialize_token", "initialize_vault", "initialize_funds",
             "init_config", "initialize_oracle_registry",

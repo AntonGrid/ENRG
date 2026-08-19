@@ -33,7 +33,7 @@ def test_build_attestation_params_basic():
 
     params = build_attestation_params(att)
 
-    # Проверяем хэши
+    # Check the hashes
     assert params.attestation_id == keccak(text=att["attestation_id"])
     assert params.device_id == keccak(text=att["device_id"])
 
@@ -44,7 +44,7 @@ def test_build_attestation_params_basic():
     assert params.max_power_w == 2500
 
     # issued_at -> unix timestamp
-    # сверим только что он > 0 и совпадает с ручным парсом
+    # verify it is > 0 and matches the manual parse
     dt = datetime.fromisoformat("2026-07-25T19:05:00+00:00")
     expected_ts = int(dt.replace(tzinfo=timezone.utc).timestamp())
     assert params.issued_at == expected_ts

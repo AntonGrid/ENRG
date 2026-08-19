@@ -1,15 +1,15 @@
 'use strict';
 
 /**
- * Unit-тесты Policy Engine (ADR-0003) — модуль policy.js.
+ * Unit tests for the Policy Engine (ADR-0003) — the policy.js module.
  *
- * Запуск:  npx mocha tests/policy.test.js   (или npm run test:policy)
- * Покрытие: validateDeviceId / validateEnergyWh / validateTimestamp /
+ * Run:  npx mocha tests/policy.test.js   (or npm run test:policy)
+ * Coverage: validateDeviceId / validateEnergyWh / validateTimestamp /
  *           validateNonce / validateSignature / validateRegister /
- *           validateProof + конфигурация политик.
+ *           validateProof + policy configuration.
  *
- * Проверяется, что policy.js возвращает те же коды HTTP и строки ошибок,
- * что и прежний server.js (обратная совместимость с клиентами ESP32/тестами).
+ * Verifies that policy.js returns the same HTTP codes and error strings
+ * as the previous server.js (backward compatibility with ESP32 clients/tests).
  */
 
 const assert = require('assert');
@@ -23,10 +23,10 @@ const { PublicKey } = require('@solana/web3.js');
 
 const policy = require('../policy');
 
-// ── Утилиты ──
+// ── Utilities ──
 const nowSec = 1_700_000_000;
 
-/** Генерирует device_id (base58 публичного ключа) + ключевую пару. */
+/** Generates a device_id (base58 of the public key) + a keypair. */
 function makeDevice() {
     const kp = nacl.sign.keyPair();
     const publicKeyB64 = util.encodeBase64(kp.publicKey);
@@ -54,8 +54,8 @@ describe('policy.validateDeviceId', function () {
         assert.strictEqual(policy.validateDeviceId('').ok, false);
         assert.strictEqual(policy.validateDeviceId('a'.repeat(129)).ok, false);
         assert.strictEqual(policy.validateDeviceId('abc def').ok, false);
-        assert.strictEqual(policy.validateDeviceId('0xabc').ok, false); // нечётная длина hex
-        assert.strictEqual(policy.validateDeviceId(123).ok, false);     // не строка
+        assert.strictEqual(policy.validateDeviceId('0xabc').ok, false); // odd hex length
+        assert.strictEqual(policy.validateDeviceId(123).ok, false);     // not a string
     });
 
     it('returns 400 with backward-compatible error message', function () {
@@ -192,13 +192,13 @@ describe('policy.validateSignature', function () {
         assert.strictEqual(r.error, 'invalid signature');
     });
 
-    it('rejects broken base64 with 401 (Node Buffer.from(base64) is lenient — как в прежнем server.js)', function () {
+    it('rejects broken base64 with 401 (Node Buffer.from(base64) is lenient — as in the previous server.js)', function () {
         const r = policy.validateSignature(sigParams({ signature: '!!!not-base64!!!' }));
         assert.strictEqual(r.status, 401);
         assert.strictEqual(r.error, 'invalid signature');
     });
 
-    it('rejects broken publicKeyB64 with 401 (lenient base64 → длина 0 ≠ 32)', function () {
+    it('rejects broken publicKeyB64 with 401 (lenient base64 → length 0 ≠ 32)', function () {
         const msg = policy.buildDeviceMessage(dev.pubkey, nonce, timestamp, energyWhInt);
         const r = policy.validateSignature(sigParams({
             publicKeyB64: '!!!not-base64!!!',
@@ -241,7 +241,7 @@ describe('policy.validateRegister', function () {
         assert.strictEqual(r.error, 'invalid public key (must be 32 bytes base64)');
     });
 
-    it('rejects a non-base64 public key with 400 (lenient decode → длина 0 ≠ 32)', function () {
+    it('rejects a non-base64 public key with 400 (lenient decode → length 0 ≠ 32)', function () {
         const r = policy.validateRegister(dev.device_id, '!!!', regSig());
         assert.strictEqual(r.status, 400);
         assert.strictEqual(r.error, 'invalid public key (must be 32 bytes base64)');
@@ -353,7 +353,7 @@ describe('policy.validateProof', function () {
     });
 
     it('preserves check order: bad device_id is reported first', function () {
-        const body = proofBody({ device_id: '0xabc', signature: 'AAAA' }); // нечётная длина hex; подпись непустая, чтобы пройти missing-fields
+        const body = proofBody({ device_id: '0xabc', signature: 'AAAA' }); // odd hex length; non-empty signature to pass missing-fields
         const r = policy.validateProof(body, ctx());
         assert.strictEqual(r.status, 400);
         assert.strictEqual(r.error, 'invalid device_id format (base58 or hex only)');
@@ -374,7 +374,7 @@ describe('policy config', function () {
         delete process.env.MAX_TIMESTAMP_SKEW_SEC;
         delete process.env.MAX_PROOF_AGE_SEC;
         delete process.env.RATE_LIMIT_PER_MINUTE;
-        policy.reloadConfig(); // вернуть значения из policy-config.json / дефолты
+        policy.reloadConfig(); // restore values from policy-config.json / defaults
     });
 
     it('rateLimitOptions uses rateLimitPerMinute', function () {
@@ -417,7 +417,7 @@ describe('policy.getOracleKeypair (multi-oracle mint, ADR-0003)', function () {
         process.env.ORACLE_KEY = JSON.stringify(Array.from(kp.secretKey));
         delete process.env.ORACLE_KEY_PATH;
         const loaded = policy.getOracleKeypair();
-        assert.ok(loaded, 'keypair должен загрузиться');
+        assert.ok(loaded, 'the keypair must load');
         assert.strictEqual(Buffer.from(loaded.publicKey.toBytes()).toString('hex'), Buffer.from(kp.publicKey).toString('hex'));
     });
 

@@ -1,6 +1,6 @@
 const nacl = require('tweetnacl');
 
-// Используем уже сгенерированную ключевую пару
+// Use the already generated keypair
 const privateKeyBase64 = 'jMId88L7QgB+cK64E42tReTu/hbyWDXRhTBIfBbIqouI3Wv4kDSWkFBOoJ+hINhVMOyhlo2L+T/2iMGjaP6aOA==';
 const privateKey = Buffer.from(privateKeyBase64, 'base64');
 
@@ -17,7 +17,7 @@ const signatureBase64 = Buffer.from(signature).toString('base64');
 
 console.log('📝 Message:', message);
 console.log('✍️ Signature (base64):', signatureBase64);
-console.log('\n=== Команда для отправки ===');
+console.log('\n=== Command to send ===');
 console.log(`curl -X POST http://localhost:3000/api/v1/proof/submit \\`);
 console.log(`  -H "Content-Type: application/json" \\`);
 console.log(`  -d '{"device_id":"${deviceId}","timestamp":${timestamp},"energyWh":${energyWh},"nonce":${nonce},"signature":"${signatureBase64}"}'`);

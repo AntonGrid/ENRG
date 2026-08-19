@@ -22,7 +22,7 @@ class ENRGClient:
         resp.raise_for_status()
         return resp.json()
 
-    # ---------- Oracle: новый формат запроса ----------
+    # ---------- Oracle: new request format ----------
 
     def oracle_attest_request(
         self,
@@ -59,12 +59,12 @@ class ENRGClient:
         resp.raise_for_status()
         return resp.json()
 
-    # ---------- Oracle: старый формат Attestation ----------
+    # ---------- Oracle: legacy Attestation format ----------
 
     def oracle_attest_legacy(self, attestation: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Отправить полную Attestation в старом формате (но по новой схеме 1.0).
-        Не бросает исключение на 400 — вместо этого печатает ошибку и возвращает тело.
+        Send a full Attestation in the legacy format (but against the new 1.0 schema).
+        Does not raise on 400 — instead prints the error and returns the body.
         """
         resp = self._client.post("/oracle/attest", json=attestation)
         try:
@@ -77,7 +77,7 @@ class ENRGClient:
         elif resp.status_code != 200:
             print(f"Oracle attest (legacy) unexpected status {resp.status_code}:", json.dumps(data, indent=2))
 
-        # Не вызываем raise_for_status(), чтобы скрипт не падал
+        # Do not call raise_for_status() so the script does not crash
         return data
 
     def build_simple_attestation(
@@ -88,9 +88,9 @@ class ENRGClient:
         reason: str = "ok",
     ) -> Dict[str, Any]:
         """
-        Сконструировать простую Attestation для отладки legacy-режима.
-        Подстраиваемся под attestation.schema.json: schema_version=1.0,
-        proof содержит минимум device_id, nonce, timestamp, payload.max_power_kw.
+        Build a simple Attestation for debugging the legacy mode.
+        Follows attestation.schema.json: schema_version=1.0,
+        the proof contains at least device_id, nonce, timestamp, payload.max_power_kw.
         """
         now = datetime.now(timezone.utc).replace(microsecond=0)
         issued_at = now.isoformat().replace("+00:00", "Z")
