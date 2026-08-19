@@ -229,15 +229,15 @@
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
 #include <HTTPClient.h>
-#include <WebServer.h>   // Plug & Play: локальный HTTP-signer (порт ENRG_SIGNER_PORT)
+#include <WebServer.h>   // Plug & Play: local HTTP signer (port ENRG_SIGNER_PORT)
 #include <ESPmDNS.h>     // Plug & Play: mDNS axis-device-XXXX.local
 #include <WiFiManager.h> // Plug & Play: Captive Portal (AP Axis-Device-XXXX)
 #include <Preferences.h>
-#include <ArduinoJson.h>   // ADR-0004: разбор подписанного Device Manifest
-#include <LittleFS.h>      // ADR-0008: staging-область для OTA-образа
-#include <Update.h>        // ADR-0008: ESP32 OTA (обновление прошивки)
-#include <Crypto.h>        // Ed25519 (подписи)
-#include <SHA256.h>        // ADR-0008: SHA-256 для проверки OTA-образа
+#include <ArduinoJson.h>   // ADR-0004: parse the signed Device Manifest
+#include <LittleFS.h>      // ADR-0008: staging area for the OTA image
+#include <Update.h>        // ADR-0008: ESP32 OTA (firmware update)
+#include <Crypto.h>        // Ed25519 (signatures)
+#include <SHA256.h>        // ADR-0008: SHA-256 for OTA image verification
 #include <Ed25519.h>
 
 #if ENRG_USE_PZEM
@@ -308,7 +308,7 @@ int base64_decode(const String &in, uint8_t *out, size_t maxOut) {
     int buf = 0, bits = 0;
     for (size_t i = 0; i < in.length(); i++) {
         char c = in[i];
-        if (c == '=' || c == '\r' || c == '\n' || c == ' ') break; // padding/мусор
+        if (c == '=' || c == '\r' || c == '\n' || c == ' ') break; // padding/junk
         int v = b64_val(c);
         if (v < 0) return -1;
         buf = (buf << 6) | v;
@@ -510,13 +510,13 @@ bool identity_init_v3(uint8_t privateKey[32], uint8_t publicKey[32]) {
 
 #if ENRG_USE_ATECC608
     if (store_seed_atecc(privateKey)) {
-        g_prefs.remove("privkey"); // дубликат в NVS не нужен
+        g_prefs.remove("privkey"); // no duplicate in NVS needed
         Serial.println("[KEY] generated and stored in ATECC608A");
         return true;
     }
-    Serial.println("[WARN] ATECC608A недоступен — ключ хранится в NVS (не Secure Element).");
+    Serial.println("[WARN] ATECC608A unavailable — the key is stored in NVS (not a Secure Element).");
 #else
-    Serial.println("[WARN] Secure Element не включён (ENRG_USE_ATECC608=0) — ключ в NVS (flash).");
+    Serial.println("[WARN] Secure Element disabled (ENRG_USE_ATECC608=0) — key in NVS (flash).");
 #endif
 
     g_prefs.putBytes("privkey", privateKey, 32);
@@ -621,7 +621,7 @@ uint64_t read_energy_wh() {
     return (uint64_t)(energy * 1000.0f); // kWh -> Wh
 #else
     // Stub without a sensor. Connect a PZEM-004T and enable ENRG_USE_PZEM=1.
-    return 1; // 1 Wh за интервал
+    return 1; // 1 Wh per interval
 #endif
 }
 
@@ -653,13 +653,13 @@ static String wifi_pass_from_nvs() { return g_prefs.getString(WIFI_PREF_PASS, ""
 static void wifi_save_creds(const String &ssid, const String &pass) {
     g_prefs.putString(WIFI_PREF_SSID, ssid);
     g_prefs.putString(WIFI_PREF_PASS, pass);
-    Serial.printf("[WIFI] креды сохранены в NVS: %s\n", ssid.c_str());
+    Serial.printf("[WIFI] credentials saved in NVS: %s\n", ssid.c_str());
 }
 
 static void wifi_clear_creds() {
     g_prefs.remove(WIFI_PREF_SSID);
     g_prefs.remove(WIFI_PREF_PASS);
-    Serial.println("[WIFI] креды стёрты из NVS");
+    Serial.println("[WIFI] credentials erased from NVS");
 }
 
 // ── Plug & Play: names are derived from deviceId (last pubkey hex), ──
@@ -714,8 +714,8 @@ bool connect_wifi_from_nvs(unsigned long timeoutMs) {
 static bool start_captive_portal() {
     String apName = ap_name();
     String apPass = ap_password();
-    Serial.printf("[PORTAL] AP: %s (пароль: %s)\n", apName.c_str(), apPass.c_str());
-    Serial.printf("[PORTAL] подключитесь к %s, откройте http://192.168.4.1\n", apName.c_str());
+    Serial.printf("[PORTAL] AP: %s (password: %s)\n", apName.c_str(), apPass.c_str());
+    Serial.printf("[PORTAL] connect to %s, open http://192.168.4.1\n", apName.c_str());
 
     WiFiManager wm;
     // Do not rely on WiFiManager's own persistence — the credentials
@@ -724,14 +724,14 @@ static bool start_captive_portal() {
     wm.setConnectTimeout(30);
 
     if (!wm.startConfigPortal(apName.c_str(), apPass.c_str())) {
-        Serial.println("[PORTAL] пользователь не настроил сеть (таймаут/отмена)");
+        Serial.println("[PORTAL] the user did not configure the network (timeout/cancel)");
         return false;
     }
 
     String ssid = wm.getWiFiSSID();
     String pass = wm.getWiFiPass();
     if (ssid.length() == 0) {
-        Serial.println("[PORTAL] WiFiManager не вернул SSID — продолжаю без WiFi");
+        Serial.println("[PORTAL] WiFiManager did not return an SSID — continuing without WiFi");
         return false;
     }
     wifi_save_creds(ssid, pass);
@@ -745,13 +745,13 @@ static bool setup_wifi() {
         if (connect_wifi_creds(ssid, wifi_pass_from_nvs(), ENRG_WIFI_CONNECT_TIMEOUT_MS)) {
             return true;
         }
-        Serial.println("[WIFI] сохранённая сеть недоступна — запускаю Captive Portal");
+        Serial.println("[WIFI] saved network unavailable — starting the Captive Portal");
     } else {
-        Serial.println("[WIFI] креды не найдены в NVS — запускаю Captive Portal (первая настройка)");
+        Serial.println("[WIFI] no credentials in NVS — starting the Captive Portal (first setup)");
     }
 
     if (start_captive_portal()) {
-        Serial.println("[WIFI] настройка завершена — перезагрузка для чистого старта в STA");
+        Serial.println("[WIFI] setup complete — rebooting for a clean STA start");
         delay(1000);
         ESP.restart();
     }
@@ -806,20 +806,20 @@ static bool transport_allowed(const String &url) {
     if (url.startsWith("https://")) return true;
     if (url.startsWith("http://")) {
 #if ENRG_ALLOW_HTTP
-        Serial.println("[TLS] WARNING: http:// (без шифрования) — только DEV (ENRG_ALLOW_HTTP=1)");
+        Serial.println("[TLS] WARNING: http:// (no encryption) — DEV only (ENRG_ALLOW_HTTP=1)");
         return true;
 #else
         String host = url_host(url);
         if (host_is_local(host)) {
-            Serial.printf("[TLS] WARNING: http:// к локальному узлу %s (только локальный контур)\n",
+            Serial.printf("[TLS] WARNING: http:// to local host %s (local loop only)\n",
                           host.c_str());
             return true;
         }
-        Serial.printf("[TLS] BLOCKED http:// к удалённому узлу (ADR-0008): %.80s\n", url.c_str());
+        Serial.printf("[TLS] BLOCKED http:// to remote host (ADR-0008): %.80s\n", url.c_str());
         return false;
 #endif
     }
-    Serial.printf("[TLS] BLOCKED неизвестная схема URL: %.80s\n", url.c_str());
+    Serial.printf("[TLS] BLOCKED unknown URL scheme: %.80s\n", url.c_str());
     return false;
 }
 
@@ -834,7 +834,7 @@ int send_proof_http(const String &body) {
     if (g_proof_url.startsWith("https://")) {
         // TLS with root CA verification (ENRG_CA_CERT); mTLS optional.
         WiFiClientSecure client;
-        client.setCACert(ENRG_CA_CERT); // обязательная проверка корневого CA
+        client.setCACert(ENRG_CA_CERT); // mandatory root CA verification
 #if ENRG_MTLS
         client.setCertificate(ENRG_CLIENT_CERT);
         client.setPrivateKey(ENRG_CLIENT_PRIVKEY);
@@ -889,7 +889,7 @@ String http_get(const String &url) {
 
     if (url.startsWith("https://")) {
         WiFiClientSecure client;
-        client.setCACert(ENRG_CA_CERT); // обязательная проверка корневого CA
+        client.setCACert(ENRG_CA_CERT); // mandatory root CA verification
 #if ENRG_MTLS
         client.setCertificate(ENRG_CLIENT_CERT);
         client.setPrivateKey(ENRG_CLIENT_PRIVKEY);
@@ -966,7 +966,7 @@ bool verify_manifest(const String &body, const String &deviceId,
     // Founder (oracle) public key from the configuration.
     uint8_t founderPub[32];
     if (!parse_hex(ENRG_FOUNDER_PUBKEY_HEX, founderPub, sizeof(founderPub))) {
-        Serial.println("[MANIFEST] FATAL: ENRG_FOUNDER_PUBKEY_HEX некорректен");
+        Serial.println("[MANIFEST] FATAL: ENRG_FOUNDER_PUBKEY_HEX is invalid");
         return false;
     }
 
@@ -987,7 +987,7 @@ bool verify_manifest(const String &body, const String &deviceId,
     // ADR-0004: all fields are required (audit 2026-08-18, P1-12).
     if (!m_id || !m_rated || !m_oracle || !m_pub || !m_ts || !m_sig ||
         !m_trust || !m_hb || !m_pt || !m_pv || !m_ve) {
-        Serial.println("[MANIFEST] отсутствует одно из обязательных полей ADR-0004");
+        Serial.println("[MANIFEST] one of the required ADR-0004 fields is missing");
         return false;
     }
 
@@ -1033,7 +1033,7 @@ bool load_manifest_from_nvs(const String &deviceId) {
     String stored = g_prefs.getString("manifest", "");
     if (stored.length() == 0) return false;
     if (!apply_manifest(stored, deviceId)) {
-        Serial.println("[MANIFEST] NVS-копия невалидна — перезапросим");
+        Serial.println("[MANIFEST] NVS copy invalid — will re-request");
         g_prefs.remove("manifest");
         return false;
     }
@@ -1061,9 +1061,9 @@ bool init_manifest(const String &deviceId) {
 
     g_manifest_valid = false;
     if (ENRG_MANIFEST_REQUIRED) {
-        Serial.println("[MANIFEST] FATAL: манифест не получен/невалиден — proof'ы заблокированы");
+        Serial.println("[MANIFEST] FATAL: manifest not received/invalid — proofs blocked");
     } else {
-        Serial.println("[MANIFEST] WARN: манифест недоступен — работаем по хардкод-конфигу (обратная совместимость)");
+        Serial.println("[MANIFEST] WARN: manifest unavailable — using the hard-coded config (backward compatibility)");
     }
     return false;
 }
@@ -1075,12 +1075,12 @@ bool init_manifest(const String &deviceId) {
 void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
     // ADR-0004: if the manifest is required but not received/invalid — we do NOT send proofs.
     if (ENRG_MANIFEST_REQUIRED && !g_manifest_valid) {
-        Serial.println("[PROOF] пропуск: нет валидного манифеста (ENRG_MANIFEST_REQUIRED)");
+        Serial.println("[PROOF] skip: no valid manifest (ENRG_MANIFEST_REQUIRED)");
         return;
     }
 
     if (!time_is_synced()) {
-        Serial.println("[NTP] время ещё не синхронизировано — proof пропущен");
+        Serial.println("[NTP] time not synced yet — proof skipped");
         return;
     }
 
@@ -1089,7 +1089,7 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
     // ADR-0004: if the rated power is known (rated_power from the manifest),
     // the energy of one report is capped by it (coarse protection against false readings).
     if (g_rated_power > 0 && energyWh > g_rated_power) {
-        Serial.printf("[PROOF] WARN: energy %lluWh > rated_power %lluW — ограничиваем\n",
+        Serial.printf("[PROOF] WARN: energy %lluWh > rated_power %lluW — clamping\n",
                       (unsigned long long)energyWh, (unsigned long long)g_rated_power);
         energyWh = g_rated_power;
     }
@@ -1106,7 +1106,7 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
     if (g_se050_ready) {
         // Hardware Ed25519 signature inside the SE050 (the private key never leaves the chip).
         if (!se050_sign(msg, sizeof(msg), signature)) {
-            Serial.println("[PROOF] SE050 signing failed — proof пропущен");
+            Serial.println("[PROOF] SE050 signing failed — proof skipped");
             return;
         }
     } else {
@@ -1176,7 +1176,7 @@ bool verify_firmware_signature(const String &version, const String &hashHex,
                                long imageSize, const String &sigB64) {
     uint8_t fwPub[32];
     if (!parse_hex(ENRG_FIRMWARE_PUBKEY_HEX, fwPub, sizeof(fwPub))) {
-        Serial.println("[OTA] FATAL: ENRG_FIRMWARE_PUBKEY_HEX некорректен");
+        Serial.println("[OTA] FATAL: ENRG_FIRMWARE_PUBKEY_HEX is invalid");
         return false;
     }
     String msg = version + "|" + hashHex + "|" + String(imageSize);
@@ -1279,17 +1279,17 @@ static int hex_to_bytes_serial(const String &hex, uint8_t *out, size_t maxOut) {
 }
 
 static void print_help_serial() {
-    Serial.println("[HELP] Команды:");
-    Serial.println("  HELP              — этот список");
-    Serial.println("  INFO              — device_id, public_key, WiFi/mDNS/signer, хранилище");
-    Serial.println("  SIGN <hex>        — подписать ПРОИЗВОЛЬНОЕ сообщение (hex, max 256 байт)");
-    Serial.println("                      ключом устройства (только физический доступ);");
-    Serial.println("                      вывод sig_base64/sig_hex");
-    Serial.println("  CLEARWIFI         — стереть WiFi-креды из NVS и перезагрузиться");
-    Serial.println("                      (устройство поднимет Captive Portal Axis-Device-XXXX)");
-    Serial.println("  Примеры:");
-    Serial.println("    SIGN 68656c6c6f           (подписать 'hello')");
-    Serial.println("    SIGN <hex(device_id|public_key)>   (PoP для оракула)");
+    Serial.println("[HELP] Commands:");
+    Serial.println("  HELP              — this list");
+    Serial.println("  INFO              — device_id, public_key, WiFi/mDNS/signer, storage");
+    Serial.println("  SIGN <hex>        — sign an ARBITRARY message (hex, max 256 bytes)");
+    Serial.println("                      with the device key (physical access only);");
+    Serial.println("                      output sig_base64/sig_hex");
+    Serial.println("  CLEARWIFI         — erase the WiFi credentials from NVS and reboot");
+    Serial.println("                      (the device will start the Axis-Device-XXXX Captive Portal)");
+    Serial.println("  Examples:");
+    Serial.println("    SIGN 68656c6c6f           (sign 'hello')");
+    Serial.println("    SIGN <hex(device_id|public_key)>   (PoP for the oracle)");
 }
 
 static void print_device_info_serial() {
@@ -1313,27 +1313,27 @@ static void print_device_info_serial() {
 /** CLEARWIFI: fully erase the WiFi credentials from NVS + reboot into AP mode. */
 static void cmd_clear_wifi() {
     wifi_clear_creds();
-    Serial.println("[WIFI] креды полностью стёрты из Preferences (NVS)");
-    Serial.println("[WIFI] перезагрузка — устройство поднимет Captive Portal Axis-Device-XXXX");
+    Serial.println("[WIFI] credentials fully erased from Preferences (NVS)");
+    Serial.println("[WIFI] rebooting — the device will start the Axis-Device-XXXX Captive Portal");
     delay(500);
     ESP.restart();
 }
 
 static void cmd_sign(const String &hexArg) {
     if (hexArg.length() == 0) {
-        Serial.println("[SIGN] ERR: укажите сообщение в hex (SIGN <hex>), max 256 байт");
+        Serial.println("[SIGN] ERR: provide a hex message (SIGN <hex>), max 256 bytes");
         return;
     }
     uint8_t msg[256];
     int msgLen = hex_to_bytes_serial(hexArg, msg, sizeof(msg));
     if (msgLen < 0) {
-        Serial.println("[SIGN] ERR: невалидный hex (чётная длина, 0-9a-fA-F, <= 256 байт)");
+        Serial.println("[SIGN] ERR: invalid hex (even length, 0-9a-fA-F, <= 256 bytes)");
         return;
     }
 
     uint8_t signature[64];
     if (!sign_with_device_key(msg, (size_t)msgLen, signature)) {
-        Serial.println("[SIGN] ERR: подпись не удалась (SE050)");
+        Serial.println("[SIGN] ERR: signing failed (SE050)");
         return;
     }
 
@@ -1356,7 +1356,7 @@ static void process_serial_command(const String &line) {
     if (cmd == "SIGN") { cmd_sign(arg); return; }
     if (cmd == "CLEARWIFI" || cmd == "WIFIRESET") { cmd_clear_wifi(); return; }
 
-    Serial.printf("[SERIAL] неизвестная команда: %s (HELP — список)\n", cmd.c_str());
+    Serial.printf("[SERIAL] unknown command: %s (HELP for the list)\n", cmd.c_str());
 }
 
 /** Poll Serial: accumulates a line until '\n' and parses the command. */
@@ -1368,7 +1368,7 @@ static void handle_serial_input() {
             if (g_serialLine.length() > 0) process_serial_command(g_serialLine);
             g_serialLine = "";
         } else if (c != '\r') {
-            if (g_serialLine.length() < 640) g_serialLine += c; // 512 hex + запас
+            if (g_serialLine.length() < 640) g_serialLine += c; // 512 hex + headroom
         }
     }
 }
@@ -1465,7 +1465,7 @@ static void signer_server_start() {
     g_signerServer.on("/api/device/info", HTTP_GET, handle_device_info);
     g_signerServer.on("/api/device/sign", HTTP_POST, handle_device_sign);
     g_signerServer.begin();
-    Serial.printf("[SIGNER] HTTP-signer на порту %d (LAN-only: %d)\n",
+    Serial.printf("[SIGNER] HTTP signer on port %d (LAN-only: %d)\n",
                   (int)ENRG_SIGNER_PORT, (int)ENRG_SIGNER_LAN_ONLY);
 }
 
@@ -1483,16 +1483,16 @@ void setup() {
     // ATECC608A (seed-vault) → NVS.
 #if ENRG_USE_SE050
     if (identity_init_se050(g_publicKey)) {
-        Serial.println("[KEY] хранилище: NXP SE050 (аппаратная Ed25519-подпись)");
+        Serial.println("[KEY] storage: NXP SE050 (hardware Ed25519 signing)");
         g_key_in_secure_element = true;
         // The private key never leaves the SE050 — no seed in RAM needed.
         memset(g_privateKey, 0, sizeof(g_privateKey));
     } else {
-        Serial.println("[SE050] чип недоступен — fallback на ATECC/NVS");
+        Serial.println("[SE050] chip unavailable — falling back to ATECC/NVS");
         if (!identity_init_v3(g_privateKey, g_publicKey)) {
             Serial.println("[FATAL] key init failed");
 #if ENRG_ENABLE_HW_ANTI_ROLLBACK
-            ota_mark_app_invalid(); // A/B rollback на предыдущий образ
+            ota_mark_app_invalid(); // A/B rollback to the previous image
 #else
             while (true) { delay(1000); }
 #endif
@@ -1502,16 +1502,16 @@ void setup() {
     if (!identity_init_v3(g_privateKey, g_publicKey)) {
         Serial.println("[FATAL] key init failed");
 #if ENRG_ENABLE_HW_ANTI_ROLLBACK
-        ota_mark_app_invalid(); // A/B rollback на предыдущий образ
+        ota_mark_app_invalid(); // A/B rollback to the previous image
 #else
         while (true) { delay(1000); }
 #endif
     }
 #endif
     if (g_key_in_secure_element) {
-        Serial.println("[KEY] хранилище: Secure Element (ATECC608A / SE050)");
+        Serial.println("[KEY] storage: Secure Element (ATECC608A / SE050)");
     } else {
-        Serial.println("[KEY] хранилище: NVS (не Secure Element) — см. ENRG_USE_ATECC608");
+        Serial.println("[KEY] storage: NVS (not a Secure Element) — see ENRG_USE_ATECC608");
     }
     Serial.printf("[KEY] device_id = %s\n", device_id_from_pubkey(g_publicKey).c_str());
 
@@ -1521,7 +1521,7 @@ void setup() {
 
     // ADR-0008: LittleFS — the staging area for the OTA image.
     if (!LittleFS.begin()) {
-        Serial.println("[OTA] WARN: LittleFS не смонтирован — OTA недоступен");
+        Serial.println("[OTA] WARN: LittleFS not mounted — OTA unavailable");
     }
 
     // Plug & Play: NVS credentials → 30s connect → otherwise Captive Portal.
@@ -1532,10 +1532,10 @@ void setup() {
             MDNS.addServiceTxt("axis-connect", "tcp", "schema", "axis-energy-v1");
             Serial.printf("[MDNS] hostname: %s.local\n", mdns_hostname().c_str());
         } else {
-            Serial.println("[MDNS] WARN: mDNS не запущен");
+            Serial.println("[MDNS] WARN: mDNS not started");
         }
     } else {
-        Serial.println("[WARN] WiFi не подключён — локальный signer недоступен без сети");
+        Serial.println("[WARN] WiFi not connected — the local signer is unavailable without a network");
     }
     // The HTTP signer always starts (in AP mode it is also available at 192.168.4.1).
     signer_server_start();
@@ -1549,7 +1549,7 @@ void setup() {
     if (g_prefs.getString("fw_version", "").length() == 0) {
         g_prefs.putString("fw_version", ENRG_FW_VERSION);
     }
-    Serial.printf("[OTA] текущая версия: %s\n", g_prefs.getString("fw_version", ENRG_FW_VERSION).c_str());
+    Serial.printf("[OTA] current version: %s\n", g_prefs.getString("fw_version", ENRG_FW_VERSION).c_str());
 
 #if ENRG_ENABLE_HW_ANTI_ROLLBACK
     // ADR-0008: A/B rollback — confirm the current image AFTER a successful
@@ -1577,7 +1577,7 @@ void loop() {
     unsigned long nowMs = millis();
     if (nowMs - g_lastUpdateCheckMs >= ENRG_UPDATE_CHECK_MS) {
         g_lastUpdateCheckMs = nowMs;
-        checkForUpdates(); // внутри — ESP.restart() при успешной установке
+        checkForUpdates(); // it calls ESP.restart() on a successful install
     }
 
     // ADR-0004: if the manifest is required but not yet received — periodically
@@ -1613,7 +1613,7 @@ bool download_firmware(const String &url, long expectedSize, const String &expec
     // P0-3 (ADR-0008): downloading a firmware image over plain HTTP is forbidden
     // (except the explicit dev mode ENRG_ALLOW_HTTP=1).
     if (!transport_allowed(url)) {
-        Serial.println("[OTA] загрузка образа заблокирована: не TLS-транспорт");
+        Serial.println("[OTA] image download blocked: non-TLS transport");
         return false;
     }
 
@@ -1711,7 +1711,7 @@ bool apply_firmware_update(const char *path) {
     }
     f.close();
     LittleFS.remove(path);
-    Serial.println("[OTA] Update.end() OK — образ установлен, перезагрузка...");
+    Serial.println("[OTA] Update.end() OK — image installed, rebooting...");
     return true;
 }
 
@@ -1726,51 +1726,51 @@ bool apply_firmware_update(const char *path) {
 bool checkForUpdates() {
     String url = String(ENRG_FIRMWARE_URL_BASE) + "/latest";
     String body = http_get(url);
-    if (body.length() == 0) { Serial.println("[OTA] оракул не ответил"); return false; }
+    if (body.length() == 0) { Serial.println("[OTA] oracle did not respond"); return false; }
 
     DynamicJsonDocument doc(1024);
-    if (deserializeJson(doc, body)) { Serial.println("[OTA] невалидный JSON"); return false; }
+    if (deserializeJson(doc, body)) { Serial.println("[OTA] invalid JSON"); return false; }
 
     const char *v = doc["version"];
     const char *hash = doc["image_hash"];
     long size = doc["image_size"];
     const char *sig = doc["signature"];
     const char *model = doc["model"];
-    if (!v || !hash || size <= 0 || !sig) { Serial.println("[OTA] неполные метаданные"); return false; }
+    if (!v || !hash || size <= 0 || !sig) { Serial.println("[OTA] incomplete metadata"); return false; }
 
     if (model && strlen(model) > 0 && String(model) != String(ENRG_FW_MODEL)) {
-        Serial.printf("[OTA] модель %s != %s — пропуск\n", model, ENRG_FW_MODEL);
+        Serial.printf("[OTA] model %s != %s — skip\n", model, ENRG_FW_MODEL);
         return false;
     }
 
     // Anti-rollback: accept only a strictly newer version.
     String current = g_prefs.getString("fw_version", ENRG_FW_VERSION);
     if (compare_versions(String(v), current) <= 0) {
-        Serial.printf("[OTA] версия %s <= текущая %s — пропуск (анти-откат)\n", v, current.c_str());
+        Serial.printf("[OTA] version %s <= current %s — skip (anti-rollback)\n", v, current.c_str());
         return false;
     }
 
     // Metadata signature (before downloading) — reject unsigned/foreign images.
     if (!verify_firmware_signature(String(v), String(hash), size, String(sig))) {
-        Serial.println("[OTA] невалидная подпись — образ отклонён");
+        Serial.println("[OTA] invalid signature — image rejected");
         return false;
     }
 
     // Download + SHA-256 verification.
     String imgUrl = String(ENRG_FIRMWARE_URL_BASE) + "/latest/image";
     if (!download_firmware(imgUrl, size, String(hash))) {
-        Serial.println("[OTA] скачивание/хеш не сошёлся — образ отклонён");
+        Serial.println("[OTA] download/hash mismatch — image rejected");
         return false;
     }
 
     // Apply.
     if (!apply_firmware_update("/fw_update.bin")) {
-        Serial.println("[OTA] установка не удалась");
+        Serial.println("[OTA] install failed");
         return false;
     }
 
-    g_prefs.putString("fw_version", String(v)); // новая версия (анти-откат после перезагрузки)
-    Serial.printf("[OTA] обновление до %s применено, перезагрузка...\n", v);
+    g_prefs.putString("fw_version", String(v)); // new version (anti-rollback after reboot)
+    Serial.printf("[OTA] update to %s applied, rebooting...\n", v);
     ESP.restart();
     return true;
 }

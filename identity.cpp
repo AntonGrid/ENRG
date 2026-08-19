@@ -1,12 +1,12 @@
 #include "identity.h"
 
-#include <Preferences.h>     // стандартная NVS-обёртка ESP32
+#include <Preferences.h>     // standard ESP32 NVS wrapper
 #include <ArduinoJson.h>
 
-// ВАЖНО: вам понадобится библиотека Ed25519 для Arduino/ESP32.
-// Пример: https://github.com/TrustWallet/TrustWalletCore/tree/master/src/Private/Ed25519
-// Здесь используются абстрактные функции ed25519_create_keypair и ed25519_sign,
-// которые вы должны связать с конкретной библиотекой.
+// IMPORTANT: you will need an Ed25519 library for Arduino/ESP32.
+// Example: https://github.com/TrustWallet/TrustWalletCore/tree/master/src/Private/Ed25519
+// Abstract functions ed25519_create_keypair and ed25519_sign are used here;
+// you must link them to a concrete library.
 
 extern "C" {
     void ed25519_create_keypair(uint8_t* pubkey, uint8_t* privkey, const uint8_t* seed);
@@ -14,19 +14,19 @@ extern "C" {
                       const uint8_t* pub_key, const uint8_t* priv_key);
 }
 
-// ---------- Константы хранения в NVS ----------
+// ---------- NVS storage constants ----------
 
 static const char* NVS_NAMESPACE = "identity";
-static const char* KEY_PRIV      = "privkey";   // 32 байта seed либо 64 байта sk (зависит от реализации)
-static const char* KEY_PUB       = "pubkey";    // 32 байта
-static const char* KEY_DEVICE_ID = "device_id"; // строка base58
-static const char* KEY_MANIFEST  = "manifest";  // строка manifest_version
+static const char* KEY_PRIV      = "privkey";   // 32-byte seed or 64-byte sk (implementation-dependent)
+static const char* KEY_PUB       = "pubkey";    // 32 bytes
+static const char* KEY_DEVICE_ID = "device_id"; // base58 string
+static const char* KEY_MANIFEST  = "manifest";  // manifest_version string
 
 static Preferences prefs;
 static DeviceIdentity g_identity;
 static bool g_identity_initialized = false;
 
-// ---------- Вспомогательные функции (base58 + sha256) ----------
+// ---------- Helper functions (base58 + sha256) ----------
 
 #include <mbedtls/sha256.h>
 
@@ -41,8 +41,8 @@ static String to_hex(const uint8_t* data, size_t len) {
     return out;
 }
 
-// Простейшая base58-реализация можно подключить как отдельную либу.
-// Здесь объявим прототип и ожидаем, что вы подключите реализацию.
+// A minimal base58 implementation can be added as a separate library.
+// We declare a prototype here and expect you to plug in the implementation.
 String base58_encode(const uint8_t* data, size_t len);
 
 static String compute_device_id_from_pubkey(const uint8_t* pubkey32) {
@@ -51,7 +51,7 @@ static String compute_device_id_from_pubkey(const uint8_t* pubkey32) {
     return base58_encode(hash, 32);
 }
 
-// ---------- Реализация публичного API ----------
+// ---------- Public API implementation ----------
 
 bool identity_init() {
     if (g_identity_initialized) {
@@ -66,7 +66,7 @@ bool identity_init() {
     uint8_t privkey[64] = {0};
 
     if (privLen > 0 && pubLen == 32) {
-        // Ключи уже есть — загружаем
+        // Keys already exist — load them
         prefs.getBytes(KEY_PUB, g_identity.publicKey, 32);
         prefs.getBytes(KEY_PRIV, privkey, sizeof(privkey));
 
@@ -78,8 +78,8 @@ bool identity_init() {
             prefs.putString(KEY_DEVICE_ID, g_identity.deviceId);
         }
     } else {
-        // Ключей нет — генерируем
-        // seed можно взять из аппаратного RNG
+        // No keys — generate
+        // the seed can come from the hardware RNG
         uint8_t seed[32];
         for (int i = 0; i < 32; ++i) {
             seed[i] = (uint8_t)esp_random();
@@ -87,7 +87,7 @@ bool identity_init() {
 
         ed25519_create_keypair(g_identity.publicKey, privkey, seed);
 
-        // Сохраняем в NVS
+        // Save to NVS
         prefs.putBytes(KEY_PUB, g_identity.publicKey, 32);
         prefs.putBytes(KEY_PRIV, privkey, sizeof(privkey));
 

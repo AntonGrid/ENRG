@@ -3,33 +3,33 @@
 #include <Arduino.h>
 #include <stdint.h>
 
-// Структура с публичной идентичностью устройства
+// Device public identity struct
 struct DeviceIdentity {
     String deviceId;       // base58(sha256(public_key))
-    uint8_t publicKey[32]; // Ed25519 публичный ключ
+    uint8_t publicKey[32]; // Ed25519 public key
 };
 
-// Инициализация подсистемы идентичности.
-// Вызывается из setup():
-//  - пытается загрузить ключи из NVS
-//  - если не находит — генерирует новую пару Ed25519 и сохраняет
+// Identity subsystem initialization.
+// Called from setup():
+//  - tries to load keys from NVS
+//  - if not found — generates a new Ed25519 keypair and saves it
 bool identity_init();
 
-// Получить текущую идентичность устройства (device_id + public key)
+// Get the current device identity (device_id + public key)
 DeviceIdentity get_device_identity();
 
-// Подписать произвольное сообщение буфером bytes длиной msgLen.
-// sigOut должен указывать на буфер длиной 64 байта (Ed25519 подпись).
-// Возвращает true при успехе.
+// Sign an arbitrary message buffer `bytes` of length msgLen.
+// sigOut must point to a 64-byte buffer (Ed25519 signature).
+// Returns true on success.
 bool sign_message(const uint8_t* msg, size_t msgLen, uint8_t* sigOut);
 
-// Вспомогательная функция: получить firmware version, зашитую в прошивку
-// (можно определить FW_VERSION в platformio.ini или вверху .ino файла).
+// Helper: get the firmware version compiled into the firmware
+// (define FW_VERSION in platformio.ini or at the top of the .ino file).
 const char* get_firmware_version();
 
-// Вспомогательная функция: получить текущую manifest_version,
-// сохранённую в NVS (или пустую строку, если ещё не применён).
+// Helper: get the current manifest_version,
+// stored in NVS (or an empty string if not yet applied).
 String get_manifest_version();
 
-// Установить manifest_version и сохранить её в NVS после успешного применения Manifest.
+// Set manifest_version and store it in NVS after a successful Manifest application.
 void set_manifest_version(const String& manifestVersion);

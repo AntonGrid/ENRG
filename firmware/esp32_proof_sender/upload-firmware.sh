@@ -1,40 +1,40 @@
 #!/usr/bin/env bash
 # ════════════════════════════════════════════════════════════════
-#  ENRG — загрузка прошивки на ESP32 (PlatformIO)
+#  ENRG — flash the ESP32 firmware (PlatformIO)
 #
-#  Что делает:
-#    1. Определяет рабочую PlatformIO (`.venv/bin/pio` > `platformio` > `pio`).
-#    2. Проверяет, что ESP32 подключён к хосту (последовательный порт).
-#    3. Показывает предупреждение (для `esp32dev-ota` — прожиг eFuse необратим!)
-#       и запрашивает подтверждение перед загрузкой.
-#    4. Загружает прошивку (`pio run -e <env> -t upload`).
-#    5. По умолчанию открывает монитор порта (`pio device monitor`).
+#  What it does:
+#    1. Finds a working PlatformIO (`.venv/bin/pio` > `platformio` > `pio`).
+#    2. Checks that the ESP32 is attached to the host (serial port).
+#    3. Shows a warning (for `esp32dev-ota` — eFuse burn is irreversible!)
+#       and asks for confirmation before flashing.
+#    4. Flashes the firmware (`pio run -e <env> -t upload`).
+#    5. Opens the port monitor by default (`pio device monitor`).
 #
-#  Использование:
-#    ./upload-firmware.sh                # env по умолчанию: esp32dev-ota
-#    ./upload-firmware.sh esp32dev       # другой env
+#  Usage:
+#    ./upload-firmware.sh                # default env: esp32dev-ota
+#    ./upload-firmware.sh esp32dev       # another env
 #    TARGET_ENV=esp32dev ./upload-firmware.sh
-#    PIO=/path/to/pio ./upload-firmware.sh   # явный путь к pio
-#    ./upload-firmware.sh --no-monitor   # без монитора порта после загрузки
+#    PIO=/path/to/pio ./upload-firmware.sh   # explicit pio path
+#    ./upload-firmware.sh --no-monitor   # no port monitor after flashing
 #
-#  ⚠️ ВАЖНО (ADR-0008): env `esp32dev-ota` использует dual-bank A/B и
-#  аппаратный anti-rollback (CONFIG_BOOTLOADER_EFUSE_SECURE_VERSION).
-#  Первый успешный boot нового образа прожигает secure_version в eFuse —
-#  это НЕОБРАТИМО. Не смешивайте env'ы на одной плате.
+#  ⚠️ IMPORTANT (ADR-0008): the `esp32dev-ota` env uses dual-bank A/B and
+#  hardware anti-rollback (CONFIG_BOOTLOADER_EFUSE_SECURE_VERSION).
+#  The first successful boot of a new image burns secure_version into the eFuse —
+#  this is IRREVERSIBLE. Do not mix envs on the same board.
 # ════════════════════════════════════════════════════════════════
 
 set -euo pipefail
 
-# ── Расположение скрипта / workspace ─────────────────────────────
+# ── Script / workspace location ───────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# Поднимаемся до workspace root (firmware/esp32_proof_sender → ENRG → workspace).
+# Walk up to the workspace root (firmware/esp32_proof_sender → ENRG → workspace).
 PROJECT_DIR="$SCRIPT_DIR"
 WORKSPACE_ROOT="$(cd "$PROJECT_DIR/../../.." && pwd)"
 
-# ── Параметры ─────────────────────────────────────────────────────
+# ── Parameters ────────────────────────────────────────────────────
 TARGET_ENV="${TARGET_ENV:-${1:-esp32dev-ota}}"
-MONITOR_BAUD="${MONITOR_BAUD:-115200}"          # совпадает с platformio.ini
-MONITOR="1"                                      # по умолчанию открываем монитор
+MONITOR_BAUD="${MONITOR_BAUD:-115200}"          # matches platformio.ini
+MONITOR="1"                                      # open the monitor by default
 for arg in "$@"; do
     case "$arg" in
         --no-monitor) MONITOR="0" ;;
@@ -42,7 +42,7 @@ for arg in "$@"; do
     esac
 done
 
-# ── Поиск рабочей PlatformIO ──────────────────────────────────────
+# ── Finding a working PlatformIO ──────────────────────────────────
 resolve_pio() {
     local candidates=()
     [ -n "${PIO:-}" ] && candidates+=("$PIO")
@@ -62,91 +62,91 @@ resolve_pio() {
 }
 
 PIO="$(resolve_pio)" || {
-    echo "❌ PlatformIO не найден. Установите PlatformIO Core или задайте PIO=/path/to/pio." >&2
-    echo "   (в этом workspace: /home/enrg/Axis-workspace/.venv/bin/pio)" >&2
+    echo "❌ PlatformIO not found. Install PlatformIO Core or set PIO=/path/to/pio." >&2
+    echo "   (in this workspace: /home/enrg/Axis-workspace/.venv/bin/pio)" >&2
     exit 1
 }
 echo "ℹ️  PlatformIO: $("$PIO" --version)"
 
-# ── Проверка, что ESP32 подключён ─────────────────────────────────
+# ── Checking the ESP32 is attached ────────────────────────────────
 detect_port() {
     local port
     port="$("$PIO" device list 2>/dev/null | grep -oE '/dev/(ttyUSB[0-9]+|ttyACM[0-9]+|cu\.[A-Za-z0-9._-]+)' | head -n1 || true)"
     if [ -z "$port" ]; then
-        # fallback: прямое сканирование /dev
+        # fallback: scan /dev directly
         port="$(ls /dev/ttyUSB* /dev/ttyACM* 2>/dev/null | head -n1 || true)"
     fi
     echo "$port"
 }
 
 echo ""
-echo "🔍 Проверка подключения ESP32 ..."
+echo "🔍 Checking the ESP32 connection ..."
 PORT="$(detect_port)"
 if [ -z "$PORT" ]; then
-    echo "❌ ESP32 НЕ обнаружен. Убедитесь, что устройство подключено по USB." >&2
+    echo "❌ ESP32 NOT detected. Make sure the device is connected via USB." >&2
     echo ""
-    echo "   Что проверить:" >&2
-    echo "     1. Кабель USB (не только зарядный — нужен data-кабель)." >&2
-    echo "     2. Драйвер USB-UART (CH340/CP210x) установлен." >&2
-    echo "     3. Список портов: \"$PIO\" device list" >&2
-    echo "     4. Права на порт (группа dialout): sudo usermod -aG dialout \$USER" >&2
+    echo "   What to check:" >&2
+    echo "     1. USB cable (not charge-only — a data cable is required)." >&2
+    echo "     2. The USB-UART driver (CH340/CP210x) is installed." >&2
+    echo "     3. Port list: \"$PIO\" device list" >&2
+    echo "     4. Port permissions (dialout group): sudo usermod -aG dialout \$USER" >&2
     echo ""
     exit 1
 fi
-echo "✅ ESP32 найден на порту: $PORT"
+echo "✅ ESP32 found on port: $PORT"
 
-# ── Предупреждение для esp32dev-ota (eFuse / dual-bank A/B) ───────
+# ── Warning for esp32dev-ota (eFuse / dual-bank A/B) ───────────────
 if [ "$TARGET_ENV" = "esp32dev-ota" ]; then
     echo ""
-    echo "⚠️  ⚠️  ⚠️  ВНИМАНИЕ (ADR-0008) ⚠️  ⚠️  ⚠️"
-    echo "   env 'esp32dev-ota': dual-bank A/B + аппаратный anti-rollback."
-    echo "   Первый успешный boot образа ПРОЖИГАЕТ secure_version в eFuse."
-    echo "   Это НЕОБРАТИМО и навсегда привяжет плату к этой линейке образов."
+    echo "⚠️  ⚠️  ⚠️  WARNING (ADR-0008) ⚠️  ⚠️  ⚠️"
+    echo "   env 'esp32dev-ota': dual-bank A/B + hardware anti-rollback."
+    echo "   The first successful image boot BURNS secure_version into the eFuse."
+    echo "   This is IRREVERSIBLE and permanently binds the board to this image line."
     echo ""
 fi
 
-# ── Подтверждение ─────────────────────────────────────────────────
+# ── Confirmation ──────────────────────────────────────────────────
 echo ""
-echo "📦 Прошивка:   $PROJECT_DIR"
+echo "📦 Firmware:   $PROJECT_DIR"
 echo "   Target env: $TARGET_ENV"
-echo "   Бинарник:   .pio/build/$TARGET_ENV/firmware.bin"
-echo "   Порт:       $PORT"
+echo "   Binary:      .pio/build/$TARGET_ENV/firmware.bin"
+echo "   Port:       $PORT"
 echo ""
-read -r -p "Начать загрузку прошивки? [y/N] " ans
+read -r -p "Start flashing the firmware? [y/N] " ans
 case "${ans:-N}" in
     y|Y|yes|YES) ;;
-    *) echo "⏹  Отменено."; exit 0 ;;
+    *) echo "⏹  Cancelled."; exit 0 ;;
 esac
 
-# ── Загрузка ──────────────────────────────────────────────────────
+# ── Flashing ──────────────────────────────────────────────────────
 echo ""
-echo "🚀 Загружаю прошивку (env=$TARGET_ENV) ..."
+echo "🚀 Flashing the firmware (env=$TARGET_ENV) ..."
 cd "$PROJECT_DIR"
 "$PIO" run -e "$TARGET_ENV" -t upload --upload-port "$PORT"
-echo "✅ Прошивка загружена."
+echo "✅ Firmware flashed."
 
-# ── Логи после загрузки ───────────────────────────────────────────
+# ── Logs after flashing ───────────────────────────────────────────
 if [ "$MONITOR" = "1" ]; then
     echo ""
-    read -r -p "Запустить монитор порта для проверки логов? [Y/n] " mon
+    read -r -p "Start the port monitor to check logs? [Y/n] " mon
     case "${mon:-Y}" in
         y|Y|yes|YES|"") 
             echo ""
-            echo "📟 Монитор порта $PORT (baud=$MONITOR_BAUD). Выход: Ctrl+]"
+            echo "📟 Port monitor $PORT (baud=$MONITOR_BAUD). Exit: Ctrl+]"
             echo "────────────────────────────────────────────"
             "$PIO" device monitor --port "$PORT" --baud "$MONITOR_BAUD" || true
             ;;
         *) 
             echo ""
-            echo "ℹ️  Логи можно посмотреть вручную:"
+            echo "ℹ️  You can view the logs manually:"
             echo "   \"$PIO\" device monitor --port $PORT --baud $MONITOR_BAUD"
             ;;
     esac
 else
     echo ""
-    echo "ℹ️  Логи можно посмотреть вручную:"
+    echo "ℹ️  You can view the logs manually:"
     echo "   \"$PIO\" device monitor --port $PORT --baud $MONITOR_BAUD"
 fi
 
 echo ""
-echo "🎉 Готово."
+echo "🎉 Done."
