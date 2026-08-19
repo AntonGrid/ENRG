@@ -10,9 +10,9 @@ crate-type = ["cdylib", "lib"]
 test = false
 
 [lints.rust]
-# cfg-значения (no-entrypoint, custom-heap, custom-panic, anchor-debug,
-# no-idl, no-log-ix-name) генерируются внутри макросов Anchor/Solana —
-# мы их не контролируем, поэтому глушим предупреждение на уровне крейта.
+# The cfg values (no-entrypoint, custom-heap, custom-panic, anchor-debug,
+# no-idl, no-log-ix-name) are generated inside Anchor/Solana macros, which we
+# do not control, so the warning is silenced at the crate level.
 unexpected_cfgs = { level = "allow", check-cfg = [
     "cfg(no_entrypoint)",
     "cfg(custom_heap)",
@@ -25,21 +25,21 @@ unexpected_cfgs = { level = "allow", check-cfg = [
 [dependencies]
 anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
 
-# default-features = false: отключаем token_2022/token_2022_extensions,
-# которые тянут spl-token-2022 → solana-zk-sdk → crypto-common 0.1.7
-# с огромными массивами ([u16; 2048], [u32; 2048] и т.д.), ломающими лимит стека 4096.
+# default-features = false: disable token_2022/token_2022_extensions, which pull
+# spl-token-2022 -> solana-zk-sdk -> crypto-common 0.1.7 with huge arrays
+# ([u16; 2048], [u32; 2048], etc.) that break the 4096-byte stack limit.
 anchor-spl = { version = "0.32.1", default-features = false, features = ["token"] }
 
 hex = "0.4"
 
-# Чтение sysvar Instructions для проверки Ed25519-подписей
-# (паттерн Axis: precompile-инструкция в транзакции + sysvar).
+# Reading the Instructions sysvar for Ed25519 signature verification
+# (Axis pattern: precompile instruction in the transaction + sysvar).
 solana-instructions-sysvar = "2.2.2"
 
 [dev-dependencies]
 # anchor-lang is reused by integration tests (tests/) for OracleReport/Pubkey.
 anchor-lang = "0.32.1"
-# Типы BorrowedInstruction для host-side unit-тестов sysvar.
+# BorrowedInstruction types for host-side sysvar unit tests.
 solana-instruction = "2.3.3"
 
 [features]
