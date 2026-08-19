@@ -1,164 +1,164 @@
 /*
  * ENRG Proof Sender v3 — security-hardened firmware (H-3 / H-4 fixes).
  *
- * Изменения относительно v1/v2:
- *   1. (H-3) НЕТ захардкоженного приватного ключа: ключ генерируется при
- *      первой загрузке и хранится в NVS (Preferences) либо в защищённом
- *      слоте ATECC608A (если ENRG_USE_ATECC608=1).
- *   2. (H-4) Опциональный Secure Element ATECC608A как защищённое хранилище
- *      seed-ключа. ВАЖНО: ATECC608A НЕ поддерживает Ed25519 — подпись
- *      выполняется в CPU, чип используется как защищённый Data-Zone slot
- *      (seed не лежит в открытом NVS). Для ПОЛНОЙ аппаратной подписи Ed25519
- *      добавлен путь NXP SE050 (ENRG_USE_SE050=1, env esp32dev-se050):
- *      ключ генерируется и подпись выполняется ВНУТРИ чипа (ADR-0001).
- *      Если чип недоступен — ключ в NVS + предупреждение.
- *   3. Бинарный формат подписи (как on-chain OracleReport::device_message_to_sign):
+ * Changes relative to v1/v2:
+ *   1. (H-3) NO hard-coded private key: the key is generated on the
+ *      first boot and stored in NVS (Preferences) or in a protected
+ *      ATECC608A slot (if ENRG_USE_ATECC608=1).
+ *   2. (H-4) Optional Secure Element ATECC608A as a protected store
+ *      for the seed key. IMPORTANT: ATECC608A does NOT support Ed25519 — the signature
+ *      is computed in the CPU; the chip is used as a protected Data-Zone slot
+ *      (the seed is not in plain NVS). For FULL hardware Ed25519 signing
+ *      an NXP SE050 path was added (ENRG_USE_SE050=1, env esp32dev-se050):
+ *      the key is generated and signing happens INSIDE the chip (ADR-0001).
+ *      If the chip is unavailable — key in NVS + a warning.
+ *   3. Binary signature format (as on-chain OracleReport::device_message_to_sign):
  *        device_id(32) || nonce(8 LE) || timestamp(8 LE) || energy_wh(8 LE)
- *   4. Wall-clock через NTP (не millis()).
- *   5. HTTPS c проверкой корневого сертификата; mTLS опционально.
+ *   4. Wall-clock via NTP (not millis()).
+ *   5. HTTPS with root certificate verification; mTLS optional.
  *
- * Зависимости (PlatformIO):
+ * Dependencies (PlatformIO):
  *   - platform: espressif32 (Arduino framework)
  *   - lib_deps: rweather/Crypto   (Ed25519)
- *   - опционально: cryptoauthlib (при ENRG_USE_ATECC608)
- *   - опционально: se050          (при ENRG_USE_SE050 — NXP SE050)
- *   - опционально: PZEM004Tv30    (при ENRG_USE_PZEM)
+ *   - optional: cryptoauthlib (when ENRG_USE_ATECC608)
+ *   - optional: se050          (when ENRG_USE_SE050 — NXP SE050)
+ *   - optional: PZEM004Tv30    (when ENRG_USE_PZEM)
  *
- * Поля /api/v1/proof/submit: device_id (0x-hex 64), timestamp, energyWh,
- * nonce, signature (base64). Подпись — бинарный формат, проверяется
- * server.js как sig_mode='binary'.
+ * /api/v1/proof/submit fields: device_id (0x-hex 64), timestamp, energyWh,
+ * nonce, signature (base64). The signature uses the binary format, verified
+ * by server.js as sig_mode='binary'.
  */
 
 // ════════════════════════════════════════════════════════════════
-//  КОНФИГУРАЦИЯ (заполните перед прошивкой)
+//  CONFIGURATION (fill in before flashing)
 // ════════════════════════════════════════════════════════════════
 
-// ⚠️ БЕЗОПАСНОСТЬ (аудит 2026-08-18, P1 + Plug & Play): WiFi-креды НИКОГДА
-// не задаются в исходнике/compile-time. Они хранятся ТОЛЬКО в NVS
-// (Preferences, namespace "enrg", ключи wifi_ssid/wifi_pass) и вводятся
-// пользователем через Captive Portal "Axis-Device-XXXX" (см. setup_wifi()).
+// ⚠️ SECURITY (audit 2026-08-18, P1 + Plug & Play): WiFi credentials are NEVER
+// set in source/compile-time. They are stored ONLY in NVS
+// (Preferences, namespace "enrg", keys wifi_ssid/wifi_pass) and entered
+// by the user through the Captive Portal "Axis-Device-XXXX" (see setup_wifi()).
 //
-// ── Plug & Play: локальный HTTP-signer (Axis-connect) ──
-// Порт локального signer'а: GET /api/device/info, POST /api/device/sign.
+// ── Plug & Play: local HTTP signer (Axis-connect) ──
+// Local signer port: GET /api/device/info, POST /api/device/sign.
 #ifndef ENRG_SIGNER_PORT
 #define ENRG_SIGNER_PORT 8080
 #endif
-// 1 — принимать запросы signer'а ТОЛЬКО из локальных подсетей
+// 1 — accept signer requests ONLY from local subnets
 // (RFC1918 10/8, 172.16/12, 192.168/16, loopback, link-local).
 #ifndef ENRG_SIGNER_LAN_ONLY
 #define ENRG_SIGNER_LAN_ONLY 1
 #endif
-// Максимальный размер сообщения, которое можно подписать через HTTP (байт).
+// Maximum message size that can be signed over HTTP (bytes).
 #ifndef ENRG_SIGNER_MAX_MSG
 #define ENRG_SIGNER_MAX_MSG 256
 #endif
-// Таймаут подключения к сохранённой Wi-Fi сети (мс) — 30 секунд.
+// Saved-WiFi connection timeout (ms) — 30 seconds.
 #ifndef ENRG_WIFI_CONNECT_TIMEOUT_MS
 #define ENRG_WIFI_CONNECT_TIMEOUT_MS 30000UL
 #endif
-// Таймаут Captive Portal (сек). По истечении устройство продолжает без WiFi.
+// Captive Portal timeout (sec). After it expires the device continues without WiFi.
 #ifndef ENRG_AP_TIMEOUT_SEC
 #define ENRG_AP_TIMEOUT_SEC 600
 #endif
 
-// HTTP(S)-эндпоинт оракула. Прошивка поддерживает оба режима: http://
-// (локальная сеть / dev, только при ENRG_ALLOW_HTTP=1) и https:// (с проверкой
-// корневого CA, ENRG_CA_CERT). По умолчанию — ТОЛЬКО HTTPS (ADR-0008: TLS 1.3
-// для доставки proof/manifest/OTA). Если получен валидный Device Manifest
-// (ADR-0004), реальный URL берётся из manifest.oracle_url.
-// ⚠️ Замените дефолтный адрес на ваш оракул перед прошивкой.
+// Oracle HTTP(S) endpoint. The firmware supports both modes: http://
+// (local network / dev, only when ENRG_ALLOW_HTTP=1) and https:// (with root CA
+// verification, ENRG_CA_CERT). By default — HTTPS ONLY (ADR-0008: TLS 1.3
+// for proof/manifest/OTA delivery). If a valid Device Manifest is received
+// (ADR-0004), the real URL is taken from manifest.oracle_url.
+// ⚠️ Replace the default address with your oracle before flashing.
 #ifndef ENRG_ORACLE_URL
 #define ENRG_ORACLE_URL "https://oracle.enrg.network/api/v1/proof/submit"
 #endif
 
 // ── Device Manifest (ADR-0004) ──
-// База URL эндпоинта манифестов: к ней добавляется "/<device_id>".
+// Manifest endpoint base URL: "/<device_id>" is appended to it.
 #ifndef ENRG_MANIFEST_URL_BASE
 #define ENRG_MANIFEST_URL_BASE "https://oracle.enrg.network/api/v1/manifest"
 #endif
 
-// Публичный ключ ОРАКУЛА (основателя, Ed25519, 32 байта) — вшивается в прошивку.
-// Манифесты подписываются этим ключом на стороне оракула (FOUNDER_KEY);
-// устройство проверяет подпись ДО использования манифеста.
-// ЗАПОЛНИТЕ реальным ключом перед прошивкой (32 hex-байта, без "0x").
+// ORACLE public key (founder, Ed25519, 32 bytes) — embedded into the firmware.
+// Manifests are signed with this key on the oracle side (FOUNDER_KEY);
+// the device verifies the signature BEFORE using the manifest.
+// FILL IN the real key before flashing (32 hex bytes, without "0x").
 #ifndef ENRG_FOUNDER_PUBKEY_HEX
-// Реальный founder-ключ (Ed25519, 32 байта hex) — публичный ключ оракула,
-// которым подписываются Device Manifests (ADR-0004) и firmware-образы (ADR-0008).
-// Соответствует founder-кошельку ~/.config/solana/founder-wallet.json
+// Real founder key (Ed25519, 32 hex bytes) — the oracle public key used
+// to sign Device Manifests (ADR-0004) and firmware images (ADR-0008).
+// Corresponds to the founder wallet ~/.config/solana/founder-wallet.json
 // (base58: 6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8).
-// ВАЖНО: при смене FOUNDER_KEY на оракуле обновите ключ и перепрошейте устройства.
+// IMPORTANT: when FOUNDER_KEY changes on the oracle, update the key and reflash the devices.
 #define ENRG_FOUNDER_PUBKEY_HEX "545ebb75bdc2022c089a4813eb4e76acc7c6628cadd18eb84d74131ccf9bfafd"
 #endif
 
-// ── ОТДЕЛЬНЫЙ «холодный» ключ подписи прошивок (ADR-0008, D-5) ──
-// Образы OTA подписываются ЭТИМ ключом, а НЕ founder-ключом (принцип
-// разделения ключей: founder подписывает манифесты, firmware-ключ — образы).
-// Приватный ключ хранится в офлайн-хранилище (HSM/холодный кошелёк); dev-копия —
-// firmware/firmware-signing-keypair.json (gitignored). Публичный ключ вшит
-// сюда для проверки подписи OTA-метаданных на устройстве.
+// ── SEPARATE "cold" firmware-signing key (ADR-0008, D-5) ──
+// OTA images are signed with THIS key, NOT the founder key (key separation
+// principle: the founder signs manifests, the firmware key signs images).
+// The private key lives in an offline store (HSM/cold wallet); a dev copy is in
+// firmware/firmware-signing-keypair.json (gitignored). The public key is embedded
+// here to verify OTA metadata signatures on the device.
 #ifndef ENRG_FIRMWARE_PUBKEY_HEX
 #define ENRG_FIRMWARE_PUBKEY_HEX "393561ec672d078ea3cae1962db935568fd1af06ddd25b65be3bdfe746d23354"
 #endif
 
-// 1 — манифест обязателен: без валидного манифеста proof'ы НЕ отправляются.
-// 0 — обратная совместимость: при недоступном/невалидном манифесте устройство
-//     работает по хардкод-конфигурации (ENRG_ORACLE_URL).
+// 1 — the manifest is required: without a valid manifest proofs are NOT sent.
+// 0 — backward compatibility: if the manifest is unavailable/invalid, the device
+//     works with the hard-coded configuration (ENRG_ORACLE_URL).
 #ifndef ENRG_MANIFEST_REQUIRED
 #define ENRG_MANIFEST_REQUIRED 0
 #endif
 
-// Как часто повторять попытку получить манифест (мс), если он не получен.
+// How often to retry fetching the manifest (ms) when it has not been received.
 #ifndef ENRG_MANIFEST_RETRY_MS
 #define ENRG_MANIFEST_RETRY_MS 60000UL
 #endif
 
-// ── OTA-обновления (ADR-0008) ──
-// Текущая версия прошивки (используется для анти-отката).
+// ── OTA updates (ADR-0008) ──
+// Current firmware version (used for anti-rollback).
 #ifndef ENRG_FW_VERSION
 #define ENRG_FW_VERSION "1.0.0"
 #endif
 
-// База URL эндпоинтов firmware оракула: к ней добавляется /latest и /latest/image.
+// Oracle firmware endpoint base URL: /latest and /latest/image are appended.
 #ifndef ENRG_FIRMWARE_URL_BASE
 #define ENRG_FIRMWARE_URL_BASE "https://oracle.enrg.network/api/v1/firmware"
 #endif
 
-// ⚠️ БЕЗОПАСНОСТЬ (аудит 2026-08-18, P0-3): по умолчанию прошивка ОТКАЗЫВАЕТСЯ
-// работать по открытому HTTP (ADR-0008 требует TLS 1.3). Для локальной
-// разработки задайте ENRG_ALLOW_HTTP=1 в build_flags — и только вместе с
-// ENRG_MANIFEST_REQUIRED=0 для явного dev-режима.
+// ⚠️ SECURITY (audit 2026-08-18, P0-3): by default the firmware REFUSES
+// to work over plain HTTP (ADR-0008 requires TLS 1.3). For local
+// development set ENRG_ALLOW_HTTP=1 in build_flags — and only together with
+// ENRG_MANIFEST_REQUIRED=0 for an explicit dev mode.
 #ifndef ENRG_ALLOW_HTTP
 #define ENRG_ALLOW_HTTP 0
 #endif
 
-// Модель устройства (оракул кладёт её в метаданные; устройство пропускает
-// обновление, если модель не совпадает).
+// Device model (the oracle puts it into metadata; the device skips the
+// update if the model does not match).
 #ifndef ENRG_FW_MODEL
 #define ENRG_FW_MODEL "ENRG-ESP32-v1"
 #endif
 
-// Как часто проверять наличие обновлений (мс). По умолчанию 6 часов.
+// How often to check for updates (ms). Default 6 hours.
 #ifndef ENRG_UPDATE_CHECK_MS
 #define ENRG_UPDATE_CHECK_MS 21600000UL
 #endif
 
-// Максимальный размер образа (байт) — меньше OTA-раздела ESP32 (~1.3 МБ).
+// Maximum image size (bytes) — smaller than the ESP32 OTA partition (~1.3 MB).
 #ifndef ENRG_MAX_FW_SIZE
 #define ENRG_MAX_FW_SIZE 1300000UL
 #endif
 
-// NTP-сервер для wall-clock.
+// NTP server for the wall clock.
 #ifndef ENRG_NTP_SERVER
 #define ENRG_NTP_SERVER "pool.ntp.org"
 #endif
 
-// Корневой сертификат CA для проверки TLS-соединения.
-// Пример для Let's Encrypt (ISRG Root X1): https://letsencrypt.org/certs/isrgrootx1.pem.txt
+// Root CA certificate for TLS connection verification.
+// Example for Let's Encrypt (ISRG Root X1): https://letsencrypt.org/certs/isrgrootx1.pem.txt
 #ifndef ENRG_CA_CERT
 #define ENRG_CA_CERT nullptr
 #endif
 
-// ── mTLS (опционально): клиентский сертификат и ключ (PEM). ──
+// ── mTLS (optional): client certificate and key (PEM). ──
 #ifndef ENRG_MTLS
 #define ENRG_MTLS 0
 #endif
@@ -169,55 +169,55 @@
 #define ENRG_CLIENT_PRIVKEY nullptr
 #endif
 
-// ── Secure Element ATECC608 (опционально). Требует cryptoauthlib. ──
+// ── Secure Element ATECC608 (optional). Requires cryptoauthlib. ──
 #ifndef ENRG_USE_ATECC608
 #define ENRG_USE_ATECC608 0
 #endif
-// Номер Data-Zone слота ATECC608A для хранения 32-байтного seed (0..15).
+// ATECC608A Data-Zone slot number for storing the 32-byte seed (0..15).
 #ifndef ENRG_ATECC_SLOT
 #define ENRG_ATECC_SLOT 4
 #endif
 
-// ── Secure Element NXP SE050 (опционально). Требует lib_deps: se050. ──
-// SE050 поддерживает Ed25519 НАТИВНО: приватный ключ хранится и подпись
-// выполняется ВНУТРИ чипа — полное соответствие ADR-0001 (в отличие от
-// ATECC608A, где только seed-vault, а подпись — в CPU).
-// Сборка: pio run -e esp32dev-se050   (см. platformio.ini).
-// ⚠️ Путь требует платы с SE050 (I2C) и библиотеки se050; по умолчанию
-// выключен — не влияет на базовую сборку.
+// ── Secure Element NXP SE050 (optional). Requires lib_deps: se050. ──
+// SE050 supports Ed25519 NATIVELY: the private key is stored and signing
+// happens INSIDE the chip — full ADR-0001 compliance (unlike
+// ATECC608A, which is only a seed vault and signs in the CPU).
+// Build: pio run -e esp32dev-se050   (see platformio.ini).
+// ⚠️ The path requires a board with SE050 (I2C) and the se050 library; by default
+// it is disabled — it does not affect the base build.
 #ifndef ENRG_USE_SE050
 #define ENRG_USE_SE050 0
 #endif
-// SSS object id Ed25519-ключа внутри SE050.
+// SSS object id of the Ed25519 key inside the SE050.
 #ifndef ENRG_SE050_KEY_ID
 #define ENRG_SE050_KEY_ID 0x00000011
 #endif
-// I2C-адрес SE050 (0x48 — по умолчанию, SE050 rev B).
+// SE050 I2C address (0x48 — default, SE050 rev B).
 #ifndef ENRG_SE050_I2C_ADDR
 #define ENRG_SE050_I2C_ADDR 0x48
 #endif
 
-// ── Аппаратный анти-откат OTA (ADR-0008) ──
+// ── Hardware OTA anti-rollback (ADR-0008) ──
 // 1 = dual-bank A/B + monotonic eFuse secure_version (env esp32dev-ota).
-// Требует partitions_ota.csv (app0/app1/otadata) и
+// Requires partitions_ota.csv (app0/app1/otadata) and
 // sdkconfig.defaults.esp32dev-ota (CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y,
-// CONFIG_BOOTLOADER_EFUSE_SECURE_VERSION=y). По умолчанию 0 — не влияет
-// на базовую сборку (single-app, анти-откат только через NVS fw_version).
+// CONFIG_BOOTLOADER_EFUSE_SECURE_VERSION=y). Default 0 — does not affect
+// the base build (single-app, anti-rollback only via NVS fw_version).
 #ifndef ENRG_ENABLE_HW_ANTI_ROLLBACK
 #define ENRG_ENABLE_HW_ANTI_ROLLBACK 0
 #endif
 
-// ── Сенсор PZEM-004T (опционально). Без него — заглушка read_energy_wh(). ──
+// ── PZEM-004T sensor (optional). Without it — a read_energy_wh() stub. ──
 #ifndef ENRG_USE_PZEM
 #define ENRG_USE_PZEM 0
 #endif
 
-// Интервал отправки proof, мс (по умолчанию 60 c).
+// Proof send interval, ms (default 60 s).
 #ifndef ENRG_REPORT_INTERVAL_MS
 #define ENRG_REPORT_INTERVAL_MS 60000UL
 #endif
 
-// Минимальный epoch для признания времени синхронизированным (2000-09-09).
+// Minimum epoch for the time to be considered synced (2000-09-09).
 #ifndef ENRG_MIN_EPOCH
 #define ENRG_MIN_EPOCH 968000000L
 
@@ -249,7 +249,7 @@
 #endif
 
 #if ENRG_USE_SE050
-// NXP SE050 (plug-and-trust): SSS API. Требует lib_deps: se050.
+// NXP SE050 (plug-and-trust): SSS API. Requires lib_deps: se050.
 #include <sss.h>
 #include <fsl_sss_se05x_apis.h>
 #include <fsl_sss_se05x_types.h>
@@ -261,13 +261,13 @@
 #include <esp_efuse.h>
 #endif
 
-// ── Глобальные ключи устройства (заполняются в identity_init_v3) ──
+// ── Global device keys (filled in identity_init_v3) ──
 static uint8_t g_privateKey[32];
 static uint8_t g_publicKey[32];
 static unsigned long g_lastReportMs = 0;
 
 // ════════════════════════════════════════════════════════════════
-//  base64 (компактная реализация, без внешних библиотек)
+//  base64 (compact implementation, no external libraries)
 // ════════════════════════════════════════════════════════════════
 
 static const char BASE64_CHARS[] =
@@ -288,7 +288,7 @@ String base64_encode(const uint8_t *data, size_t len) {
     return out;
 }
 
-// Значение base64-символа (0..63) или -1, если символ недопустим.
+// Base64 character value (0..63) or -1 if the character is invalid.
 static int b64_val(char c) {
     if (c >= 'A' && c <= 'Z') return c - 'A';
     if (c >= 'a' && c <= 'z') return c - 'a' + 26;
@@ -299,9 +299,9 @@ static int b64_val(char c) {
 }
 
 /**
- * Декодирование base64 (без внешних библиотек). Возвращает число
- * декодированных байт или -1 при ошибке/переполнении буфера.
- * Используется для разбора signature Device Manifest (ADR-0004).
+ * Base64 decoding (no external libraries). Returns the number of
+ * decoded bytes or -1 on error/buffer overflow.
+ * Used to parse the Device Manifest signature (ADR-0004).
  */
 int base64_decode(const String &in, uint8_t *out, size_t maxOut) {
     size_t oi = 0;
@@ -323,7 +323,7 @@ int base64_decode(const String &in, uint8_t *out, size_t maxOut) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  hex (device_id = "0x" + 64 hex-символа публичного ключа)
+//  hex (device_id = "0x" + 64 hex characters of the public key)
 // ════════════════════════════════════════════════════════════════
 
 String to_hex(const uint8_t *data, size_t len) {
@@ -342,8 +342,8 @@ String device_id_from_pubkey(const uint8_t *pubkey) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  ХРАНИЛИЩЕ КЛЮЧА (H-3 / H-4)
-//  Приоритет: ATECC608A (если включён и доступен) → NVS.
+//  KEY STORAGE (H-3 / H-4)
+//  Priority: ATECC608A (if enabled and available) → NVS.
 // ════════════════════════════════════════════════════════════════
 
 static Preferences g_prefs;
@@ -353,8 +353,8 @@ static bool store_seed_atecc(const uint8_t seed[32]) {
 #if ENRG_USE_ATECC608
     ATCA_STATUS status = atcab_init(NULL);
     if (status != ATCA_SUCCESS) return false;
-    // Запись в Data-Zone слот; слот должен быть сконфигурирован как
-    // write-protected/encrypted (см. datasheet ATECC608A, config zone).
+    // Write to the Data-Zone slot; the slot must be configured as
+    // write-protected/encrypted (see the ATECC608A datasheet, config zone).
     status = atcab_write_bytes(ENRG_ATECC_SLOT, 0, (uint8_t *)seed, 32);
     if (status != ATCA_SUCCESS) return false;
     g_key_in_secure_element = true;
@@ -381,16 +381,16 @@ static bool load_seed_atecc(uint8_t seed[32]) {
 
 #if ENRG_USE_SE050
 // ════════════════════════════════════════════════════════════════
-//  NXP SE050 — аппаратная Ed25519-подпись (полное соответствие ADR-0001).
+//  NXP SE050 — hardware Ed25519 signing (full ADR-0001 compliance).
 //
-//  В отличие от ATECC608A (seed-vault + подпись в CPU), SE050 умеет Ed25519
-//  НАТИВНО: приватный ключ генерируется/хранится ВНУТРИ чипа и никогда не
-//  покидает его; подпись выполняется аппаратно.
+//  Unlike ATECC608A (seed vault + CPU signing), the SE050 supports Ed25519
+//  NATIVELY: the private key is generated/stored INSIDE the chip and never
+//  leaves it; signing is performed in hardware.
 //
-//  ⚠️ REFERENCE IMPLEMENTATION: код требует платы с SE050 (I2C) и библиотеки
-//  `se050` (PlatformIO env `esp32dev-se050`). Без чипа путь не собирается и
-//  не включается (ENRG_USE_SE050=0 по умолчанию). При bring-up сверьте имена
-//  SSS-функций с версией библиотеки.
+//  ⚠️ REFERENCE IMPLEMENTATION: the code requires a board with SE050 (I2C) and the
+//  `se050` library (PlatformIO env `esp32dev-se050`). Without the chip the path does not build and
+//  is not enabled (ENRG_USE_SE050=0 by default). During bring-up, check the SSS
+//  function names against the library version.
 // ════════════════════════════════════════════════════════════════
 
 static sss_se05x_connect_ctx_t g_se05x_ctx = {0};
@@ -400,7 +400,7 @@ static sss_object_t g_se05x_key_obj = {0};
 static sss_asymmetric_t g_se05x_asym = {0};
 static bool g_se050_ready = false;
 
-/** Открыть сессию с SE050 (I2C). */
+/** Open a session with the SE050 (I2C). */
 static bool se050_open() {
     sss_status_t st = sss_se05x_connect(&g_se05x_ctx);
     if (st != kStatus_SSS_Success) {
@@ -426,15 +426,15 @@ static bool se050_open() {
 }
 
 /**
- * Загрузить существующий Ed25519-ключ из SE050 или создать новый ВНУТРИ чипа.
- * Публичный ключ получаем из SE050 (device_id стабилен между загрузками).
+ * Load an existing Ed25519 key from the SE050 or create a new one INSIDE the chip.
+ * The public key is obtained from the SE050 (device_id stays stable across boots).
  */
 static bool se050_load_or_create_key(uint8_t publicKey[32]) {
     sss_status_t st = sss_crypto_object_get_handle(
         &g_se05x_key_obj, &g_se05x_key_store,
         kSSS_KeyPart_Pair_Ed25519, kSSS_CipherType_EC_ED25519, ENRG_SE050_KEY_ID);
     if (st != kStatus_SSS_Success) {
-        // Ключа нет — генерируем ПРЯМО В SE050 (секрет не появляется на шине).
+        // No key — generate it DIRECTLY IN the SE050 (the secret never appears on the bus).
         st = sss_crypto_object_create(
             &g_se05x_key_obj, &g_se05x_key_store,
             kSSS_KeyPart_Pair_Ed25519, kSSS_CipherType_EC_ED25519, ENRG_SE050_KEY_ID);
@@ -464,14 +464,14 @@ static bool se050_load_or_create_key(uint8_t publicKey[32]) {
     return true;
 }
 
-/** Аппаратная Ed25519-подпись внутри SE050 (приватный ключ не покидает чип). */
+/** Hardware Ed25519 signature inside the SE050 (the private key never leaves the chip). */
 static bool se050_sign(const uint8_t *msg, size_t msgLen, uint8_t signature[64]) {
     size_t sigLen = 64;
     sss_status_t st = sss_asymmetric_sign(&g_se05x_asym, msg, msgLen, signature, &sigLen);
     return (st == kStatus_SSS_Success && sigLen == 64);
 }
 
-/** Инициализация SE050-пути: сессия + ключ + публичный ключ. */
+/** SE050 path initialization: session + key + public key. */
 static bool identity_init_se050(uint8_t publicKey[32]) {
     if (!se050_open()) return false;
     if (!se050_load_or_create_key(publicKey)) return false;
@@ -480,12 +480,12 @@ static bool identity_init_se050(uint8_t publicKey[32]) {
 }
 #endif // ENRG_USE_SE050
 
-// Генерирует Ed25519-ключ при первой загрузке и сохраняет seed в NVS
-// (или ATECC608A). При последующих загрузках — загружает.
+// Generates the Ed25519 key on first boot and stores the seed in NVS
+// (or ATECC608A). On later boots — loads it.
 bool identity_init_v3(uint8_t privateKey[32], uint8_t publicKey[32]) {
     g_prefs.begin("enrg", false);
 
-    // 1) Пробуем Secure Element (если включён).
+    // 1) Try the Secure Element (if enabled).
 #if ENRG_USE_ATECC608
     if (load_seed_atecc(privateKey)) {
         Ed25519::derivePublicKey(publicKey, privateKey);
@@ -494,7 +494,7 @@ bool identity_init_v3(uint8_t privateKey[32], uint8_t publicKey[32]) {
     }
 #endif
 
-    // 2) Пробуем NVS.
+    // 2) Try NVS.
     size_t privLen = g_prefs.getBytesLength("privkey");
     if (privLen == 32) {
         g_prefs.getBytes("privkey", privateKey, 32);
@@ -503,8 +503,8 @@ bool identity_init_v3(uint8_t privateKey[32], uint8_t publicKey[32]) {
         return true;
     }
 
-    // 3) Нет ключа — генерируем.
-    // Crypto 0.4.0: Ed25519::generatePrivateKey(privkey) использует внутренний RNG.
+    // 3) No key — generate one.
+    // Crypto 0.4.0: Ed25519::generatePrivateKey(privkey) uses the internal RNG.
     Ed25519::generatePrivateKey(privateKey);
     Ed25519::derivePublicKey(publicKey, privateKey);
 
@@ -525,9 +525,9 @@ bool identity_init_v3(uint8_t privateKey[32], uint8_t publicKey[32]) {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  ОБЩИЙ ПУТЬ ПОДПИСИ (Serial SIGN / локальный HTTP-signer)
-//  ADR-0001: приватный ключ никогда не покидает устройство; наружу —
-//  только подпись. CPU Ed25519 (NVS/ATECC seed) или аппаратный SE050.
+//  COMMON SIGNING PATH (Serial SIGN / local HTTP signer)
+//  ADR-0001: the private key never leaves the device; only the signature
+//  goes out. CPU Ed25519 (NVS/ATECC seed) or hardware SE050.
 // ════════════════════════════════════════════════════════════════
 
 static bool sign_with_device_key(const uint8_t *msg, size_t msgLen, uint8_t signature[64]) {
@@ -538,17 +538,17 @@ static bool sign_with_device_key(const uint8_t *msg, size_t msgLen, uint8_t sign
     return true;
 }
 
-// Канонический префикс сообщений, которые устройство подписывает ПО СЕТИ
-// (зеркалит security/lifecycle.rs: enrg:device:register/claim/rotate).
+// Canonical prefix of the messages the device signs OVER THE NETWORK
+// (mirrors security/lifecycle.rs: enrg:device:register/claim/rotate).
 static const uint8_t ENRG_DEVICE_SIGN_PREFIX[] = "enrg:device:";
 static const size_t ENRG_DEVICE_SIGN_PREFIX_LEN = sizeof(ENRG_DEVICE_SIGN_PREFIX) - 1; // 12
 
 /**
- * Доменная валидация для HTTP-signer'а (обязательная):
- *  - сообщение начинается с "enrg:device:" (только протокольные домены);
- *  - встроенный device_id (байты 12..44) == наш публичный ключ.
- * Произвольные сообщения HTTP-эндпоинт НЕ подписывает — только Serial
- * (физический доступ к устройству).
+ * Domain validation for the HTTP signer (mandatory):
+ *  - the message starts with "enrg:device:" (protocol domains only);
+ *  - the embedded device_id (bytes 12..44) == our public key.
+ * The HTTP endpoint does NOT sign arbitrary messages — only Serial
+ * (physical access to the device).
  */
 static bool signer_message_allowed(const uint8_t *msg, size_t len) {
     if (len < ENRG_DEVICE_SIGN_PREFIX_LEN + 32) return false;
@@ -557,7 +557,7 @@ static bool signer_message_allowed(const uint8_t *msg, size_t len) {
     return true;
 }
 
-/** RFC1918 / loopback / link-local — "локальный контур" для signer'а. */
+/** RFC1918 / loopback / link-local — the "local loop" for the signer. */
 static bool is_private_ipv4(uint8_t a, uint8_t b, uint8_t c, uint8_t d) {
     (void)c; (void)d;
     if (a == 10) return true;               // 10/8
@@ -577,7 +577,7 @@ static bool signer_client_allowed(const IPAddress &ip) {
 #endif
 }
 
-// Монотонный nonce, персистентный между перезагрузками (анти-replay).
+// Monotonic nonce, persistent across reboots (anti-replay).
 uint32_t next_nonce() {
     uint32_t n = g_prefs.getUInt("nonce", 0) + 1;
     g_prefs.putUInt("nonce", n);
@@ -585,9 +585,9 @@ uint32_t next_nonce() {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  БИНАРНАЯ ПОДПИСЬ (on-chain формат)
+//  BINARY SIGNATURE (on-chain format)
 //  message = device_id(32) || nonce(8 LE) || timestamp(8 LE) || energy_wh(8 LE)
-//  Совпадает с state/oracle.rs OracleReport::device_message_to_sign().
+//  Matches state/oracle.rs OracleReport::device_message_to_sign().
 // ════════════════════════════════════════════════════════════════
 
 static void le64_put(uint8_t *buf, uint64_t v) {
@@ -603,7 +603,7 @@ void build_proof_message(uint8_t msg[56], const uint8_t pubkey[32],
 }
 
 // ════════════════════════════════════════════════════════════════
-//  ЭНЕРГИЯ (Wh за интервал отчёта)
+//  ENERGY (Wh per report interval)
 // ════════════════════════════════════════════════════════════════
 
 #if ENRG_USE_PZEM
@@ -620,13 +620,13 @@ uint64_t read_energy_wh() {
     }
     return (uint64_t)(energy * 1000.0f); // kWh -> Wh
 #else
-    // Заглушка без сенсора. Подключите PZEM-004T и включите ENRG_USE_PZEM=1.
+    // Stub without a sensor. Connect a PZEM-004T and enable ENRG_USE_PZEM=1.
     return 1; // 1 Wh за интервал
 #endif
 }
 
 // ════════════════════════════════════════════════════════════════
-//  NTP (wall-clock вместо millis())
+//  NTP (wall clock instead of millis())
 // ════════════════════════════════════════════════════════════════
 
 void ntp_sync() {
@@ -643,7 +643,7 @@ bool time_is_synced() {
 //  WIFI
 // ════════════════════════════════════════════════════════════════
 
-// ── Credentials: ТОЛЬКО NVS (Preferences, namespace "enrg") ──
+// ── Credentials: ONLY NVS (Preferences, namespace "enrg") ──
 static const char WIFI_PREF_SSID[] = "wifi_ssid";
 static const char WIFI_PREF_PASS[] = "wifi_pass";
 
@@ -662,24 +662,24 @@ static void wifi_clear_creds() {
     Serial.println("[WIFI] креды стёрты из NVS");
 }
 
-// ── Plug & Play: имена выводятся из deviceId (последние hex pubkey), ──
-//    чтобы Axis-connect мог вычислить hostname прямо из QR-пейлоада.
+// ── Plug & Play: names are derived from deviceId (last pubkey hex), ──
+//    so Axis-connect can derive the hostname directly from the QR payload.
 static String device_tail_hex(size_t n) {
     String id = device_id_from_pubkey(g_publicKey); // "0x" + 64 hex
     return id.substring(id.length() - n);
 }
-// AP "Axis-Device-XXXX": XXXX = последние 4 hex deviceId.
+// AP "Axis-Device-XXXX": XXXX = last 4 deviceId hex chars.
 static String ap_name() { return "Axis-Device-" + device_tail_hex(4); }
-// Пароль AP: последние 8 hex deviceId (не хардкод, печатается в Serial).
+// AP password: last 8 deviceId hex chars (not hard-coded; printed to Serial).
 static String ap_password() { return device_tail_hex(8); }
-// mDNS: axis-device-xxxx.local (RFC 6763: только [a-z0-9-]).
+// mDNS: axis-device-xxxx.local (RFC 6763: only [a-z0-9-]).
 static String mdns_hostname() {
     String tail = device_tail_hex(4);
     tail.toLowerCase();
     return "axis-device-" + tail;
 }
 
-/** Подключение к Wi-Fi по явным кредам с таймаутом. */
+/** Connect to Wi-Fi with explicit credentials and a timeout. */
 bool connect_wifi_creds(const String &ssid, const String &pass, unsigned long timeoutMs) {
     if (WiFi.status() == WL_CONNECTED) return true;
     WiFi.mode(WIFI_STA);
@@ -697,7 +697,7 @@ bool connect_wifi_creds(const String &ssid, const String &pass, unsigned long ti
     return false;
 }
 
-/** Подключение по кредам из NVS. */
+/** Connect using the credentials from NVS. */
 bool connect_wifi_from_nvs(unsigned long timeoutMs) {
     if (WiFi.status() == WL_CONNECTED) return true;
     String ssid = wifi_ssid_from_nvs();
@@ -706,10 +706,10 @@ bool connect_wifi_from_nvs(unsigned long timeoutMs) {
 }
 
 /**
- * Captive Portal (WiFiManager): защищённая AP "Axis-Device-XXXX".
- * Пользователь подключается к AP, попадает на портал (DNS-редирект),
- * вводит SSID/пароль домашней сети. Креды сохраняем САМИ в NVS.
- * Возвращает true, если пользователь настроил сеть (нужен ESP.restart()).
+ * Captive Portal (WiFiManager): a protected AP "Axis-Device-XXXX".
+ * The user connects to the AP, is taken to the portal (DNS redirect),
+ * and enters the home network SSID/password. WE save the credentials in NVS ourselves.
+ * Returns true if the user configured the network (ESP.restart() needed).
  */
 static bool start_captive_portal() {
     String apName = ap_name();
@@ -718,8 +718,8 @@ static bool start_captive_portal() {
     Serial.printf("[PORTAL] подключитесь к %s, откройте http://192.168.4.1\n", apName.c_str());
 
     WiFiManager wm;
-    // Не полагаемся на собственную персистентность WiFiManager'а — креды
-    // читаются/пишутся только через наш Preferences (namespace "enrg").
+    // Do not rely on WiFiManager's own persistence — the credentials
+    // are read/written only through our Preferences (namespace "enrg").
     wm.setConfigPortalTimeout((unsigned long)ENRG_AP_TIMEOUT_SEC);
     wm.setConnectTimeout(30);
 
@@ -738,7 +738,7 @@ static bool start_captive_portal() {
     return true;
 }
 
-/** Оркестрация: NVS-креды → 30s connect → иначе Captive Portal. */
+/** Orchestration: NVS credentials → 30s connect → otherwise Captive Portal. */
 static bool setup_wifi() {
     String ssid = wifi_ssid_from_nvs();
     if (ssid.length() > 0) {
@@ -759,19 +759,19 @@ static bool setup_wifi() {
 }
 
 // ════════════════════════════════════════════════════════════════
-//  ОТПРАВКА PROOF (http:// или https:// — выбор по схеме URL)
+//  SENDING PROOF (http:// or https:// — chosen by the URL scheme)
 // ════════════════════════════════════════════════════════════════
 
-// ── Глобальное состояние манифеста (ADR-0004) ──
-// URL для отправки proof'ов: по умолчанию ENRG_ORACLE_URL (обратная
-// совместимость); при валидном манифесте заменяется на manifest.oracle_url.
+// ── Global manifest state (ADR-0004) ──
+// Proof-sending URL: ENRG_ORACLE_URL by default (backward
+// compatibility); replaced by manifest.oracle_url when a valid manifest exists.
 static String g_proof_url = ENRG_ORACLE_URL;
-// Номинальная мощность устройства из манифеста (Вт); 0 — не задана.
+// Device rated power from the manifest (W); 0 — not set.
 static uint64_t g_rated_power = 0;
-// true — манифест получен и подпись проверена.
+// true — the manifest was received and its signature verified.
 static bool g_manifest_valid = false;
 
-/** Извлечь host из URL (http://host[:port]/path). */
+/** Extract the host from a URL (http://host[:port]/path). */
 static String url_host(const String &url) {
     int schemeEnd = url.indexOf("://");
     if (schemeEnd < 0) return "";
@@ -783,7 +783,7 @@ static String url_host(const String &url) {
     return url.substring(hostStart, end);
 }
 
-/** Локальный ли узел: loopback / RFC1918 / link-local / mDNS .local. */
+/** Is the host local: loopback / RFC1918 / link-local / mDNS .local. */
 static bool host_is_local(const String &host) {
     if (host == "localhost") return true;
     if (host.endsWith(".local")) return true;
@@ -795,12 +795,12 @@ static bool host_is_local(const String &host) {
 }
 
 /**
- * Защита транспорта от открытого HTTP (P0-3, ADR-0008: TLS 1.3).
- * https:// — всегда разрешено. http:// — разрешено ТОЛЬКО для локального
- * контура (loopback/LAN/mDNS: локальный оракул, подпись через signer'а);
- * http:// к УДАЛЁННОМУ узлу блокируется всегда. ENRG_ALLOW_HTTP=1 — явный
- * dev-обход (полностью открывает http).
- * Возвращает false, если запрос блокируется.
+ * Transport protection against plain HTTP (P0-3, ADR-0008: TLS 1.3).
+ * https:// — always allowed. http:// — allowed ONLY for the local
+ * loop (loopback/LAN/mDNS: local oracle, signing via the signer);
+ * http:// to a REMOTE host is always blocked. ENRG_ALLOW_HTTP=1 is an explicit
+ * dev bypass (fully opens http).
+ * Returns false if the request is blocked.
  */
 static bool transport_allowed(const String &url) {
     if (url.startsWith("https://")) return true;
@@ -832,7 +832,7 @@ int send_proof_http(const String &body) {
     }
 
     if (g_proof_url.startsWith("https://")) {
-        // TLS с проверкой корневого CA (ENRG_CA_CERT); mTLS опционально.
+        // TLS with root CA verification (ENRG_CA_CERT); mTLS optional.
         WiFiClientSecure client;
         client.setCACert(ENRG_CA_CERT); // обязательная проверка корневого CA
 #if ENRG_MTLS
@@ -849,7 +849,7 @@ int send_proof_http(const String &body) {
         if (code > 0) resp = http.getString();
         http.end();
     } else {
-        // Обычный HTTP (локальная сеть / dev): http://host:port
+        // Plain HTTP (local network / dev): http://host:port
         WiFiClient client;
         HTTPClient http;
         if (!http.begin(client, g_proof_url)) {
@@ -876,8 +876,8 @@ int send_proof_http(const String &body) {
 }
 
 /**
- * Простой HTTP(S) GET (для получения Device Manifest, ADR-0004, и
- * метаданных OTA). Возвращает тело ответа (пустая строка при ошибке).
+ * Simple HTTP(S) GET (to fetch the Device Manifest, ADR-0004, and
+ * OTA metadata). Returns the response body (empty string on error).
  */
 String http_get(const String &url) {
     String body = "";
@@ -924,7 +924,7 @@ String http_get(const String &url) {
 //  DEVICE MANIFEST (ADR-0004)
 // ════════════════════════════════════════════════════════════════
 
-// Парсинг hex-строки публичного ключа основателя в байты (32).
+// Parse the founder public key hex string into bytes (32).
 bool parse_hex(const char *hex, uint8_t *out, size_t outLen) {
     size_t len = strlen(hex);
     if (len != outLen * 2) return false;
@@ -944,26 +944,26 @@ bool parse_hex(const char *hex, uint8_t *out, size_t outLen) {
 }
 
 /**
- * Проверка подписанного Device Manifest (ADR-0004).
+ * Verify a signed Device Manifest (ADR-0004).
  *
- * 1. Разбирает JSON.
- * 2. Проверяет привязку к ЭТОМУ устройству: device_id == свой, public_key == свой.
- * 3. Пересобирает каноническое сообщение подписи (то же, что в policy.js):
+ * 1. Parses the JSON.
+ * 2. Checks the binding to THIS device: device_id == ours, public_key == ours.
+ * 3. Rebuilds the canonical signature message (same as in policy.js):
  *      device_id|rated_power|oracle_url|public_key|timestamp
- * 4. Декодирует base64-подпись и проверяет Ed25519 публичным ключом основателя
- *    (вшит в прошивку как ENRG_FOUNDER_PUBKEY_HEX).
+ * 4. Decodes the base64 signature and verifies it with the founder Ed25519 public key
+ *    (embedded in the firmware as ENRG_FOUNDER_PUBKEY_HEX).
  *
- * @param body тело ответа оракула (JSON)
- * @param deviceId собственный device_id ("0x" + hex публичного ключа)
- * @param ownPublicKey собственный Ed25519-публичный ключ (32 байта)
- * @param ratedPowerOut номинальная мощность (Вт) из манифеста
- * @param oracleUrlOut oracle_url из манифеста
- * @returns true, если манифест валиден
+ * @param body the oracle response body (JSON)
+ * @param deviceId our device_id ("0x" + public key hex)
+ * @param ownPublicKey our Ed25519 public key (32 bytes)
+ * @param ratedPowerOut the rated power (W) from the manifest
+ * @param oracleUrlOut the oracle_url from the manifest
+ * @returns true if the manifest is valid
  */
 bool verify_manifest(const String &body, const String &deviceId,
                      const uint8_t *ownPublicKey,
                      uint64_t &ratedPowerOut, String &oracleUrlOut) {
-    // Публичный ключ основателя (оракула) из конфигурации.
+    // Founder (oracle) public key from the configuration.
     uint8_t founderPub[32];
     if (!parse_hex(ENRG_FOUNDER_PUBKEY_HEX, founderPub, sizeof(founderPub))) {
         Serial.println("[MANIFEST] FATAL: ENRG_FOUNDER_PUBKEY_HEX некорректен");
@@ -984,18 +984,18 @@ bool verify_manifest(const String &body, const String &deviceId,
     const char *m_pv = doc["policy_version"];
     const char *m_ve = doc["verifier_endpoint"];
     const char *m_sig = doc["signature"];
-    // ADR-0004: все поля обязательны (аудит 2026-08-18, P1-12).
+    // ADR-0004: all fields are required (audit 2026-08-18, P1-12).
     if (!m_id || !m_rated || !m_oracle || !m_pub || !m_ts || !m_sig ||
         !m_trust || !m_hb || !m_pt || !m_pv || !m_ve) {
         Serial.println("[MANIFEST] отсутствует одно из обязательных полей ADR-0004");
         return false;
     }
 
-    // Привязка к этому устройству (манифест нельзя подменить/переадресовать).
+    // Binding to this device (the manifest cannot be swapped/redirected).
     if (String(m_id) != deviceId) return false;
     if (String(m_pub) != base64_encode(ownPublicKey, 32)) return false;
 
-    // Каноническое сообщение — побайтово как в policy.js::buildManifestMessage.
+    // Canonical message — byte-for-byte as in policy.js::buildManifestMessage.
     String msg = String(m_id) + "|" + String(m_rated) + "|" +
                  String(m_oracle) + "|" + String(m_pub) + "|" + String(m_ts) + "|" +
                  String(m_trust) + "|" + String(m_hb) + "|" + String(m_pt) + "|" +
@@ -1012,7 +1012,7 @@ bool verify_manifest(const String &body, const String &deviceId,
     return true;
 }
 
-/** Применить валидный манифест: rated_power + oracle_url → эндпоинт proof. */
+/** Apply a valid manifest: rated_power + oracle_url → proof endpoint. */
 bool apply_manifest(const String &body, const String &deviceId) {
     uint64_t rp = 0;
     String ourl = "";
@@ -1028,7 +1028,7 @@ bool apply_manifest(const String &body, const String &deviceId) {
     return true;
 }
 
-/** Загрузить манифест из NVS и проверить подпись. */
+/** Load the manifest from NVS and verify its signature. */
 bool load_manifest_from_nvs(const String &deviceId) {
     String stored = g_prefs.getString("manifest", "");
     if (stored.length() == 0) return false;
@@ -1040,19 +1040,19 @@ bool load_manifest_from_nvs(const String &deviceId) {
     return true;
 }
 
-/** Запросить манифест у оракула (GET /api/v1/manifest/<device_id>). */
+/** Request the manifest from the oracle (GET /api/v1/manifest/<device_id>). */
 String fetch_manifest_body(const String &deviceId) {
     String url = String(ENRG_MANIFEST_URL_BASE) + "/" + deviceId;
     Serial.printf("[MANIFEST] fetching %s\n", url.c_str());
     return http_get(url);
 }
 
-/** Полная инициализация манифеста при старте (setup). */
+/** Full manifest initialization at startup (setup). */
 bool init_manifest(const String &deviceId) {
-    // 1) Сначала NVS-копия (устройство может работать офлайн, ADR-0004).
+    // 1) First the NVS copy (the device can work offline, ADR-0004).
     if (load_manifest_from_nvs(deviceId)) return true;
 
-    // 2) Иначе — получить свежий манифест и сохранить.
+    // 2) Otherwise — fetch a fresh manifest and save it.
     String body = fetch_manifest_body(deviceId);
     if (body.length() > 0 && apply_manifest(body, deviceId)) {
         g_prefs.putString("manifest", body);
@@ -1073,7 +1073,7 @@ bool init_manifest(const String &deviceId) {
 // ════════════════════════════════════════════════════════════════
 
 void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
-    // ADR-0004: если манифест обязателен, но не получен/невалиден — proof'ы НЕ отправляем.
+    // ADR-0004: if the manifest is required but not received/invalid — we do NOT send proofs.
     if (ENRG_MANIFEST_REQUIRED && !g_manifest_valid) {
         Serial.println("[PROOF] пропуск: нет валидного манифеста (ENRG_MANIFEST_REQUIRED)");
         return;
@@ -1086,8 +1086,8 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
 
     uint64_t energyWh = read_energy_wh();
 
-    // ADR-0004: если известна номинальная мощность (rated_power из манифеста),
-    // энергия одного отчёта ограничена ею (грубая защита от ложных показаний).
+    // ADR-0004: if the rated power is known (rated_power from the manifest),
+    // the energy of one report is capped by it (coarse protection against false readings).
     if (g_rated_power > 0 && energyWh > g_rated_power) {
         Serial.printf("[PROOF] WARN: energy %lluWh > rated_power %lluW — ограничиваем\n",
                       (unsigned long long)energyWh, (unsigned long long)g_rated_power);
@@ -1097,14 +1097,14 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
     uint32_t nonce = next_nonce();
     int64_t timestamp = (int64_t)time(nullptr); // wall-clock (epoch)
 
-    // Бинарное сообщение и подпись.
+    // Binary message and signature.
     uint8_t msg[56];
     build_proof_message(msg, publicKey, nonce, timestamp, energyWh);
 
     uint8_t signature[64];
 #if ENRG_USE_SE050
     if (g_se050_ready) {
-        // Аппаратная Ed25519-подпись внутри SE050 (приватный ключ не покидает чип).
+        // Hardware Ed25519 signature inside the SE050 (the private key never leaves the chip).
         if (!se050_sign(msg, sizeof(msg), signature)) {
             Serial.println("[PROOF] SE050 signing failed — proof пропущен");
             return;
@@ -1119,7 +1119,7 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
     String deviceId = device_id_from_pubkey(publicKey);
     String sigB64 = base64_encode(signature, sizeof(signature));
 
-    // JSON без внешних библиотек.
+    // JSON without external libraries.
     String body;
     body.reserve(256);
     body += "{\"device_id\":\"";
@@ -1146,12 +1146,12 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
 
 // ════════════════════════════════════════════════════════════════
 // ════════════════════════════════════════════════════════════════
-//  OTA-ОБНОВЛЕНИЯ ПРОШИВКИ (ADR-0008)
+//  FIRMWARE OTA UPDATES (ADR-0008)
 // ════════════════════════════════════════════════════════════════
 
 /**
- * Сравнение версий "a.b.c..." (числовое, по компонентам).
- * Возвращает >0 если a > b, <0 если a < b, 0 если равны.
+ * Version comparison "a.b.c..." (numeric, component-wise).
+ * Returns >0 if a > b, <0 if a < b, 0 if equal.
  */
 int compare_versions(const String &a, const String &b) {
     int pa = 0, pb = 0;
@@ -1166,11 +1166,11 @@ int compare_versions(const String &a, const String &b) {
 }
 
 /**
- * Проверка подписи firmware-метаданных (ADR-0008).
- * Каноническое сообщение — `version|image_hash|image_size` (то же, что в
- * policy.js::buildFirmwareMessage). Публичный ключ вшит в прошивку
- * (ENRG_FIRMWARE_PUBKEY_HEX — ОТДЕЛЬНЫЙ «холодный» firmware-ключ, D-5;
- * НЕ founder-ключ, который используется для манифестов).
+ * Firmware metadata signature verification (ADR-0008).
+ * The canonical message is `version|image_hash|image_size` (same as in
+ * policy.js::buildFirmwareMessage). The public key is embedded in the firmware
+ * (ENRG_FIRMWARE_PUBKEY_HEX — a SEPARATE "cold" firmware key, D-5;
+ * NOT the founder key used for manifests).
  */
 bool verify_firmware_signature(const String &version, const String &hashHex,
                                long imageSize, const String &sigB64) {
@@ -1187,20 +1187,20 @@ bool verify_firmware_signature(const String &version, const String &hashHex,
 
 #if ENRG_ENABLE_HW_ANTI_ROLLBACK
 // ════════════════════════════════════════════════════════════════
-//  DUAL-BANK OTA + АППАРАТНЫЙ MONOTONIC-СЧЁТЧИК (ADR-0008)
+//  DUAL-BANK OTA + HARDWARE MONOTONIC COUNTER (ADR-0008)
 //
-//  Dual-bank A/B: otadata + app0/app1 (partitions_ota.csv). Новый образ
-//  стартует как «pending»; если приложение НЕ подтвердило себя
-//  (esp_ota_mark_app_valid_cancel_rollback не вызван или вызван
-//  esp_ota_mark_app_invalid) — бутлоадер автоматически откатывается
-//  к предыдущему образу при следующей перезагрузке.
-//  Monotonic: secure_version «сжигается» в eFuse (значение может только
-//  расти); бутлоадер (CONFIG_BOOTLOADER_EFUSE_SECURE_VERSION=y) отказывает
-//  в запуске образов со СТАРШЕЙ secure_version — аппаратный анти-откат,
-//  в отличие от NVS fw_version, который можно перезаписать физическим доступом.
+//  Dual-bank A/B: otadata + app0/app1 (partitions_ota.csv). The new image
+//  starts as "pending"; if the application did NOT confirm itself
+//  (esp_ota_mark_app_valid_cancel_rollback was not called or
+//  esp_ota_mark_app_invalid was called) — the bootloader automatically rolls back
+//  to the previous image on the next reboot.
+//  Monotonic: secure_version is "burned" into eFuse (the value can only
+//  grow); the bootloader (CONFIG_BOOTLOADER_EFUSE_SECURE_VERSION=y) refuses
+//  to boot images with an OLDER secure_version — hardware anti-rollback,
+//  unlike the NVS fw_version, which can be overwritten with physical access.
 // ════════════════════════════════════════════════════════════════
 
-/** "1.2.3" → 1*10000 + 2*100 + 3 (монотонно растёт с версией). */
+/** "1.2.3" → 1*10000 + 2*100 + 3 (grows monotonically with the version). */
 static uint32_t fw_version_number(const char *v) {
     uint32_t maj = 0, min = 0, pat = 0;
     int p = 0;
@@ -1212,13 +1212,13 @@ static uint32_t fw_version_number(const char *v) {
     return maj * 10000 + min * 100 + pat;
 }
 
-/** Подтвердить текущий образ (отменяет автоматический rollback). */
+/** Confirm the current image (cancels the automatic rollback). */
 static void ota_mark_boot_ok() {
     esp_err_t e = esp_ota_mark_app_valid_cancel_rollback();
     Serial.printf("[OTA] mark_app_valid_cancel_rollback: %s\n", esp_err_to_name(e));
 }
 
-/** Сжечь secure_version в eFuse (только увеличение) — аппаратный анти-откат. */
+/** Burn secure_version into eFuse (increase only) — hardware anti-rollback. */
 static void ota_mark_hardware_anti_rollback() {
     uint32_t ver = fw_version_number(ENRG_FW_VERSION);
     esp_err_t e = esp_efuse_update_secure_version(ver);
@@ -1226,10 +1226,10 @@ static void ota_mark_hardware_anti_rollback() {
                   (unsigned long)ver, esp_err_to_name(e));
 }
 
-/** Пометить текущий образ невалидным и перезагрузиться → rollback на предыдущий. */
+/** Mark the current image invalid and reboot → rollback to the previous one. */
 static void ota_mark_app_invalid() {
-    // В текущей IDF: esp_ota_mark_app_invalid_rollback_and_reboot() сама
-    // выполняет перезагрузку. ESP.restart() ниже — страховка.
+    // In the current IDF: esp_ota_mark_app_invalid_rollback_and_reboot() itself
+    // performs the reboot. The ESP.restart() below is a safety net.
     esp_err_t e = esp_ota_mark_app_invalid_rollback_and_reboot();
     Serial.printf("[OTA] mark_app_invalid_rollback_and_reboot: %s — rollback...\n",
                   esp_err_to_name(e));
@@ -1239,20 +1239,20 @@ static void ota_mark_app_invalid() {
 
 
 // ════════════════════════════════════════════════════════════════
-//  SERIAL-КОМАНДЫ (onboarding / регистрация)
+//  SERIAL COMMANDS (onboarding / registration)
 //
-//  ADR-0001: приватный ключ НИКОГДА не покидает устройство. Команда
-//  SIGN подписывает произвольное сообщение ЛОКАЛЬНЫМ ключом и выдаёт
-//  наружу только подпись (64 байта). Это нужно для:
-//    * PoP-регистрации в оракуле: подпись над `${device_id}|${public_key}`;
-//    * on-chain register/claim: подпись над бинарными сообщениями
+//  ADR-0001: the private key NEVER leaves the device. The SIGN
+//  command signs an arbitrary message with the LOCAL key and outputs
+//  only the signature (64 bytes). This is needed for:
+//    * PoP registration at the oracle: a signature over `${device_id}|${public_key}`;
+//    * on-chain register/claim: a signature over binary messages
 //      (`enrg:device:register ‖ device_id ‖ ts`, etc.).
 //
-//  Формат:
-//    HELP             — список команд
-//    INFO             — device_id, public_key (base64/hex), хранилище
-//    SIGN <hex>       — подписать сообщение (hex) Ed25519-ключом устройства
-//                       (max 256 байт); вывод: sig_base64 / sig_hex
+//  Format:
+//    HELP             — list of commands
+//    INFO             — device_id, public_key (base64/hex), storage
+//    SIGN <hex>       — sign the message (hex) with the device Ed25519 key
+//                       (max 256 bytes); output: sig_base64 / sig_hex
 // ════════════════════════════════════════════════════════════════
 
 static String g_serialLine = "";
@@ -1264,7 +1264,7 @@ static int hex_val_serial(char c) {
     return -1;
 }
 
-/** hex-строка → байты. Возвращает число байт или -1 при ошибке/переполнении. */
+/** hex string → bytes. Returns the byte count or -1 on error/overflow. */
 static int hex_to_bytes_serial(const String &hex, uint8_t *out, size_t maxOut) {
     if (hex.length() == 0 || hex.length() % 2 != 0) return -1;
     size_t n = hex.length() / 2;
@@ -1310,7 +1310,7 @@ static void print_device_info_serial() {
                   wifi_ssid_from_nvs().length() > 0 ? "<saved>" : "<none>");
 }
 
-/** CLEARWIFI: полное стирание WiFi-кредов из NVS + перезагрузка в AP-режим. */
+/** CLEARWIFI: fully erase the WiFi credentials from NVS + reboot into AP mode. */
 static void cmd_clear_wifi() {
     wifi_clear_creds();
     Serial.println("[WIFI] креды полностью стёрты из Preferences (NVS)");
@@ -1337,7 +1337,7 @@ static void cmd_sign(const String &hexArg) {
         return;
     }
 
-    // ADR-0001: наружу уходит ТОЛЬКО подпись — приватный ключ не покидает устройство.
+    // ADR-0001: only the signature goes out — the private key never leaves the device.
     Serial.printf("[SIGN] device_id    = %s\n", device_id_from_pubkey(g_publicKey).c_str());
     Serial.printf("[SIGN] msg_len      = %d\n", msgLen);
     Serial.printf("[SIGN] sig_base64   = %s\n", base64_encode(signature, 64).c_str());
@@ -1359,7 +1359,7 @@ static void process_serial_command(const String &line) {
     Serial.printf("[SERIAL] неизвестная команда: %s (HELP — список)\n", cmd.c_str());
 }
 
-/** Опрос Serial: накапливает строку до '\n' и разбирает команду. */
+/** Poll Serial: accumulates a line until '\n' and parses the command. */
 static void handle_serial_input() {
     while (Serial.available() > 0) {
         char c = (char)Serial.read();
@@ -1375,7 +1375,7 @@ static void handle_serial_input() {
 
 
 // ════════════════════════════════════════════════════════════════
-//  ЛОКАЛЬНЫЙ HTTP-SIGNER + mDNS (Plug & Play, связь с Axis-connect)
+//  LOCAL HTTP SIGNER + mDNS (Plug & Play, communication with Axis-connect)
 // ════════════════════════════════════════════════════════════════
 
 static WebServer g_signerServer(ENRG_SIGNER_PORT);
@@ -1403,12 +1403,12 @@ static void handle_device_info() {
 
 /**
  * POST /api/device/sign.
- * Тело: {"hex":"<message hex>"} (JSON, формат Axis-connect) или сырой
- * бинарный payload (application/octet-stream). Ответ: {"signature":"<hex>"}.
- * Безопасность:
- *  - ENRG_SIGNER_LAN_ONLY — только локальные подсети (RFC1918);
- *  - доменная валидация signer_message_allowed(): только "enrg:device:*"
- *    и только с НАШИМ device_id внутри. Произвольный SIGN — только Serial.
+ * Body: {"hex":"<message hex>"} (JSON, Axis-connect format) or raw
+ * binary payload (application/octet-stream). Response: {"signature":"<hex>"}.
+ * Security:
+ *  - ENRG_SIGNER_LAN_ONLY — local subnets only (RFC1918);
+ *  - domain validation signer_message_allowed(): only "enrg:device:*"
+ *    and only with OUR device_id inside. Arbitrary SIGN — Serial only.
  */
 static void handle_device_sign() {
     if (!signer_client_allowed(g_signerServer.client().remoteIP())) {
@@ -1424,7 +1424,7 @@ static void handle_device_sign() {
     String contentType = g_signerServer.header("Content-Type");
 
     if (contentType.indexOf("json") >= 0) {
-        // {"hex":"..."} — формат Axis-connect
+        // {"hex":"..."} — Axis-connect format
         JsonDocument doc;
         DeserializationError err = deserializeJson(doc, body);
         if (err) { signer_reject(400, "invalid json"); return; }
@@ -1433,7 +1433,7 @@ static void handle_device_sign() {
         if (n <= 0) { signer_reject(400, "invalid hex"); return; }
         msgLen = (size_t)n;
     } else {
-        // Сырое бинарное тело (payload/hash)
+        // Raw binary body (payload/hash)
         if (body.length() > sizeof(msg)) { signer_reject(413, "message too large"); return; }
         memcpy(msg, body.c_str(), body.length());
         msgLen = body.length();
@@ -1478,14 +1478,14 @@ void setup() {
     delay(500);
     Serial.println("\n[BOOT] ENRG Proof Sender v3 (secure)");
 
-    // H-3: генерация ключа при первой загрузке / загрузка из NVS/ATECC608.
-    // Приоритет хранилища (ADR-0001): NXP SE050 (аппаратная Ed25519) →
+    // H-3: key generation on first boot / loading from NVS/ATECC608.
+    // Storage priority (ADR-0001): NXP SE050 (hardware Ed25519) →
     // ATECC608A (seed-vault) → NVS.
 #if ENRG_USE_SE050
     if (identity_init_se050(g_publicKey)) {
         Serial.println("[KEY] хранилище: NXP SE050 (аппаратная Ed25519-подпись)");
         g_key_in_secure_element = true;
-        // Приватный ключ не покидает SE050 — seed в RAM не нужен.
+        // The private key never leaves the SE050 — no seed in RAM needed.
         memset(g_privateKey, 0, sizeof(g_privateKey));
     } else {
         Serial.println("[SE050] чип недоступен — fallback на ATECC/NVS");
@@ -1519,14 +1519,14 @@ void setup() {
     g_pzem_ok = true;
 #endif
 
-    // ADR-0008: LittleFS — staging-область для OTA-образа.
+    // ADR-0008: LittleFS — the staging area for the OTA image.
     if (!LittleFS.begin()) {
         Serial.println("[OTA] WARN: LittleFS не смонтирован — OTA недоступен");
     }
 
-    // Plug & Play: NVS-креды → 30s connect → иначе Captive Portal.
+    // Plug & Play: NVS credentials → 30s connect → otherwise Captive Portal.
     if (setup_wifi()) {
-        // mDNS-респондент + локальный HTTP-signer (связь с Axis-connect).
+        // mDNS responder + local HTTP signer (communication with Axis-connect).
         if (MDNS.begin(mdns_hostname().c_str())) {
             MDNS.addService("axis-connect", "tcp", ENRG_SIGNER_PORT);
             MDNS.addServiceTxt("axis-connect", "tcp", "schema", "axis-energy-v1");
@@ -1537,28 +1537,28 @@ void setup() {
     } else {
         Serial.println("[WARN] WiFi не подключён — локальный signer недоступен без сети");
     }
-    // HTTP-signer стартует всегда (в AP-режиме доступен и на 192.168.4.1).
+    // The HTTP signer always starts (in AP mode it is also available at 192.168.4.1).
     signer_server_start();
 
-    // ADR-0004: получаем и проверяем подписанный манифест при старте.
-    // device_id = "0x" + hex публичного ключа (как при регистрации в оракуле).
+    // ADR-0004: fetch and verify the signed manifest at startup.
+    // device_id = "0x" + public key hex (as when registering with the oracle).
     String deviceId = device_id_from_pubkey(g_publicKey);
     init_manifest(deviceId);
 
-    // ADR-0008: текущая версия прошивки (из NVS или дефолт) — для анти-отката.
+    // ADR-0008: current firmware version (from NVS or default) — for anti-rollback.
     if (g_prefs.getString("fw_version", "").length() == 0) {
         g_prefs.putString("fw_version", ENRG_FW_VERSION);
     }
     Serial.printf("[OTA] текущая версия: %s\n", g_prefs.getString("fw_version", ENRG_FW_VERSION).c_str());
 
 #if ENRG_ENABLE_HW_ANTI_ROLLBACK
-    // ADR-0008: A/B rollback — подтверждаем текущий образ ПОСЛЕ успешного
-    // старта (ключ, WiFi, манифест, версия) и сжигаем monotonic secure_version.
+    // ADR-0008: A/B rollback — confirm the current image AFTER a successful
+    // startup (key, WiFi, manifest, version) and burn the monotonic secure_version.
     ota_mark_boot_ok();
     ota_mark_hardware_anti_rollback();
 #endif
 
-    // Первая проверка обновления сразу после старта (не ждём ENRG_UPDATE_CHECK_MS).
+    // First update check right after startup (do not wait for ENRG_UPDATE_CHECK_MS).
     checkForUpdates();
 
     ntp_sync();
@@ -1566,13 +1566,13 @@ void setup() {
 }
 
 void loop() {
-    // Onboarding: обработка Serial-команд (HELP/INFO/SIGN/CLEARWIFI) — без блокировки.
+    // Onboarding: handle Serial commands (HELP/INFO/SIGN/CLEARWIFI) — non-blocking.
     handle_serial_input();
 
-    // Plug & Play: обслуживание локального HTTP-signer'а.
+    // Plug & Play: serve the local HTTP signer.
     g_signerServer.handleClient();
 
-    // ADR-0008: периодическая проверка обновлений прошивки.
+    // ADR-0008: periodic firmware update check.
     static unsigned long g_lastUpdateCheckMs = 0;
     unsigned long nowMs = millis();
     if (nowMs - g_lastUpdateCheckMs >= ENRG_UPDATE_CHECK_MS) {
@@ -1580,8 +1580,8 @@ void loop() {
         checkForUpdates(); // внутри — ESP.restart() при успешной установке
     }
 
-    // ADR-0004: если манифест обязателен, но ещё не получен — периодически
-    // повторяем запрос (иначе устройство никогда не выйдет из блокировки).
+    // ADR-0004: if the manifest is required but not yet received — periodically
+    // retry the request (otherwise the device never leaves the blocked state).
     if (ENRG_MANIFEST_REQUIRED && !g_manifest_valid) {
         static unsigned long lastAttemptMs = 0;
         unsigned long nowMs = millis();
@@ -1606,19 +1606,19 @@ void loop() {
 }
 
 /**
- * Скачивание образа в LittleFS (/fw_update.bin) с параллельным вычислением
- * SHA-256. Возвращает true, если размер и хеш совпали с метаданными.
+ * Download the image into LittleFS (/fw_update.bin) with parallel SHA-256
+ * computation. Returns true if the size and hash match the metadata.
  */
 bool download_firmware(const String &url, long expectedSize, const String &expectedHashHex) {
-    // P0-3 (ADR-0008): загрузка образа прошивки по открытому HTTP запрещена
-    // (кроме явного dev-режима ENRG_ALLOW_HTTP=1).
+    // P0-3 (ADR-0008): downloading a firmware image over plain HTTP is forbidden
+    // (except the explicit dev mode ENRG_ALLOW_HTTP=1).
     if (!transport_allowed(url)) {
         Serial.println("[OTA] загрузка образа заблокирована: не TLS-транспорт");
         return false;
     }
 
-    // Транспорт по схеме URL: https:// → TLS (WiFiClientSecure + проверка CA),
-    // http:// → обычный TCP (локальная dev-сеть, порт 3000).
+    // Transport by URL scheme: https:// → TLS (WiFiClientSecure + CA verification),
+    // http:// → plain TCP (local dev network, port 3000).
     WiFiClientSecure secureClient;
     WiFiClient plainClient;
     WiFiClient *client;
@@ -1687,8 +1687,8 @@ bool download_firmware(const String &url, long expectedSize, const String &expec
 
 
 /**
- * Применение образа через ESP32 OTA (Update). Файл уже проверен
- * (подпись + SHA-256). После успешной установки вызывающий делает ESP.restart().
+ * Apply the image via ESP32 OTA (Update). The file has already been verified
+ * (signature + SHA-256). After a successful install the caller performs ESP.restart().
  */
 bool apply_firmware_update(const char *path) {
     File f = LittleFS.open(path, "r");
@@ -1716,12 +1716,12 @@ bool apply_firmware_update(const char *path) {
 }
 
 /**
- * Полный цикл проверки обновления (вызывается периодически):
- *   1. GET {ENRG_FIRMWARE_URL_BASE}/latest → метаданные (version, hash, size, signature).
- *   2. Анти-откат: version должна быть строго выше текущей (из NVS).
- *   3. Проверка подписи метаданных ключом основателя.
- *   4. Скачивание образа + проверка SHA-256.
- *   5. Применение (Update) + запись новой версии в NVS + перезагрузка.
+ * Full update-check cycle (called periodically):
+ *   1. GET {ENRG_FIRMWARE_URL_BASE}/latest → metadata (version, hash, size, signature).
+ *   2. Anti-rollback: the version must be strictly higher than the current one (from NVS).
+ *   3. Verify the metadata signature with the founder key.
+ *   4. Download the image + verify SHA-256.
+ *   5. Apply (Update) + write the new version to NVS + reboot.
  */
 bool checkForUpdates() {
     String url = String(ENRG_FIRMWARE_URL_BASE) + "/latest";
@@ -1743,27 +1743,27 @@ bool checkForUpdates() {
         return false;
     }
 
-    // Анти-откат: принимаем только строго более новую версию.
+    // Anti-rollback: accept only a strictly newer version.
     String current = g_prefs.getString("fw_version", ENRG_FW_VERSION);
     if (compare_versions(String(v), current) <= 0) {
         Serial.printf("[OTA] версия %s <= текущая %s — пропуск (анти-откат)\n", v, current.c_str());
         return false;
     }
 
-    // Подпись метаданных (без скачивания) — отклоняем неподписанные/чужие образы.
+    // Metadata signature (before downloading) — reject unsigned/foreign images.
     if (!verify_firmware_signature(String(v), String(hash), size, String(sig))) {
         Serial.println("[OTA] невалидная подпись — образ отклонён");
         return false;
     }
 
-    // Скачивание + проверка SHA-256.
+    // Download + SHA-256 verification.
     String imgUrl = String(ENRG_FIRMWARE_URL_BASE) + "/latest/image";
     if (!download_firmware(imgUrl, size, String(hash))) {
         Serial.println("[OTA] скачивание/хеш не сошёлся — образ отклонён");
         return false;
     }
 
-    // Применение.
+    // Apply.
     if (!apply_firmware_update("/fw_update.bin")) {
         Serial.println("[OTA] установка не удалась");
         return false;
