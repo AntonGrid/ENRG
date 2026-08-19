@@ -28,7 +28,7 @@ paths:
                 properties:
                   challenge:
                     type: string
-                    description: "Случайный challenge в base64"
+                    description: "Random challenge in base64"
                     pattern: "^[A-Za-z0-9+/]{16,}[=]{0,2}$"
                   device_id:
                     type: string

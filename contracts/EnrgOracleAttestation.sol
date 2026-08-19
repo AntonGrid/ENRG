@@ -2,25 +2,25 @@
 pragma solidity ^0.8.20;
 
 /// @title ENRG Oracle Attestation Contract (minimal skeleton)
-/// @notice Принимает attestations от доверенных оракулов и эмитит события.
+/// @notice Accepts attestations from trusted oracles and emits events.
 contract EnrgOracleAttestation {
-    /// @dev Доверенные оракулы (обычно адреса, за которыми стоят off-chain-сервисы Oracle).
+    /// @dev Trusted oracles (usually addresses behind the off-chain Oracle services).
     mapping(address => bool) public isTrustedOracle;
 
-    /// @dev Адрес владельца контракта (временно — централизованный админ / DAO-мультисиг).
+    /// @dev Contract owner address (temporarily a centralized admin / DAO multisig).
     address public owner;
 
-    /// @notice Attestation о состоянии/решении по устройству.
+    /// @notice Attestation about a device state/decision.
     struct Attestation {
-        bytes32 deviceId;       // Хэш/байтовое представление device_id ("dev_...")
-        address oracle;         // Адрес оракула (msg.sender)
-        bool allowed;           // Разрешено ли действие/режим
-        int96 maxPowerKw;       // Макс. мощность * 1e6 (фиксированная точность)
-        uint64 issuedAt;        // Unix timestamp выпуска аттестации
-        bytes32 proofHash;      // Хэш исходного DeviceProof/Attestation JSON (off-chain хранится отдельно)
+        bytes32 deviceId;       // Hash/byte representation of device_id ("dev_...")
+        address oracle;         // Oracle address (msg.sender)
+        bool allowed;           // Whether the action/mode is allowed
+        int96 maxPowerKw;       // Max power * 1e6 (fixed precision)
+        uint64 issuedAt;        // Attestation issue unix timestamp
+        bytes32 proofHash;      // Hash of the original DeviceProof/Attestation JSON (stored off-chain)
     }
 
-    /// @dev Событие, которое будут слушать другие контракты / off-chain клиенты.
+    /// @dev Event other contracts / off-chain clients will listen to.
     event DeviceAttested(
         bytes32 indexed deviceId,
         address indexed oracle,
@@ -30,7 +30,7 @@ contract EnrgOracleAttestation {
         bytes32 proofHash
     );
 
-    /// @dev Эмитится при добавлении/удалении доверенного оракула.
+    /// @dev Emitted when a trusted oracle is added/removed.
     event TrustedOracleUpdated(address indexed oracle, bool isTrusted);
 
     error NotOwner();
@@ -40,20 +40,20 @@ contract EnrgOracleAttestation {
         owner = _owner;
     }
 
-    /// @notice Обновляет статус доверенного оракула.
-    /// @dev В проде это будет управляться DAO / мультисигом.
+    /// @notice Updates the trusted-oracle status.
+    /// @dev In production this will be governed by a DAO / multisig.
     function setTrustedOracle(address oracle, bool trusted) external {
         if (msg.sender != owner) revert NotOwner();
         isTrustedOracle[oracle] = trusted;
         emit TrustedOracleUpdated(oracle, trusted);
     }
 
-    /// @notice Приём аттестации от доверенного оракула.
-    /// @param deviceId Хэш/байтовое представление `device_id` (например, keccak256("dev_9e9c...")).
-    /// @param allowed Разрешено ли действие.
-    /// @param maxPowerKw Макс. мощность * 1e6 (для дробной части без float).
-    /// @param issuedAt Unix timestamp выпуска аттестации.
-    /// @param proofHash keccak256 от сериализованного Attestation/DeviceProof JSON.
+    /// @notice Accepts an attestation from a trusted oracle.
+    /// @param deviceId Hash/byte representation of `device_id` (e.g., keccak256("dev_9e9c...")).
+    /// @param allowed Whether the action is allowed.
+    /// @param maxPowerKw Max power * 1e6 (fractional part without float).
+    /// @param issuedAt Attestation issue unix timestamp.
+    /// @param proofHash keccak256 of the serialized Attestation/DeviceProof JSON.
     function submitAttestation(
         bytes32 deviceId,
         bool allowed,
@@ -63,7 +63,7 @@ contract EnrgOracleAttestation {
     ) external {
         if (!isTrustedOracle[msg.sender]) revert NotTrustedOracle();
 
-        // Здесь можно добавить доп. проверки (например, что issuedAt не слишком в прошлом/будущем).
+        // Extra checks can be added here (e.g., issuedAt not too far in the past/future).
 
         emit DeviceAttested(deviceId, msg.sender, allowed, maxPowerKw, issuedAt, proofHash);
     }

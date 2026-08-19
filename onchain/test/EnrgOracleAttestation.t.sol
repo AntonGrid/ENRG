@@ -13,11 +13,11 @@ contract EnrgOracleAttestationTest is Test {
     address internal stranger = address(0xBEEF);
 
     function setUp() public {
-        // Деплоим контракт от лица owner
+        // Deploy the contract as the owner
         vm.prank(owner);
         enrg = new EnrgOracleAttestation();
 
-        // Делаем oracle1 доверенным
+        // Make oracle1 trusted
         vm.prank(owner);
         enrg.setTrustedOracle(oracle1, true);
     }

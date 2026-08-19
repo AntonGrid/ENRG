@@ -25,7 +25,7 @@ print(f"Using account: {account.address}")
 print(f"Contract: {CONTRACT_ADDRESS}")
 
 
-# --- Встроенная версия build_attestation_params ---
+# --- Inline version of build_attestation_params ---
 
 
 @dataclass
@@ -38,8 +38,8 @@ class OnchainAttestationParams:
 
 
 def iso_to_unix(ts: str) -> int:
-    """Преобразование ISO8601 (с 'Z') в unix timestamp (секунды)."""
-    # Примеры: "2024-01-01T00:00:00Z"
+    """Convert ISO8601 (with 'Z') to a unix timestamp (seconds)."""
+    # Examples: "2024-01-01T00:00:00Z"
     if ts.endswith("Z"):
         ts = ts[:-1] + "+00:00"
     dt = datetime.fromisoformat(ts)
@@ -50,7 +50,7 @@ def iso_to_unix(ts: str) -> int:
 
 def build_attestation_params(attestation: dict) -> OnchainAttestationParams:
     """
-    Приблизительный эквивалент app.onchain_bridge.build_attestation_params:
+    Approximate equivalent of app.onchain_bridge.build_attestation_params:
     - attestation_id, device_id -> keccak(text)
     - max_power_kw -> W (uint64)
     - issued_at (ISO) -> unix timestamp (uint64)
@@ -78,7 +78,7 @@ def build_attestation_params(attestation: dict) -> OnchainAttestationParams:
     )
 
 
-# --- ABI контракта ---
+# --- Contract ABI ---
 
 
 CONTRACT_ABI = [

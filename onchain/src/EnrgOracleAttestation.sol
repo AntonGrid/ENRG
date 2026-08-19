@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 /// @title EnrgOracleAttestation
-/// @notice Минимальный контракт для приёма аттестаций от доверенных оракулов.
+/// @notice Minimal contract for accepting attestations from trusted oracles.
 contract EnrgOracleAttestation {
     struct AttestationCore {
         bytes32 attestationId;
@@ -13,13 +13,13 @@ contract EnrgOracleAttestation {
         uint64 issuedAt; // unix timestamp
     }
 
-    /// @notice доверенные оракулы, которые могут слать аттестации
+    /// @notice trusted oracles that may submit attestations
     mapping(address => bool) public trustedOracles;
 
-    /// @notice хранение аттестаций по их идентификатору
+    /// @notice attestations stored by their identifier
     mapping(bytes32 => AttestationCore) public attestations;
 
-    /// @notice чтобы не перезаписывать уже существующую аттестацию
+    /// @notice to avoid overwriting an existing attestation
     mapping(bytes32 => bool) public attestationExists;
 
     address public owner;
@@ -47,14 +47,14 @@ contract EnrgOracleAttestation {
         _;
     }
 
-    /// @notice Установить/снять доверие к оракулу
+    /// @notice Set/clear trust for an oracle
     function setTrustedOracle(address oracle, bool trusted) external onlyOwner {
         trustedOracles[oracle] = trusted;
         emit OracleUpdated(oracle, trusted);
     }
 
-    /// @notice Отправить аттестацию. Вызывать могут только доверенные оракулы.
-    /// @dev Предполагается, что off-chain слой уже превратил строки в bytes32/uint64.
+    /// @notice Submit an attestation. Only trusted oracles may call.
+    /// @dev The off-chain layer is expected to have already converted strings to bytes32/uint64.
     function submitAttestation(
         bytes32 attestationId,
         bytes32 deviceId,

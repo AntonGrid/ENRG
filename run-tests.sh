@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Корень репозитория — директория, где лежит этот скрипт
+# Repository root — the directory where this script lives
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "==> Running Python tests (pytest)..."
@@ -20,7 +20,7 @@ echo
 echo "==> Running Foundry tests (forge)..."
 cd "$ROOT_DIR/onchain"
 
-# source ~/.bashrc на случай, если PATH к forge подхватывается там
+# source ~/.bashrc in case the forge PATH is picked up there
 # shellcheck disable=SC1090
 if [ -f "$HOME/.bashrc" ]; then
   source "$HOME/.bashrc"
