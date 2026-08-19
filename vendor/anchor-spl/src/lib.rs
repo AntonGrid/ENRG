@@ -17,8 +17,8 @@ pub mod token_2022;
 #[cfg(feature = "token_2022_extensions")]
 pub mod token_2022_extensions;
 
-// Всегда доступен: shim без spl-token-2022 (см. token_interface.rs).
-// При включённой фиче token_2022 реэкспортирует полноценный spl-token-2022.
+// Always available: a shim without spl-token-2022 (see token_interface.rs).
+// With the token_2022 feature enabled, re-exports the full spl-token-2022.
 pub mod token_interface;
 
 #[cfg(feature = "governance")]

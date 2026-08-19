@@ -3,8 +3,8 @@ info:
   title: ENRG Provisioning Service API
   version: 0.1.0
   description: >
-    Provisioning / onboarding устройств в ENRG.
-    Вся криптография и идентичность — через Ed25519, provisioning строится вокруг challenge/response.
+    Device provisioning / onboarding in ENRG.
+    All cryptography and identity go through Ed25519; provisioning is built around challenge/response.
 
 servers:
   - url: https://provisioning.enrg.example.com
@@ -12,7 +12,7 @@ servers:
 paths:
   /provisioning/start:
     post:
-      summary: Начало provisioning-потока (создание provisioning_id и challenge)
+      summary: Start the provisioning flow (create provisioning_id and challenge)
       operationId: startProvisioning
       requestBody:
         required: true
@@ -22,19 +22,19 @@ paths:
               $ref: '#/components/schemas/ProvisioningStartRequest'
       responses:
         '200':
-          description: Provisioning-сессия создана, выдан challenge
+          description: Provisioning session created, challenge issued
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProvisioningStartResponse'
         '400':
-          description: Некорректный запрос (отсутствуют обязательные поля)
+          description: Invalid request (required fields missing)
         '409':
-          description: Конфликт (например, устройство с таким serial уже привязано)
+          description: Conflict (e.g., a device with this serial is already bound)
 
   /provisioning/complete:
     post:
-      summary: Завершение provisioning по подписи устройства
+      summary: Complete provisioning using the device signature
       operationId: completeProvisioning
       requestBody:
         required: true
@@ -44,17 +44,17 @@ paths:
               $ref: '#/components/schemas/ProvisioningChallengeResponse'
       responses:
         '200':
-          description: Устройство успешно заведено в Device Registry
+          description: Device successfully registered in the Device Registry
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProvisioningCompleteResponse'
         '400':
-          description: Некорректный запрос
+          description: Invalid request
         '401':
-          description: Подпись/attestation невалидны
+          description: Invalid signature/attestation
         '410':
-          description: Provisioning-сессия истекла или не найдена
+          description: Provisioning session expired or not found
 
 components:
   schemas:
@@ -81,7 +81,7 @@ components:
         onchain_account:
           type: string
           nullable: true
-          description: On-chain аккаунт владельца (например, Solana address)
+          description: Owner on-chain account (e.g., a Solana address)
 
     ProvisioningStartRequest:
       type: object
@@ -97,10 +97,10 @@ components:
           $ref: '#/components/schemas/OwnerInfo'
         device_public_key:
           type: string
-          description: Ed25519 публичный ключ устройства (формат префикс+base58/base64, TBD)
+          description: Device Ed25519 public key (prefix+base58/base64 format, TBD)
         claimed_manifest_ref:
           type: string
-          description: Ссылка на ожидаемый Device Manifest (URN/URL)
+          description: Reference to the expected Device Manifest (URN/URL)
         context:
           type: object
           additionalProperties: true
@@ -118,7 +118,7 @@ components:
           type: string
           nullable: true
           description: >
-            Может быть null на старте; финальный device_id появится после complete.
+            May be null at the start; the final device_id appears after complete.
         challenge:
           type: object
           required: [nonce, expires_at]
@@ -206,11 +206,11 @@ components:
         bootstrap_policy:
           type: object
           description: >
-            Минимальный набор политик/разрешений, который устройство должно применять на старте.
-            (Формат будет уточняться Policy Engine.)
+            Minimal set of policies/permissions the device must apply at startup.
+            (The format will be refined by the Policy Engine.)
           additionalProperties: true
         provisioning_proof:
           type: object
           description: >
-            Canonical ProvisioningProof, который PS/Oracle может публиковать в DR/on-chain.
+            Canonical ProvisioningProof that PS/Oracle may publish to DR/on-chain.
           additionalProperties: true

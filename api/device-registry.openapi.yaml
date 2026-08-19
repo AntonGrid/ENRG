@@ -3,8 +3,8 @@ info:
   title: ENRG Device Registry API
   version: 0.1.0
   description: >
-    Off-chain единый источник истины по устройствам.
-    Не содержит закрытых ключей, только публичные данные и lifecycle.
+    Off-chain single source of truth for devices.
+    Contains no private keys, only public data and lifecycle.
 
 servers:
   - url: https://registry.enrg.example.com
@@ -12,7 +12,7 @@ servers:
 paths:
   /devices:
     get:
-      summary: Поиск устройств
+      summary: Search devices
       operationId: listDevices
       parameters:
         - in: query
@@ -43,7 +43,7 @@ paths:
             default: 50
       responses:
         '200':
-          description: Список устройств
+          description: Device list
           content:
             application/json:
               schema:
@@ -58,7 +58,7 @@ paths:
                     nullable: true
 
     post:
-      summary: Создать запись устройства (обычно через Provisioning Service)
+      summary: Create a device record (usually via the Provisioning Service)
       operationId: createDevice
       requestBody:
         required: true
@@ -68,7 +68,7 @@ paths:
               $ref: '#/components/schemas/DeviceRecordCreate'
       responses:
         '201':
-          description: Устройство создано
+          description: Device created
           content:
             application/json:
               schema:
@@ -76,7 +76,7 @@ paths:
 
   /devices/{device_id}:
     get:
-      summary: Получить устройство по device_id
+      summary: Get a device by device_id
       operationId: getDeviceById
       parameters:
         - in: path
@@ -86,16 +86,16 @@ paths:
             type: string
       responses:
         '200':
-          description: Найдено
+          description: Found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceRecord'
         '404':
-          description: Не найдено
+          description: Not found
 
     patch:
-      summary: Частичное обновление устройства (lifecycle, firmware_version и т.п.)
+      summary: Partially update a device (lifecycle, firmware_version, etc.)
       operationId: patchDevice
       parameters:
         - in: path
@@ -111,13 +111,13 @@ paths:
               $ref: '#/components/schemas/DeviceRecordPatch'
       responses:
         '200':
-          description: Обновлено
+          description: Updated
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/DeviceRecord'
         '409':
-          description: Конфликт версий (optimistic locking по version)
+          description: Version conflict (optimistic locking on version)
 
 components:
   schemas:
@@ -173,10 +173,10 @@ components:
       properties:
         device_id:
           type: string
-          description: Детерминированный идентификатор (на основе public_key + производственные атрибуты)
+          description: Deterministic identifier (based on public_key + manufacturing attributes)
         public_key:
           type: string
-          description: Ed25519 публичный ключ устройства
+          description: Device Ed25519 public key
         owner:
           $ref: '#/components/schemas/DeviceOwnerInfo'
         lifecycle_state:
@@ -200,7 +200,7 @@ components:
           format: date-time
         version:
           type: integer
-          description: Версия записи для optimistic locking
+          description: Record version for optimistic locking
 
     DeviceRecord:
       allOf:
@@ -224,4 +224,4 @@ components:
           $ref: '#/components/schemas/DeviceMetadata'
         version:
           type: integer
-          description: Текущая известная версия записи (для защиты от гонок)
+          description: Currently known record version (race protection)
