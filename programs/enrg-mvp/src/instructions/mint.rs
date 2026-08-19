@@ -16,44 +16,43 @@ use crate::state::*;
 /// are managed by enrg-profile via CPI — this instruction
 /// calls profile::record_production() after minting.
 ///
-/// ADR-0003: Verifier и Policy Engine разделены. Эта инструкция — Verifier:
-/// проверяет Ed25519-подписи устройства и оракула, nonce и связку device_id,
-/// затем ИСПОЛНЯЕТ решение Policy Engine (`instructions::policy_engine` /
-/// PolicyRegistry, PDA `[b"policy-registry"]`). Все решения о допустимости
-/// Proof'а — whitelist оракулов (C-0), состояние устройства (ADR-0005),
-/// freshness, tier-лимиты (v7.0 §15), энергия за proof, supply cap и пауза
-/// минта — принимаются в PolicyEngine, а не здесь.
+/// ADR-0003: the Verifier and the Policy Engine are separated. This instruction
+/// is the Verifier: it checks the device and oracle Ed25519 signatures, the
+/// nonce, and the device_id binding, then EXECUTES the Policy Engine decision
+/// (`instructions::policy_engine` / PolicyRegistry, PDA `[b"policy-registry"]`).
+/// All proof-admissibility decisions — oracle whitelist (C-0), device state
+/// (ADR-0005), freshness, tier limits (v7.0 §15), energy per proof, supply cap,
+/// and the mint pause — are made in the PolicyEngine, not here.
 ///
-/// Обратная совместимость: если PolicyRegistry не инициализирован
-/// (policy_registry = None), применяются дефолтные политики протокола —
-/// поведение идентично версии до Policy Engine, существующие устройства
-/// и оракул работают без изменений.
+/// Backward compatibility: if the PolicyRegistry is not initialized
+/// (policy_registry = None), the protocol default policies apply — behavior
+/// identical to the pre-Policy Engine version; existing devices and the
+/// oracle keep working unchanged.
 pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
     let vault = &mut ctx.accounts.vault;
 
-    // ── Clock: используется для freshness и tier-окна ──
+    // ── Clock: used for freshness and the tier window ──
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // ── Нормализация месячного окна (ADR-0005) ──
+    // ── Normalize the monthly window (ADR-0005) ──
     producer.roll_month(now);
 
-    // ADR-0007: отозванное устройство не может минтить НИКОГДА — жёсткий
-    // инвариант протокола (не отключается политикой; policy управляет
-    // остальным gating по состоянию устройства).
+    // ADR-0007: a revoked device can NEVER mint — a hard protocol invariant
+    // (not disabled by policy; policy manages the remaining device-state gating).
     require!(!producer.revoked, ErrorCode::DeviceRevoked);
 
-    // ══ C-1: отчёт должен принадлежать именно этому устройству ══
+    // ══ C-1: the report must belong to this exact device ══
     require!(
         producer.device_id == report.device_id,
         ErrorCode::DeviceMismatch
     );
 
-    // ══ C-2: подписант транзакции — владелец устройства ИЛИ оракул из отчёта ══
-    // (мульти-владельческий mint: любой доверенный оракул из OracleRegistry
-    //  может инициировать mint от имени устройства, не будучи его владельцем;
-    //  членство report.oracle в OracleRegistry проверяет Policy Engine — C-0).
+    // ══ C-2: transaction signer — device owner OR the report oracle ══
+    // (multi-owner mint: any trusted oracle from the OracleRegistry may
+    //  initiate a mint on behalf of the device without being its owner;
+    //  Policy Engine checks report.oracle membership in OracleRegistry — C-0).
     require!(
         mint_submitter_authorized(
             &producer.authority,
@@ -64,7 +63,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     );
 
     // ── Ed25519 signature verification (device) ──
-    // Устройство подписывает (device_id, nonce, device_timestamp, energy_wh).
+    // The device signs (device_id, nonce, device_timestamp, energy_wh).
     let device_message = report.device_message_to_sign()?;
 
     verify_ed25519_signature(
@@ -75,9 +74,9 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     )?;
 
     // ── Oracle signature verification (authenticity of the report) ──
-    // Оракул подписывает (device_id, nonce, device_timestamp, verified_at, energy_wh).
-    // Без этой подписи любой вызывающий мог бы выдать себя за доверенного
-    // оракула, просто указав его pubkey в поле report.oracle.
+    // The oracle signs (device_id, nonce, device_timestamp, verified_at, energy_wh).
+    // Without this signature, any caller could impersonate a trusted oracle
+    // by simply putting its pubkey in the report.oracle field.
     let oracle_message = report.oracle_message_to_sign()?;
 
     verify_ed25519_signature(
@@ -90,9 +89,9 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     // ── Proof validation: nonce (verifier) ──
     verify_nonce(producer, report.nonce)?;
 
-    // ══ Policy Engine (ADR-0003): все решения о допустимости Proof'а ══
-    // Verifier (эта инструкция) не принимает решений — он исполняет политики
-    // из PolicyRegistry (или дефолты протокола, если реестр не инициализирован).
+    // ══ Policy Engine (ADR-0003): all proof-admissibility decisions ══
+    // The Verifier (this instruction) makes no decisions — it executes the
+    // policies from PolicyRegistry (or protocol defaults if the registry is not initialized).
     PolicyEngine::evaluate_preamble(MintPreambleInput {
         policy: ctx.accounts.policy_registry.as_ref().map(|a| &**a),
         producer: &*producer,
@@ -112,7 +111,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     );
     vault.network_energy_updated_at = now_ts;
 
-    // ── CPI: record_production в enrg-profile ──
+    // ── CPI: record_production into enrg-profile ──
     let profile_ctx = CpiContext::new(
         ctx.accounts.profile_program.to_account_info(),
         crate::enrg_profile::cpi::accounts::RecordProduction {
@@ -151,8 +150,8 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         vault.network_energy_30d,
     );
 
-    // ══ Policy Engine (ADR-0003): награда > 0 и supply cap ══
-    // Решение о допустимости награды и потолке эмиссии принимает PolicyEngine.
+    // ══ Policy Engine (ADR-0003): reward > 0 and supply cap ══
+    // The PolicyEngine decides the reward admissibility and the emission cap.
     PolicyEngine::evaluate_reward(MintRewardInput {
         policy: ctx.accounts.policy_registry.as_ref().map(|a| &**a),
         reward,
@@ -160,7 +159,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         vault_max_supply: vault.max_supply,
     })?;
 
-    // ── Check supply cap (итоговое значение для обновления vault) ──
+    // ── Check supply cap (final value for the vault update) ──
     let new_supply = vault
         .total_supply
         .checked_add(reward)
@@ -322,7 +321,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         emergency_amount
     );
 
-    // ── ERS (v7.0 §16): обновляем репутацию, если аккаунт передан ──
+    // ── ERS (v7.0 §16): update the reputation if the account is provided ──
     if let Some(reputation) = &mut ctx.accounts.reputation {
         crate::instructions::reputation::update_reputation_after_mint(
             reputation,
@@ -336,7 +335,7 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
         });
     }
 
-    // ── Pool contribution (v7.0 §14): вклад в пул, если producer — участник ──
+    // ── Pool contribution (v7.0 §14): contribute to the pool if the producer is a member ──
     match (&mut ctx.accounts.pool, &mut ctx.accounts.pool_share) {
         (Some(pool), Some(pool_share)) => {
             require!(pool_share.pool == pool.key(), ErrorCode::InvalidParameter);
@@ -414,44 +413,44 @@ pub struct MintEnergy<'info> {
     )]
     pub mint_authority: UncheckedAccount<'info>,
 
-    /// Мульти-владельческий mint: награда идёт ВЛАДЕЛЬЦУ устройства
-    /// (producer.authority), а не подписанту транзакции (оракулу).
-    /// user token account должен принадлежать producer.authority.
+    /// Multi-owner mint: the reward goes to the DEVICE OWNER
+    /// (producer.authority), not to the transaction signer (oracle).
+    /// The user token account must belong to producer.authority.
     #[account(
         mut,
         constraint = user_token_account.owner == producer.authority @ ErrorCode::UnauthorizedTokenAccountOwner,
     )]
     pub user_token_account: Box<Account<'info, TokenAccount>>,
 
-    /// Протокольный buyback-фонд — жёстко привязан к конфигурации TokenMint.
+    /// Protocol buyback fund — strictly bound to the TokenMint configuration.
     #[account(
         mut,
         constraint = buyback_account.key() == token_mint.buyback_account @ ErrorCode::InvalidParameter
     )]
     pub buyback_account: Box<Account<'info, TokenAccount>>,
 
-    /// Протокольный staking-фонд — жёстко привязан к конфигурации TokenMint.
+    /// Protocol staking fund — strictly bound to the TokenMint configuration.
     #[account(
         mut,
         constraint = staking_account.key() == token_mint.staking_account @ ErrorCode::InvalidParameter
     )]
     pub staking_account: Box<Account<'info, TokenAccount>>,
 
-    /// Протокольный DAO-фонд — жёстко привязан к конфигурации TokenMint.
+    /// Protocol DAO fund — strictly bound to the TokenMint configuration.
     #[account(
         mut,
         constraint = dao_account.key() == token_mint.dao_account @ ErrorCode::InvalidParameter
     )]
     pub dao_account: Box<Account<'info, TokenAccount>>,
 
-    /// Протокольный emergency-фонд — жёстко привязан к конфигурации TokenMint.
+    /// Protocol emergency fund — strictly bound to the TokenMint configuration.
     #[account(
         mut,
         constraint = emergency_account.key() == token_mint.emergency_account @ ErrorCode::InvalidParameter
     )]
     pub emergency_account: Box<Account<'info, TokenAccount>>,
 
-    /// CHECK: Sysvar instructions — используется для проверки Ed25519-подписи.
+    /// CHECK: Sysvar instructions — used for Ed25519 signature verification.
     #[account(
         constraint = instructions.key() == crate::constants::INSTRUCTIONS_SYSVAR_ID @ ErrorCode::InvalidInstructionsAccount
     )]
@@ -467,15 +466,15 @@ pub struct MintEnergy<'info> {
     pub token_program: Program<'info, Token>,
 
     // ── CPI: enrg-profile ──
-    /// CHECK: on-chain enrg-profile program (единственная разрешённая CPI-цель).
+    /// CHECK: on-chain enrg-profile program (the only allowed CPI target).
     #[account(
         constraint = profile_program.key() == crate::constants::ENRG_PROFILE_PROGRAM_ID @ ErrorCode::InvalidParameter
     )]
     pub profile_program: UncheckedAccount<'info>,
 
-    /// Подписант транзакции: владелец устройства ИЛИ доверенный оракул из
-    /// отчёта (мульти-владельческий mint). Сам по себе награду не получает —
-    /// она идёт producer.authority (см. user_token_account).
+    /// Transaction signer: the device owner OR a trusted oracle from the
+    /// report (multi-owner mint). It does not receive the reward itself —
+    /// the reward goes to producer.authority (see user_token_account).
     pub authority: Signer<'info>,
 
     #[account(
@@ -486,8 +485,8 @@ pub struct MintEnergy<'info> {
     )]
     pub profile: Account<'info, crate::enrg_profile::accounts::EnergyProfile>,
 
-    /// ERS (v7.0 §16) — опционально: если передан, обновляется после минта.
-    /// Привязан к владельцу устройства (producer.authority).
+    /// ERS (v7.0 §16) — optional: if provided, updated after the mint.
+    /// Bound to the device owner (producer.authority).
     #[account(
         mut,
         seeds = [b"reputation", producer.authority.as_ref()],
@@ -495,19 +494,19 @@ pub struct MintEnergy<'info> {
     )]
     pub reputation: Option<Account<'info, Reputation>>,
 
-    /// Pool (v7.0 §14) — опционально: если producer является участником,
-    /// вклад записывается в pool.total_energy и pool_share.energy_wh.
+    /// Pool (v7.0 §14) — optional: if the producer is a member,
+    /// the contribution is recorded in pool.total_energy and pool_share.energy_wh.
     #[account(mut)]
     pub pool: Option<Account<'info, Pool>>,
 
-    /// Вклад участника пула (PDA [b"pool-share", pool, producer]).
+    /// Pool member contribution (PDA [b"pool-share", pool, producer]).
     #[account(mut)]
     pub pool_share: Option<Account<'info, PoolContribution>>,
 
-    /// Policy Registry (ADR-0003): адресуемые политики минта. Опционально —
-    /// если PDA [b"policy-registry"] не инициализирован, применяются дефолтные
-    /// политики протокола (полная обратная совместимость с существующими
-    /// деплоями и устройствами).
+    /// Policy Registry (ADR-0003): addressable mint policies. Optional —
+    /// if the PDA [b"policy-registry"] is not initialized, the protocol
+    /// default policies apply (full backward compatibility with existing
+    /// deployments and devices).
     #[account(
         seeds = [b"policy-registry"],
         bump
@@ -515,10 +514,10 @@ pub struct MintEnergy<'info> {
     pub policy_registry: Option<Account<'info, PolicyRegistry>>,
 }
 
-/// Разрешён ли подписант транзакции (submitter) инициировать mint для устройства:
-/// это либо владелец устройства (producer.authority), либо оракул, подписавший
-/// отчёт (report.oracle == submitter). Членство report.oracle в OracleRegistry
-/// проверяется отдельно (C-0) — здесь только связка «кто подписывает».
+/// Whether the transaction signer (submitter) may initiate a mint for the device:
+/// either the device owner (producer.authority) or the oracle that signed the
+/// report (report.oracle == submitter). report.oracle membership in the
+/// OracleRegistry is checked separately (C-0) — here only the "who signs" binding.
 pub fn mint_submitter_authorized(
     producer_authority: &Pubkey,
     submitter: &Pubkey,
@@ -541,7 +540,7 @@ mod tests {
         let oracle = pk(2);
         assert!(
             mint_submitter_authorized(&owner, &owner, &oracle),
-            "владелец устройства может инициировать mint"
+            "the device owner may initiate a mint"
         );
     }
 
@@ -551,7 +550,7 @@ mod tests {
         let oracle = pk(2);
         assert!(
             mint_submitter_authorized(&owner, &oracle, &oracle),
-            "оракул из отчёта может инициировать mint (мульти-владельческий flow)"
+            "the report oracle may initiate a mint (multi-owner flow)"
         );
     }
 
@@ -562,19 +561,19 @@ mod tests {
         let stranger = pk(3);
         assert!(
             !mint_submitter_authorized(&owner, &stranger, &oracle),
-            "посторонний подписант не может инициировать mint"
+            "a stranger cannot initiate a mint"
         );
     }
 
     #[test]
     fn owner_fabricating_report_still_owner_but_oracle_not_in_registry() {
-        // Владелец может подписать транзакцию (authorized=true), НО если он
-        // указывает себя как report.oracle и не находится в OracleRegistry —
-        // отклонит C-0 (UntrustedOracle). Это покрыто интеграционно.
+        // The owner may sign the transaction (authorized=true), BUT if they
+        // set themselves as report.oracle and are not in the OracleRegistry —
+        // C-0 (UntrustedOracle) rejects it. This is covered by integration tests.
         let owner = pk(1);
         assert!(
             mint_submitter_authorized(&owner, &owner, &owner),
-            "владелец всегда authorized на уровне C-2; блокировку даёт C-0"
+            "the owner is always authorized at C-2; C-0 provides the block"
         );
     }
 }

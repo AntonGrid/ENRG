@@ -4,26 +4,26 @@ use crate::constants::MAX_CLOCK_SKEW;
 use crate::error::ErrorCode;
 use crate::state::EnergyProducer;
 
-/// Максимальный «возраст» доказательства.
-/// M-3: было 31_536_000 (1 год) — теперь 15 минут, как требует спецификация
-/// (см. docs «не старше 15 минут»). Синхронизировано с server.js (MAX_PROOF_AGE_SEC).
+/// Maximum proof "age".
+/// M-3: was 31_536_000 (1 year) — now 15 minutes, as required by the spec
+/// (see docs "no older than 15 minutes"). Synced with server.js (MAX_PROOF_AGE_SEC).
 pub const MAX_PROOF_AGE: i64 = 900;
 
-/// Проверка nonce производителя (строго возрастающий — защита от replay).
+/// Producer nonce check (strictly increasing — replay protection).
 pub fn verify_nonce(producer: &EnergyProducer, nonce: u64) -> Result<()> {
     require!(nonce > producer.nonce, ErrorCode::InvalidNonce);
     Ok(())
 }
 
-/// Проверка временной метки:
-/// - метка не должна быть в будущем (допускается только отклонение часов MAX_CLOCK_SKEW);
-/// - метка не должна быть старше MAX_PROOF_AGE.
+/// Timestamp check:
+/// - the timestamp must not be in the future (only a clock skew of MAX_CLOCK_SKEW is allowed);
+/// - the timestamp must not be older than MAX_PROOF_AGE.
 pub fn verify_timestamp(now: i64, timestamp: i64) -> Result<()> {
     verify_timestamp_with_skew(now, timestamp, MAX_CLOCK_SKEW)
 }
 
-/// Проверка временной метки с параметризуемым допустимым сдвигом часов
-/// (используется Policy Engine, ADR-0003).
+/// Timestamp check with a parameterized allowed clock skew
+/// (used by the Policy Engine, ADR-0003).
 pub fn verify_timestamp_with_skew(
     now: i64,
     timestamp: i64,

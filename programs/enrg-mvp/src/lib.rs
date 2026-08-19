@@ -43,7 +43,7 @@ pub mod enrg_mvp {
         instructions::initialize::initialize_funds(ctx)
     }
 
-    /// Смена Vault.authority (protocol admin / временный governor).
+    /// Change Vault.authority (protocol admin / temporary governor).
     pub fn set_vault_authority(
         ctx: Context<SetVaultAuthority>,
         new_authority: Pubkey,
@@ -138,7 +138,7 @@ pub mod enrg_mvp {
         instructions::oracle_registry::remove_oracle(ctx, oracle)
     }
 
-    /// Смена oracle_admin (управление списком оракулов). Только protocol admin.
+    /// Change oracle_admin (manage the oracle list). Protocol admin only.
     pub fn set_oracle_admin(
         ctx: Context<SetOracleAdmin>,
         new_oracle_admin: Pubkey,
@@ -150,15 +150,15 @@ pub mod enrg_mvp {
     //  PHASE 3 — Policy Engine (ADR-0003)
     // ═══════════════════════════════════════════
 
-    /// Инициализация Policy Registry (PDA [b"policy-registry"]).
-    /// Только EXPECTED_DEPLOYER. Дефолты = поведение протокола до Policy Engine.
+    /// Initialize the Policy Registry (PDA [b"policy-registry"]).
+    /// EXPECTED_DEPLOYER only. Defaults = pre-Policy Engine protocol behavior.
     pub fn initialize_policy_registry(
         ctx: Context<InitializePolicyRegistry>,
     ) -> Result<()> {
         instructions::policy_engine::initialize_policy_registry(ctx)
     }
 
-    /// Обновление набора политик (authority реестра).
+    /// Update the policy set (registry authority).
     pub fn update_policy(
         ctx: Context<UpdatePolicy>,
         update: PolicyUpdate,
@@ -166,7 +166,7 @@ pub mod enrg_mvp {
         instructions::policy_engine::update_policy(ctx, update)
     }
 
-    /// Смена администратора политик (далее — передача роли под Governance ADR-0009).
+    /// Change the policy administrator (role may later go to Governance ADR-0009).
     pub fn set_policy_authority(
         ctx: Context<SetPolicyAuthority>,
         new_authority: Pubkey,
@@ -202,7 +202,7 @@ pub mod enrg_mvp {
         instructions::pool::join_pool(ctx)
     }
 
-    /// Пропорциональное распределение пула при достижении порога (v7.0 §14).
+    /// Proportional pool distribution when the threshold is reached (v7.0 §14).
     pub fn distribute_pool<'info>(
         ctx: Context<'_, '_, 'info, 'info, DistributePool<'info>>,
     ) -> Result<()> {
@@ -260,16 +260,16 @@ pub mod enrg_mvp {
         instructions::buyback::buyback_and_burn(ctx, amount)
     }
 
-    /// Одноразовый founder-премайн при launch: mint 2e17 на founder ATA,
-    /// засчёт в vault.total_supply с проверкой MAX_SUPPLY_ATOMIC.
+    /// One-shot founder premine at launch: mint 2e17 to the founder ATA,
+    /// counted in vault.total_supply with a MAX_SUPPLY_ATOMIC check.
     pub fn allocate_founder(
         ctx: Context<AllocateFounder>,
     ) -> Result<()> {
         instructions::init_founder::allocate_founder(ctx)
     }
 
-    /// Вывод SRC из протокольного фонда (buyback/staking/dao/emergency)
-    /// на ATA получателя. Только Vault.authority (временный governor).
+    /// Withdraw SRC from a protocol fund (buyback/staking/dao/emergency)
+    /// to the recipient ATA. Vault.authority only (temporary governor).
     pub fn withdraw_fund(
         ctx: Context<WithdrawFund>,
         fund_tag: u8,
@@ -346,8 +346,8 @@ pub mod enrg_mvp {
         instructions::device_lifecycle::revoke_device(ctx)
     }
 
-    /// Ротация ключа устройства (ADR-0007): owner/admin меняет device_id.
-    /// Новый ключ обязан подписать b"enrg:device:rotate" || ... (PoP).
+    /// Device key rotation (ADR-0007): owner/admin changes the device_id.
+    /// The new key MUST sign b"enrg:device:rotate" || ... (PoP).
     pub fn rotate_device_key(
         ctx: Context<RotateDeviceKey>,
         new_device_id: Pubkey,
@@ -364,7 +364,7 @@ pub mod enrg_mvp {
         )
     }
 
-    /// Назначение/смена tier устройства (v7.0 §15 — Trust Levels).
+    /// Assign/change the device tier (v7.0 §15 — Trust Levels).
     pub fn set_device_tier(
         ctx: Context<SetDeviceTier>,
         tier: DeviceTier,
@@ -372,14 +372,14 @@ pub mod enrg_mvp {
         instructions::tier::set_device_tier(ctx, tier)
     }
 
-    /// Инициализация Reputation PDA (v7.0 §16 — Energy Reputation Score).
+    /// Initialize the Reputation PDA (v7.0 §16 — Energy Reputation Score).
     pub fn initialize_reputation(
         ctx: Context<InitializeReputation>,
     ) -> Result<()> {
         instructions::reputation::initialize_reputation(ctx)
     }
 
-    /// Фиксация аномалии профиля генерации доверенным оракулом (v7.0 §27).
+    /// Record a generation profile anomaly by a trusted oracle (v7.0 §27).
     pub fn report_anomaly(
         ctx: Context<ReportAnomaly>,
         severity: u8,
@@ -387,7 +387,7 @@ pub mod enrg_mvp {
         instructions::reputation::report_anomaly(ctx, severity)
     }
 
-    /// Премиум-доступ к ENRG Market по ERS (v7.0 §16, §30).
+    /// Premium access to ENRG Market by ERS (v7.0 §16, §30).
     pub fn ers_premium_access(
         ctx: Context<ErsPremiumAccess>,
     ) -> Result<bool> {

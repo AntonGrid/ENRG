@@ -5,10 +5,10 @@ use anchor_lang::prelude::*;
 /// This is the only trusted object accepted
 /// by the ENRG Protocol Core.
 ///
-/// Отчёт аутентифицирован ДВУМЯ подписями:
-/// - `device_signature` — устройство подтверждает (device_id, nonce, device_timestamp, energy_wh);
-/// - `oracle_signature` — доверенный оракул подтверждает, что он верифицировал
-///   данные устройства (device_id, nonce, device_timestamp, verified_at, energy_wh).
+/// The report is authenticated by TWO signatures:
+/// - `device_signature` — the device confirms (device_id, nonce, device_timestamp, energy_wh);
+/// - `oracle_signature` — the trusted oracle confirms that it verified the
+///   device data (device_id, nonce, device_timestamp, verified_at, energy_wh).
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct OracleReport {
     /// Trusted Oracle identity.
@@ -51,7 +51,7 @@ impl OracleReport {
     }
 
     /// Serialize the fields signed by the ORACLE.
-    /// Биндит верификационную метку оракула и данные устройства.
+    /// Binds the oracle verification tag to the device data.
     pub fn oracle_message_to_sign(&self) -> Result<Vec<u8>> {
         let mut buf = Vec::with_capacity(32 + 8 + 8 + 8 + 8);
 

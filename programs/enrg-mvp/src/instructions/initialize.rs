@@ -5,7 +5,7 @@ use crate::constants::*;
 use crate::error::ErrorCode;
 use crate::state::*;
 
-/// Инициализация глобального Vault PDA — хранилища экономики протокола.
+/// Initialize the global Vault PDA — the store of the protocol economy.
 #[derive(Accounts)]
 pub struct InitializeVault<'info> {
     #[account(
@@ -37,10 +37,10 @@ pub struct InitializeVault<'info> {
     pub system_program: Program<'info, System>,
 }
 
-/// Инициализация адресов фондов в TokenMint PDA.
+/// Initialize the fund addresses in the TokenMint PDA.
 #[derive(Accounts)]
 pub struct InitializeFunds<'info> {
-    /// Vault PDA — глобальное состояние протокола и владелец всех Token Accounts.
+    /// Vault PDA — global protocol state and owner of all Token Accounts.
     #[account(
         mut,
         seeds = [b"vault"],
@@ -49,7 +49,7 @@ pub struct InitializeFunds<'info> {
     )]
     pub vault: Account<'info, Vault>,
 
-    /// TokenMint PDA — хранит все конфигурационные адреса токена.
+    /// TokenMint PDA — holds all token configuration addresses.
     #[account(
         mut,
         seeds = [b"token-mint"],
@@ -65,28 +65,28 @@ pub struct InitializeFunds<'info> {
     )]
     pub mint: Account<'info, Mint>,
 
-    /// Vault PDA как токенный авторити для всех протокольных ATA.
-    /// CHECK: Vault PDA подписывает через seeds.
+    /// Vault PDA as the token authority for all protocol ATAs.
+    /// CHECK: the Vault PDA signs via seeds.
     #[account(
         seeds = [b"vault"],
         bump
     )]
     pub vault_authority: UncheckedAccount<'info>,
 
-    /// Buyback ATA — принадлежит Vault PDA.
-    /// Должен быть создан заранее.
+    /// Buyback ATA — owned by the Vault PDA.
+    /// Must be created in advance.
     #[account(mut)]
     pub buyback_account: Account<'info, TokenAccount>,
 
-    /// Staking rewards ATA — принадлежит Vault PDA.
+    /// Staking rewards ATA — owned by the Vault PDA.
     #[account(mut)]
     pub staking_account: Account<'info, TokenAccount>,
 
-    /// DAO treasury ATA — принадлежит Vault PDA.
+    /// DAO treasury ATA — owned by the Vault PDA.
     #[account(mut)]
     pub dao_account: Account<'info, TokenAccount>,
 
-    /// Emergency reserve ATA — принадлежит Vault PDA.
+    /// Emergency reserve ATA — owned by the Vault PDA.
     #[account(mut)]
     pub emergency_account: Account<'info, TokenAccount>,
 
@@ -98,8 +98,8 @@ pub struct InitializeFunds<'info> {
 }
 
 pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
-    // H-2: только EXPECTED_DEPLOYER может инициализировать vault
-    // (защита от front-running захвата протокольной экономики).
+    // H-2: only EXPECTED_DEPLOYER can initialize the vault
+    // (protection against front-running capture of the protocol economy).
     require!(
         ctx.accounts.authority.key() == EXPECTED_DEPLOYER,
         ErrorCode::UnauthorizedDeployer
@@ -107,7 +107,7 @@ pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
 
     let vault = &mut ctx.accounts.vault;
 
-    // Аккаунт только что создан (все поля в нулях) — настраиваем дефолтную экономику.
+    // The account was just created (all fields zero) — set up the default economy.
     if vault.deployer == Pubkey::default() {
         vault.deployer = ctx.accounts.authority.key();
         vault.authority = ctx.accounts.authority.key();
@@ -130,9 +130,9 @@ pub fn initialize_vault(ctx: Context<InitializeVault>) -> Result<()> {
 pub fn initialize_funds(ctx: Context<InitializeFunds>) -> Result<()> {
     let token_mint = &mut ctx.accounts.token_mint;
 
-    // Фондовые Token Accounts обязаны принадлежать своим fund-PDA
+    // Fund Token Accounts must be owned by their fund PDAs
     // (fund-buyback / fund-staking / fund-dao / fund-emergency).
-    // Это исключает подмену фондовых аккаунтов произвольными ATA.
+    // This prevents substituting arbitrary ATAs for the fund accounts.
     let program_id = ctx.program_id;
     for (name, seed, account) in [
         ("buyback", b"fund-buyback".as_ref(), &ctx.accounts.buyback_account),
@@ -148,7 +148,7 @@ pub fn initialize_funds(ctx: Context<InitializeFunds>) -> Result<()> {
         msg!("{} fund account verified: {}", name, account.key());
     }
 
-    // Сохраняем все адреса фондов в TokenMint PDA
+    // Store all fund addresses in the TokenMint PDA
     token_mint.buyback_account = ctx.accounts.buyback_account.key();
     token_mint.staking_account = ctx.accounts.staking_account.key();
     token_mint.dao_account = ctx.accounts.dao_account.key();
@@ -157,16 +157,16 @@ pub fn initialize_funds(ctx: Context<InitializeFunds>) -> Result<()> {
     Ok(())
 }
 
-/// Смена Vault.authority (protocol admin / временный governor).
+/// Change Vault.authority (protocol admin / temporary governor).
 ///
-/// РАЗДЕЛЕНИЕ РОЛЕЙ (BLOCK 2 аудита): Vault.authority — protocol admin,
-/// управляет vault/funds/безопасностью; список оракулов — отдельная роль
-/// (oracle_admin в OracleRegistry). mint-authority PDA механизм не затрагивается.
+/// ROLE SEPARATION (audit BLOCK 2): Vault.authority — protocol admin,
+/// managing vault/funds/security; the oracle list is a separate role
+/// (oracle_admin in OracleRegistry). The mint-authority PDA mechanism is unaffected.
 ///
-/// TODO(audit): внедрить двухшаговую смену (pending_authority + accept) и/или
-/// timelock/multisig. Сейчас смена одношаговая и фиксируется событием
-/// VaultAuthorityChanged. Изменение layout Vault (добавление pending_authority)
-/// требует миграции задеплоенного аккаунта, поэтому сознательно отложено.
+/// TODO(audit): implement a two-step change (pending_authority + accept) and/or
+/// timelock/multisig. Currently the change is single-step and recorded by the
+/// VaultAuthorityChanged event. Changing the Vault layout (adding pending_authority)
+/// requires migrating the deployed account, so it is deliberately deferred.
 #[derive(Accounts)]
 pub struct SetVaultAuthority<'info> {
     #[account(

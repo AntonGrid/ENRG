@@ -42,11 +42,11 @@ impl Default for DeviceState {
     }
 }
 
-/// Уровень доверия устройства (v7.0 §15 — Device Trust Levels).
+/// Device trust level (v7.0 §15 — Device Trust Levels).
 ///
-/// Влияет на лимиты майнинга: Basic ≤ 100 kWh/мес, Verified ≤ 10 MWh/мес,
-/// Industrial / Institutional — без ограничений. Тир назначается протокольным
-/// администратором (Vault authority) через `set_device_tier`.
+/// Affects minting limits: Basic ≤ 100 kWh/month, Verified ≤ 10 MWh/month,
+/// Industrial / Institutional — no limits. The tier is assigned by the protocol
+/// administrator (Vault authority) via `set_device_tier`.
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, Debug, InitSpace)]
 pub enum DeviceTier {
     Basic,
@@ -62,7 +62,7 @@ impl Default for DeviceTier {
 }
 
 impl DeviceTier {
-    /// Лимит майнинга на месяц (Wh). `None` — без ограничений.
+    /// Monthly minting limit (Wh). `None` — no limit.
     pub fn monthly_limit_wh(&self) -> Option<u64> {
         match self {
             DeviceTier::Basic => Some(crate::constants::BASIC_MONTHLY_LIMIT_WH),
@@ -71,9 +71,9 @@ impl DeviceTier {
         }
     }
 
-    /// Разрешён ли отчёт `report_energy` с учётом уже накопленной месячной
-    /// энергии (v7.0 §15): `month_energy + report_energy <= limit`.
-    /// Используется в mint_energy перед записью вклада.
+    /// Whether a `report_energy` is allowed given the already accumulated monthly
+    /// energy (v7.0 §15): `month_energy + report_energy <= limit`.
+    /// Used in mint_energy before recording the contribution.
     pub fn allows_increment(&self, month_energy: u64, report_energy: u64) -> bool {
         match self.monthly_limit_wh() {
             Some(limit) => month_energy
@@ -83,7 +83,7 @@ impl DeviceTier {
         }
     }
 
-    /// Признак премиум-тира (премиум-функции ENRG Market, v7.0 §30).
+    /// Premium tier flag (premium features of ENRG Market, v7.0 §30).
     pub fn is_premium(&self) -> bool {
         matches!(self, DeviceTier::Industrial | DeviceTier::Institutional)
     }
@@ -91,63 +91,63 @@ impl DeviceTier {
 
 /// Core device identity.
 ///
-/// Хранит только базовую on-chain логику протокола.
-/// Метаданные устройства (мощность, тип, локация) и
-/// скользящее окно энергии (30 days) вынесены в
-/// отдельную программу — enrg-profile (EnergyProfile PDA).
+/// Stores only the base on-chain protocol logic.
+/// Device metadata (power, type, location) and the
+/// rolling energy window (30 days) live in a separate
+/// program — enrg-profile (EnergyProfile PDA).
 ///
 /// Seeds: [b"producer", device_id.key().as_ref()]
 #[account]
 #[derive(InitSpace)]
 pub struct EnergyProducer {
-    /// Владелец устройства (wallet).
+    /// Device owner (wallet).
     pub authority: Pubkey,
 
-    /// Публичный ключ физического устройства (Ed25519).
+    /// Public key of the physical device (Ed25519).
     pub device_id: Pubkey,
 
-    /// Последний использованный nonce (защита от replay).
+    /// Last used nonce (replay protection).
     pub nonce: u64,
 
-    /// Суммарная подтверждённая энергия за всё время (Wh).
+    /// Total confirmed energy of all time (Wh).
     pub energy_wh: u64,
 
-    /// Временная метка последнего подтверждённого репорта.
+    /// Timestamp of the last confirmed report.
     pub timestamp: i64,
 
-    /// Текущее состояние устройства (Device Lifecycle, ADR-0005).
+    /// Current device state (Device Lifecycle, ADR-0005).
     pub state: DeviceState,
 
-    /// Уровень доверия устройства (v7.0 §15) — лимиты майнинга.
+    /// Device trust level (v7.0 §15) — minting limits.
     pub tier: DeviceTier,
 
-    /// Подтверждённая энергия за текущий месяц (Wh) — для tier-лимита.
+    /// Confirmed energy for the current month (Wh) — for the tier limit.
     pub month_energy_wh: u64,
 
-    /// Начало текущего месячного окна (unix ts) — для tier-лимита.
+    /// Start of the current monthly window (unix ts) — for the tier limit.
     pub month_start_ts: i64,
 
-    /// Монотонный nonce последнего claim-сообщения (защита от replay).
-    /// Отдельно от `nonce` (proof-nonce отчётов): claim и proof не пересекаются.
+    /// Monotonic nonce of the last claim message (replay protection).
+    /// Separate from `nonce` (proof nonce of reports): claim and proof do not overlap.
     pub claim_nonce: u64,
 
-    /// Временная метка успешного claim (аудит, ADR-0002).
+    /// Timestamp of a successful claim (audit, ADR-0002).
     pub claimed_at: i64,
 
-    /// Флаг отзыва (ADR-0007). После revoke/rotate — true: устройство не может
-    /// минтить и менять состояние. Дублирует terminal-состояние
-    /// DeviceState::Revoked для defense-in-depth и простых проверок.
+    /// Revocation flag (ADR-0007). After revoke/rotate — true: the device cannot
+    /// mint or change state. Duplicates the terminal state
+    /// DeviceState::Revoked for defense-in-depth and simple checks.
     pub revoked: bool,
 
-    /// При ротации ключа (ADR-0007) — новый device_id. Pubkey::default(), если
-    /// ротации не было. Аудит-след old → new.
+    /// On key rotation (ADR-0007) — the new device_id. Pubkey::default() if no
+    /// rotation happened. Audit trail old → new.
     pub rotated_to: Pubkey,
 }
 
 impl EnergyProducer {
-    /// Разрешено ли устройству минтить в момент `now`:
-    /// не отозвано (ADR-0007) И состояние Active (ADR-0005) И tier-лимит
-    /// месяца не исчерпан (v7.0 §15).
+    /// Whether the device is allowed to mint at time `now`:
+    /// not revoked (ADR-0007) AND state Active (ADR-0005) AND the monthly tier
+    /// limit is not exhausted (v7.0 §15).
     pub fn can_mint(&self, now: i64) -> bool {
         if self.revoked {
             return false;
@@ -161,8 +161,8 @@ impl EnergyProducer {
         }
     }
 
-    /// Энергия месяца с учётом «прокрутки» окна к `now`.
-    /// Если окно истекло (>= TIER_MONTH_SECS) — новый месяц, энергия = 0.
+    /// Month energy with the window "rolled" to `now`.
+    /// If the window expired (>= TIER_MONTH_SECS) — new month, energy = 0.
     pub fn effective_month_energy(&self, now: i64) -> u64 {
         if self.month_start_ts == 0
             || now.saturating_sub(self.month_start_ts) >= crate::constants::TIER_MONTH_SECS
@@ -173,7 +173,7 @@ impl EnergyProducer {
         }
     }
 
-    /// Прокручивает месячное окно к `now` (вызывать перед записью энергии).
+    /// Rolls the monthly window to `now` (call before recording energy).
     pub fn roll_month(&mut self, now: i64) {
         if self.month_start_ts == 0
             || now.saturating_sub(self.month_start_ts) >= crate::constants::TIER_MONTH_SECS
@@ -213,7 +213,7 @@ mod tests {
 
     #[test]
     fn tier_limits_match_spec() {
-        // v7.0 §15: Basic ≤ 100 kWh/мес, Verified ≤ 10 MWh/мес, остальные — без лимита.
+        // v7.0 §15: Basic ≤ 100 kWh/month, Verified ≤ 10 MWh/month, the rest — no limit.
         assert_eq!(DeviceTier::Basic.monthly_limit_wh(), Some(100_000));
         assert_eq!(DeviceTier::Verified.monthly_limit_wh(), Some(10_000_000));
         assert_eq!(DeviceTier::Industrial.monthly_limit_wh(), None);
@@ -255,12 +255,12 @@ mod tests {
 
     #[test]
     fn revoked_device_cannot_mint() {
-        // ADR-0007: флаг revoked блокирует mint даже в состоянии Active.
+        // ADR-0007: the revoked flag blocks mint even in the Active state.
         let mut p = producer_with(DeviceState::Active, DeviceTier::Industrial, 0, 1_000);
         assert!(p.can_mint(1_000));
         p.revoked = true;
         assert!(!p.can_mint(1_000), "revoked device must not mint");
-        // И state-переход из Revoked невозможен (терминальное состояние).
+        // And a state transition out of Revoked is impossible (terminal state).
         assert!(!DeviceState::Revoked.can_transition_to(DeviceState::Active));
         assert!(!DeviceState::Revoked.can_transition_to(DeviceState::Provisioned));
     }
@@ -289,15 +289,15 @@ mod tests {
 
     #[test]
     fn tier_allows_increment_respects_limit() {
-        // Basic: 60_000 + 50_000 = 110_000 > 100_000 → запрещено (mint-путь).
+        // Basic: 60_000 + 50_000 = 110_000 > 100_000 → disallowed (mint path).
         assert!(DeviceTier::Basic.allows_increment(60_000, 40_000));
         assert!(!DeviceTier::Basic.allows_increment(60_000, 50_000));
-        // Verified: в пределах 10 МВт·ч.
+        // Verified: within 10 MWh.
         assert!(DeviceTier::Verified.allows_increment(5_000_000, 5_000_000));
         assert!(!DeviceTier::Verified.allows_increment(5_000_000, 6_000_000));
-        // Industrial/Institutional — без лимита.
+        // Industrial/Institutional — no limit.
         assert!(DeviceTier::Industrial.allows_increment(u64::MAX, u64::MAX));
-        // Переполнение month_energy + report не «протаскивает» лимит.
+        // Overflow of month_energy + report cannot bypass the limit.
         assert!(!DeviceTier::Basic.allows_increment(u64::MAX, 1));
     }
 }

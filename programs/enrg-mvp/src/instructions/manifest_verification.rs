@@ -4,12 +4,13 @@ use crate::error::ErrorCode;
 use crate::security::verify_ed25519_signature;
 use crate::state::{ManifestRegistry, ManifestVerification};
 
-/// Канонический префикс сообщения, которое подписывает ИЗДАТЕЛЬ манифеста.
-/// Формат зафиксирован на уровне протокола (ADR-0004/ADR-0007): менять нельзя
-/// без одновременной миграции издательских клиентов и офф-чейн паблишера.
+/// Canonical prefix of the message signed by the manifest PUBLISHER.
+/// The format is fixed at the protocol level (ADR-0004/ADR-0007): it cannot
+/// be changed without a coordinated migration of publisher clients and the
+/// off-chain publisher.
 pub const MANIFEST_SIGN_MESSAGE_PREFIX: &[u8] = b"enrg:manifest";
 
-/// Сообщение, подписываемое издателем при публикации манифеста:
+/// The message signed by the publisher when publishing a manifest:
 /// ```text
 /// b"enrg:manifest" (13 bytes)
 /// || manifest_id       (16 bytes)
@@ -41,10 +42,10 @@ pub struct RegisterManifestVerification<'info> {
     )]
     pub verification: Account<'info, ManifestVerification>,
 
-    /// Единственный легитимный ManifestRegistry (PDA программы).
-    /// Издатель манифеста обязан быть `oracle_authority` реестра — доверенной
-    /// стороной (ADR-0004/ADR-0007). Это закрывает «любой может зарегистрировать
-    /// произвольный манифест» (аудит 2026-08-18, P0-1).
+    /// The only legitimate ManifestRegistry (program PDA).
+    /// The manifest publisher must be the registry `oracle_authority` — a trusted
+    /// party (ADR-0004/ADR-0007). This closes the "anyone can register an
+    /// arbitrary manifest" gap (audit 2026-08-18, P0-1).
     #[account(
         seeds = [b"manifest-registry"],
         bump
@@ -54,8 +55,8 @@ pub struct RegisterManifestVerification<'info> {
     #[account(mut)]
     pub publisher: Signer<'info>,
 
-    /// CHECK: sysvar Instructions — ed25519-precompile-инструкция с подписью
-    /// издателя ДОЛЖНА быть в транзакции перед этой инструкцией.
+    /// CHECK: sysvar Instructions — an ed25519 precompile instruction with the
+    /// publisher signature MUST be in the transaction before this instruction.
     #[account(
         constraint = instructions.key() == INSTRUCTIONS_SYSVAR_ID @ ErrorCode::InvalidInstructionsAccount
     )]
@@ -72,8 +73,8 @@ pub fn register_manifest_verification(
     signature: [u8; 64],
     manifest_version: u8,
 ) -> Result<()> {
-    // ── ADR-0004/0007: подпись издателя проверяется on-chain (P0-1) ──
-    // 1) Издатель должен быть доверенной стороной (oracle_authority реестра).
+    // ── ADR-0004/0007: the publisher signature is verified on-chain (P0-1) ──
+    // 1) The publisher must be a trusted party (registry oracle_authority).
     let registry = &ctx.accounts.registry;
     let publisher_pubkey = Pubkey::new_from_array(publisher_key);
     require!(
@@ -81,7 +82,7 @@ pub fn register_manifest_verification(
         ErrorCode::UntrustedManifestPublisher
     );
 
-    // 2) Подпись издателя над каноническим сообщением (см. manifest_sign_message).
+    // 2) The publisher signature over the canonical message (see manifest_sign_message).
     let message = manifest_sign_message(&manifest_id, &content_hash, manifest_version);
     verify_ed25519_signature(
         &signature,
@@ -99,7 +100,7 @@ pub fn register_manifest_verification(
     verification.signature = signature;
     verification.created_at = clock.unix_timestamp;
     verification.manifest_version = manifest_version;
-    verification.verified = true; // подпись действительно проверена
+    verification.verified = true; // the signature was actually verified
     verification.reserved = [0u8; 32];
 
     emit!(ManifestVerificationRegistered {

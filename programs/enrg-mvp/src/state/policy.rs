@@ -2,54 +2,54 @@ use anchor_lang::prelude::*;
 
 /// Policy Registry (ADR-0003).
 ///
-/// On-chain набор политик, определяющих допустимость Proof'ов и минта.
-/// `mint_energy` (Verifier) **не принимает решений** — он исполняет политики,
-/// адресуемые этим реестром. Это устраняет документированное отклонение
-/// «verifier+policy co-location» (см. `instructions/mint.rs`).
+/// On-chain set of policies that determine which Proofs and mints are allowed.
+/// `mint_energy` (Verifier) **does not make decisions** — it executes the
+/// policies addressed by this registry. This removes the documented
+/// "verifier+policy co-location" deviation (see `instructions/mint.rs`).
 ///
 /// PDA: seeds = [b"policy-registry"]
 ///
-/// **Обратная совместимость:** аккаунт опционален в `MintEnergy`. Если PDA
-/// не инициализирован, применяются дефолтные политики протокола — поведение
-/// идентично версии до Policy Engine. После инициализации политики задаются
-/// через `update_policy` (authority реестра, далее может быть передан под
-/// Governance ADR-0009 через `set_policy_authority`).
+/// **Backward compatibility:** the account is optional in `MintEnergy`. If the
+/// PDA is not initialized, the protocol default policies apply — behavior
+/// identical to the pre-Policy Engine version. After initialization, policies
+/// are set via `update_policy` (registry authority; may later be handed over
+/// to Governance ADR-0009 via `set_policy_authority`).
 #[account]
 pub struct PolicyRegistry {
-    /// Администратор политик. Изначально — `EXPECTED_DEPLOYER`; смена через
-    /// `set_policy_authority` (возможна передача роли под Governance ADR-0009).
+    /// Policy administrator. Initially — `EXPECTED_DEPLOYER`; change via
+    /// `set_policy_authority` (the role may be handed over to Governance ADR-0009).
     pub authority: Pubkey,
 
-    /// Глобальный выключатель минта (maintenance / pause).
-    /// `false` → `mint_energy` отклоняет все Proof'ы (`MintPaused`).
+    /// Global mint switch (maintenance / pause).
+    /// `false` → `mint_energy` rejects all Proofs (`MintPaused`).
     pub mint_enabled: bool,
 
-    /// Проверка членства `report.oracle` в `OracleRegistry` (C-0).
+    /// Check that `report.oracle` is a member of `OracleRegistry` (C-0).
     pub enforce_oracle_whitelist: bool,
 
-    /// Gating по состоянию устройства (ADR-0005: mint только из `Active`).
+    /// Device-state gating (ADR-0005: mint only from `Active`).
     pub enforce_device_state: bool,
 
-    /// Tier-лимиты месяца (v7.0 §15).
+    /// Monthly tier limits (v7.0 §15).
     pub enforce_tier_limits: bool,
 
-    /// Ограничение энергии за proof: `≤ rated_power × max_energy_bps / 10_000`.
+    /// Energy cap per proof: `≤ rated_power × max_energy_bps / 10_000`.
     pub enforce_energy_caps: bool,
 
     /// Supply cap: `total_supply + reward ≤ vault.max_supply`.
     pub enforce_supply_cap: bool,
 
-    /// Максимальная энергия за proof в базисных пунктах от `rated_power`
-    /// (10_000 == 100 %). Дефолт — 10_000 (как в версии до Policy Engine).
+    /// Maximum energy per proof in basis points of `rated_power`
+    /// (10_000 == 100%). Default — 10_000 (as in the pre-Policy Engine version).
     pub max_energy_bps: u64,
 
-    /// Допустимый сдвиг часов (сек) для freshness-проверки `verified_at`.
+    /// Allowed clock skew (sec) for the `verified_at` freshness check.
     pub max_clock_skew_sec: i64,
 
-    /// Версия набора политик (инкремент при каждом обновлении).
+    /// Policy-set version (incremented on every update).
     pub version: u64,
 
-    /// Timestamp последнего обновления (unix, сек).
+    /// Timestamp of the last update (unix, sec).
     pub updated_at: i64,
 
     /// PDA bump.
@@ -57,7 +57,7 @@ pub struct PolicyRegistry {
 }
 
 impl PolicyRegistry {
-    /// Размер аккаунта (без дискриминатора Anchor — 8 байт).
+    /// Account size (without the Anchor discriminator — 8 bytes).
     pub const LEN: usize =
         32 + // authority
         1 +  // mint_enabled
@@ -72,7 +72,7 @@ impl PolicyRegistry {
         8 +  // updated_at
         1;   // bump
 
-    /// Дефолтный набор политик (зеркалирует поведение до Policy Engine).
+    /// Default policy set (mirrors pre-Policy Engine behavior).
     pub fn defaults(authority: Pubkey, bump: u8) -> Self {
         Self {
             authority,

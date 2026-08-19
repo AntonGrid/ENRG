@@ -49,9 +49,9 @@ pub struct RemoveOracle<'info> {
     pub authority: Signer<'info>,
 }
 
-/// Смена oracle_admin. Доступно только protocol admin (registry.authority).
-/// NOTE: отдельного timelock/двухшагового паттерна пока нет — роль меняется
-/// мгновенно с событием; multisig-план зафиксирован в комментариях (BLOCK 2).
+/// Change oracle_admin. Only the protocol admin (registry.authority) can do it.
+/// NOTE: there is no separate timelock/two-step pattern yet — the role changes
+/// instantly with an event; the multisig plan is recorded in comments (BLOCK 2).
 #[derive(Accounts)]
 pub struct SetOracleAdmin<'info> {
     #[account(
@@ -68,9 +68,9 @@ pub struct SetOracleAdmin<'info> {
 pub fn initialize_oracle_registry(
     ctx: Context<InitializeOracleRegistry>,
 ) -> Result<()> {
-    // H-2: только EXPECTED_DEPLOYER может быть первым инициализатором registry —
-    // иначе атакующий мог бы захватить роль oracle_admin и добавить свой ключ
-    // в список доверенных оракулов (front-running при деплое).
+    // H-2: only EXPECTED_DEPLOYER can be the first registry initializer —
+    // otherwise an attacker could take the oracle_admin role and add their key
+    // to the trusted oracle list (front-running at deploy time).
     require!(
         ctx.accounts.authority.key() == EXPECTED_DEPLOYER,
         ErrorCode::UnauthorizedDeployer
@@ -79,7 +79,7 @@ pub fn initialize_oracle_registry(
     let registry = &mut ctx.accounts.registry;
 
     registry.authority = ctx.accounts.authority.key();
-    // По умолчанию oracle_admin = authority (обратная совместимость bootstrap).
+    // By default oracle_admin = authority (backward-compatible bootstrap).
     registry.oracle_admin = ctx.accounts.authority.key();
     registry.oracles = Vec::new();
 

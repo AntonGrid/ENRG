@@ -13,20 +13,20 @@ use crate::state::*;
 // ══════════════════════════════════════════════════════════════
 //  REGISTER — UNREGISTERED → REGISTERED (ADR-0005)
 // ══════════════════════════════════════════════════════════════
-//  Создаёт device record (EnergyProducer PDA):
+//  Creates a device record (EnergyProducer PDA):
 //    seeds = [b"producer", device_id.key().as_ref()]
 //
-//  Устройство ДОЛЖНО подписать сообщение
+//  The device MUST sign the message
 //    b"enrg:device:register" || device_id(32) || register_timestamp(8 LE)
-//  — это доказывает владение ключом (ADR-0001 / ADR-0002). Без подписи
-//  устройства запись создать нельзя: невозможно зарегистрировать чужой ключ.
+//  — this proves key ownership (ADR-0001 / ADR-0002). Without the device
+//  signature no record can be created: it is impossible to register a foreign key.
 #[derive(Accounts)]
 pub struct RegisterDevice<'info> {
-    /// Оператор: инициирует регистрацию и платит rent.
+    /// Operator: initiates registration and pays the rent.
     #[account(mut)]
     pub operator: Signer<'info>,
 
-    /// PDA device record, жёстко привязан к device_id.
+    /// PDA device record, strictly bound to device_id.
     #[account(
         init,
         payer = operator,
@@ -36,15 +36,15 @@ pub struct RegisterDevice<'info> {
     )]
     pub producer: Account<'info, EnergyProducer>,
 
-    /// CHECK: публичный Ed25519-ключ устройства (32 байта).
-    /// Используется только для вывода PDA seeds.
+    /// CHECK: the device's public Ed25519 key (32 bytes).
+    /// Used only for deriving PDA seeds.
     #[account(
         constraint = device_id.key() != Pubkey::default() @ ErrorCode::InvalidParameter
     )]
     pub device_id: UncheckedAccount<'info>,
 
-    /// CHECK: sysvar Instructions — ed25519-precompile-инструкция с подписью
-    /// устройства ДОЛЖНА быть в транзакции перед этой инструкцией.
+    /// CHECK: sysvar Instructions — an ed25519 precompile instruction with the
+    /// device signature MUST be in the transaction before this instruction.
     #[account(
         constraint = instructions.key() == INSTRUCTIONS_SYSVAR_ID @ ErrorCode::InvalidInstructionsAccount
     )]
@@ -68,7 +68,7 @@ pub fn register_device(
         ErrorCode::FutureTimestamp
     );
 
-    // ── Устройство доказывает владение ключом (ADR-0001 / ADR-0002) ──
+    // ── The device proves key ownership (ADR-0001 / ADR-0002) ──
     let message = device_register_message(&device_id, register_timestamp);
     verify_ed25519_signature(
         &device_signature,
@@ -84,7 +84,7 @@ pub fn register_device(
     producer.energy_wh = 0;
     producer.timestamp = 0;
     producer.state = DeviceState::Registered;
-    producer.tier = DeviceTier::Basic; // v7.0 §15: новый девайс — Basic
+    producer.tier = DeviceTier::Basic; // v7.0 §15: new device — Basic
     producer.month_energy_wh = 0;
     producer.month_start_ts = 0;
     producer.claim_nonce = 0;
@@ -102,23 +102,23 @@ pub fn register_device(
 // ══════════════════════════════════════════════════════════════
 //  CLAIM — REGISTERED → CLAIMED (ADR-0005)
 // ══════════════════════════════════════════════════════════════
-//  Привязывает устройство к кошельку (authority).
+//  Binds the device to a wallet (authority).
 //
-//  Устройство ДОЛЖНО подписать сообщение
+//  The device MUST sign the message
 //    b"enrg:device:claim" || device_id(32) || owner(32)
 //                         || claim_nonce(8 LE) || claim_timestamp(8 LE)
 //
-//  По ADR-0001 приватный ключ никогда не покидает устройство, поэтому
-//  «захват» устройства без его согласия невозможен. Owner вшит в сообщение:
-//  перехваченную подпись нельзя «перенаправить» на другой кошелёк.
+//  Per ADR-0001 the private key never leaves the device, so the device cannot
+//  be "captured" without its consent. The owner is embedded in the message:
+//  an intercepted signature cannot be "redirected" to another wallet.
 #[derive(Accounts)]
 pub struct ClaimDevice<'info> {
-    /// Кошелёк, которому устройство привязывается (новый authority).
+    /// The wallet the device is bound to (new authority).
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    /// PDA device record. Seeds выведены из stored device_id — подмена
-    /// записи или привязка к чужому устройству невозможны.
+    /// PDA device record. Seeds are derived from the stored device_id —
+    /// substituting the record or binding to a foreign device is impossible.
     #[account(
         mut,
         seeds = [b"producer", producer.device_id.as_ref()],
@@ -127,8 +127,8 @@ pub struct ClaimDevice<'info> {
     )]
     pub producer: Account<'info, EnergyProducer>,
 
-    /// Per-owner registry — создаётся при первом claim (BLOCK 4:
-    /// лимит устройств на владельца).
+    /// Per-owner registry — created on the first claim (BLOCK 4:
+    /// device-per-owner limit).
     #[account(
         init_if_needed,
         payer = authority,
@@ -138,8 +138,8 @@ pub struct ClaimDevice<'info> {
     )]
     pub owner_devices: Account<'info, OwnerDevices>,
 
-    /// CHECK: sysvar Instructions — ed25519-precompile-инструкция с подписью
-    /// устройства ДОЛЖНА быть в транзакции перед этой инструкцией.
+    /// CHECK: sysvar Instructions — an ed25519 precompile instruction with the
+    /// device signature MUST be in the transaction before this instruction.
     #[account(
         constraint = instructions.key() == INSTRUCTIONS_SYSVAR_ID @ ErrorCode::InvalidInstructionsAccount
     )]
@@ -156,12 +156,12 @@ pub fn claim_device(
 ) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
 
-    // ADR-0007: отозванное устройство не может быть заклеймлено.
+    // ADR-0007: a revoked device cannot be claimed.
     require!(!producer.revoked, ErrorCode::DeviceRevoked);
 
-    // Переход только из REGISTERED (ADR-0005).
+    // Transition only from REGISTERED (ADR-0005).
     require!(producer.state == DeviceState::Registered, ErrorCode::InvalidDeviceState);
-    // Устройство не должно быть уже привязано к кошельку.
+    // The device must not already be bound to a wallet.
     require!(producer.authority == Pubkey::default(), ErrorCode::DeviceAlreadyClaimed);
     require!(producer.device_id != Pubkey::default(), ErrorCode::InvalidParameter);
 
@@ -171,10 +171,10 @@ pub fn claim_device(
         claim_timestamp <= clock.unix_timestamp + MAX_CLOCK_SKEW,
         ErrorCode::FutureTimestamp
     );
-    // Anti-replay: claim-nonce строго возрастает (отдельно от proof-nonce).
+    // Anti-replay: the claim nonce strictly increases (separate from the proof nonce).
     require!(claim_nonce > producer.claim_nonce, ErrorCode::InvalidNonce);
 
-    // ── Подпись УСТРОЙСТВА (ADR-0001): ключ не покидает устройство ──
+    // ── DEVICE signature (ADR-0001): the key never leaves the device ──
     let owner = ctx.accounts.authority.key();
     let message = device_claim_message(&producer.device_id, &owner, claim_nonce, claim_timestamp);
     verify_ed25519_signature(
@@ -184,7 +184,7 @@ pub fn claim_device(
         &ctx.accounts.instructions.to_account_info(),
     )?;
 
-    // ── Лимит устройств на владельца (BLOCK 4 — антидробление) ──
+    // ── Device-per-owner limit (BLOCK 4 — anti-fragmentation) ──
     let owner_devices = &mut ctx.accounts.owner_devices;
     if owner_devices.owner == Pubkey::default() {
         owner_devices.owner = owner;
@@ -218,14 +218,14 @@ pub fn claim_device(
 
 
 // ══════════════════════════════════════════════════════════════
-//  INIT_ENERGY_PROFILE — создание owner-bound EnergyProfile
+//  INIT_ENERGY_PROFILE — creates an owner-bound EnergyProfile
 // ══════════════════════════════════════════════════════════════
-//  Вызывается владельцем (authority) ПОСЛЕ claim. Создаёт EnergyProfile
-//  PDA [b"profile", authority] через CPI в enrg-profile. Профиль нужен
-//  mint_energy (rated_power + скользящее окно энергии).
+//  Called by the owner (authority) AFTER claim. Creates the EnergyProfile
+//  PDA [b"profile", authority] via CPI into enrg-profile. The profile is
+//  needed by mint_energy (rated_power + rolling energy window).
 #[derive(Accounts)]
 pub struct InitEnergyProfile<'info> {
-    /// Владелец устройства (authority producer'а).
+    /// Device owner (producer authority).
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -236,13 +236,13 @@ pub struct InitEnergyProfile<'info> {
     )]
     pub producer: Account<'info, EnergyProducer>,
 
-    /// CHECK: enrg-profile program ID — единственная разрешённая CPI-цель.
+    /// CHECK: enrg-profile program ID — the only allowed CPI target.
     #[account(
         constraint = profile_program.key() == ENRG_PROFILE_PROGRAM_ID @ ErrorCode::InvalidParameter
     )]
     pub profile_program: UncheckedAccount<'info>,
 
-    /// CHECK: EnergyProfile PDA, создаётся через CPI-вызов в enrg-profile.
+    /// CHECK: EnergyProfile PDA, created via a CPI call into enrg-profile.
     #[account(mut)]
     pub profile: UncheckedAccount<'info>,
 
@@ -252,7 +252,7 @@ pub struct InitEnergyProfile<'info> {
 pub fn init_energy_profile(ctx: Context<InitEnergyProfile>) -> Result<()> {
     require!(
         !ctx.accounts.producer.revoked,
-        ErrorCode::DeviceRevoked // ADR-0007: отозванному устройству профиль не создаём
+        ErrorCode::DeviceRevoked // ADR-0007: no profile for a revoked device
     );
     let authority_key = ctx.accounts.authority.key();
     let profile_seeds = &[b"profile".as_ref(), authority_key.as_ref()];
@@ -275,7 +275,7 @@ pub fn init_energy_profile(ctx: Context<InitEnergyProfile>) -> Result<()> {
     crate::enrg_profile::cpi::initialize_profile(
         cpi_ctx,
         ctx.accounts.producer.device_id,
-        0,            // rated_power — заполняется позже через enrg-profile::update_metadata
+        0,            // rated_power — filled later via enrg-profile::update_metadata
         String::new(), // device_type
         String::new(), // location
     )?;
@@ -287,8 +287,8 @@ pub fn init_energy_profile(ctx: Context<InitEnergyProfile>) -> Result<()> {
 // ══════════════════════════════════════════════════════════════
 //  Owner-gated transitions (ADR-0005): PROVISIONED / ACTIVE /
 //  QUARANTINE / MAINTENANCE / REVOKED / RELEASE.
-//  Авторизация — has_one = authority (владелец устройства).
-//  Переходы — только через валидный предыдущий state (can_transition_to).
+//  Authorization — has_one = authority (device owner).
+//  Transitions — only through a valid previous state (can_transition_to).
 // ══════════════════════════════════════════════════════════════
 
 #[derive(Accounts)]
@@ -335,7 +335,7 @@ pub struct ActivateDevice<'info> {
     )]
     pub producer: Account<'info, EnergyProducer>,
 
-    /// Per-owner registry — лимит активных устройств (BLOCK 4).
+    /// Per-owner registry — active-device limit (BLOCK 4).
     #[account(
         mut,
         seeds = [b"owner-devices", authority.key().as_ref()],
@@ -353,7 +353,7 @@ pub fn activate_device(ctx: Context<ActivateDevice>) -> Result<()> {
         ErrorCode::InvalidStateTransition
     );
 
-    // Лимит активных устройств на владельца (BLOCK 4 — антидробление).
+    // Active-device-per-owner limit (BLOCK 4 — anti-fragmentation).
     let owner_devices = &mut ctx.accounts.owner_devices;
     require!(
         owner_devices.active_count < MAX_DEVICES_PER_OWNER,
@@ -388,7 +388,7 @@ pub struct QuarantineDevice<'info> {
     )]
     pub producer: Account<'info, EnergyProducer>,
 
-    /// Per-owner registry — счётчик активных устройств (BLOCK 4).
+    /// Per-owner registry — active-device counter (BLOCK 4).
     #[account(
         mut,
         seeds = [b"owner-devices", authority.key().as_ref()],
@@ -405,7 +405,7 @@ pub fn quarantine_device(ctx: Context<QuarantineDevice>) -> Result<()> {
         producer.state.can_transition_to(DeviceState::Quarantine),
         ErrorCode::InvalidStateTransition
     );
-    // Из Active уходит ровно один активный счётчик (Quarantine достижим только из Active).
+    // Exactly one active counter leaves Active (Quarantine is reachable only from Active).
     let owner_devices = &mut ctx.accounts.owner_devices;
     owner_devices.active_count = owner_devices.active_count.saturating_sub(1);
     producer.state = DeviceState::Quarantine;
@@ -432,7 +432,7 @@ pub struct MaintenanceDevice<'info> {
     )]
     pub producer: Account<'info, EnergyProducer>,
 
-    /// Per-owner registry — счётчик активных устройств (BLOCK 4).
+    /// Per-owner registry — active-device counter (BLOCK 4).
     #[account(
         mut,
         seeds = [b"owner-devices", authority.key().as_ref()],
@@ -449,8 +449,8 @@ pub fn maintenance_device(ctx: Context<MaintenanceDevice>) -> Result<()> {
         producer.state.can_transition_to(DeviceState::Maintenance),
         ErrorCode::InvalidStateTransition
     );
-    // Уменьшаем счётчик только если устройство уходит из Active
-    // (из Quarantine счётчик уже был уменьшен при карантине).
+    // Decrement the counter only when the device leaves Active
+    // (from Quarantine the counter was already decremented during quarantine).
     if producer.state == DeviceState::Active {
         let owner_devices = &mut ctx.accounts.owner_devices;
         owner_devices.active_count = owner_devices.active_count.saturating_sub(1);
@@ -469,7 +469,7 @@ pub fn maintenance_device(ctx: Context<MaintenanceDevice>) -> Result<()> {
 
 #[derive(Accounts)]
 pub struct RevokeDevice<'info> {
-    /// Владелец устройства ИЛИ протокольный админ (vault.authority).
+    /// Device owner OR protocol admin (vault.authority).
     pub authority: Signer<'info>,
 
     #[account(
@@ -480,9 +480,9 @@ pub struct RevokeDevice<'info> {
     )]
     pub producer: Account<'info, EnergyProducer>,
 
-    /// Per-owner registry — счётчик активных устройств (BLOCK 4).
-    /// Опционально: для незаклеймленных устройств (authority == default)
-    /// аккаунта владельца может не существовать (админ-отзыв).
+    /// Per-owner registry — active-device counter (BLOCK 4).
+    /// Optional: for unclaimed devices (authority == default)
+    /// the owner account may not exist (admin revocation).
     #[account(
         mut,
         seeds = [b"owner-devices", producer.authority.as_ref()],
@@ -491,9 +491,9 @@ pub struct RevokeDevice<'info> {
     )]
     pub owner_devices: Option<Account<'info, OwnerDevices>>,
 
-    /// Vault — протокольный админ (vault.authority) может отозвать устройство
-    /// (ADR-0005: «by owner or system»). Опционален: owner-отзыв работает без
-    /// vault (обратная совместимость).
+    /// Vault — the protocol admin (vault.authority) can revoke a device
+    /// (ADR-0005: "by owner or system"). Optional: owner revocation works
+    /// without the vault (backward compatibility).
     #[account(seeds = [b"vault"], bump)]
     pub vault: Option<Account<'info, Vault>>,
 }
@@ -501,10 +501,10 @@ pub struct RevokeDevice<'info> {
 pub fn revoke_device(ctx: Context<RevokeDevice>) -> Result<()> {
     let producer = &mut ctx.accounts.producer;
 
-    // ADR-0007: повторный отзыв недопустим (терминальное состояние).
+    // ADR-0007: a second revocation is invalid (terminal state).
     require!(!producer.revoked, ErrorCode::DeviceAlreadyRevoked);
 
-    // Авторизация: владелец ИЛИ протокольный админ (vault.authority).
+    // Authorization: owner OR protocol admin (vault.authority).
     let is_owner = producer.authority == ctx.accounts.authority.key();
     let is_admin = ctx
         .accounts
@@ -514,22 +514,22 @@ pub fn revoke_device(ctx: Context<RevokeDevice>) -> Result<()> {
         .unwrap_or(false);
     require!(is_owner || is_admin, ErrorCode::Unauthorized);
 
-    // Отзыв возможен из любого не-терминального состояния (ADR-0005/0007:
-    // «permanent decommissioning by owner or system»).
+    // Revocation is possible from any non-terminal state (ADR-0005/0007:
+    // "permanent decommissioning by owner or system").
     require!(
         producer.state != DeviceState::Revoked,
         ErrorCode::DeviceAlreadyRevoked
     );
 
-    // Уменьшаем счётчик только если устройство уходит из Active
-    // (из Quarantine/Maintenance счётчик уже уменьшен ранее).
+    // Decrement the counter only when the device leaves Active
+    // (from Quarantine/Maintenance the counter was already decremented).
     if producer.state == DeviceState::Active {
         if let Some(owner_devices) = &mut ctx.accounts.owner_devices {
             owner_devices.active_count = owner_devices.active_count.saturating_sub(1);
         }
     }
     producer.state = DeviceState::Revoked;
-    producer.revoked = true; // ADR-0007: явный флаг отзыва
+    producer.revoked = true; // ADR-0007: explicit revocation flag
 
     let clock = Clock::get()?;
     emit!(DeviceRevoked {
@@ -542,28 +542,28 @@ pub fn revoke_device(ctx: Context<RevokeDevice>) -> Result<()> {
 }
 
 // ══════════════════════════════════════════════════════════════
-//  ROTATE KEY — ротация ключа устройства (ADR-0007)
+//  ROTATE KEY — device key rotation (ADR-0007)
 // ══════════════════════════════════════════════════════════════
-//  Владелец (или протокольный админ) меняет публичный ключ устройства.
-//  НОВЫЙ ключ обязан подписать сообщение
+//  The owner (or protocol admin) changes the device public key.
+//  The NEW key MUST sign the message
 //    b"enrg:device:rotate" || new_device_id(32) || owner(32)
 //                          || rotate_nonce(8 LE) || rotate_timestamp(8 LE)
-//  — proof-of-possession нового ключа (ADR-0007 §4).
+//  — proof-of-possession of the new key (ADR-0007 §4).
 //
-//  Реализация: создаётся новая запись EnergyProducer с seed
-//  [b"producer", new_device_id] (PDA определяется новым ключом), в неё
-//  копируется состояние (nonce, энергия, tier, owner, state). Старая запись
-//  помечается revoked + rotated_to = new_device_id (аудит-след). Счётчик
-//  активных устройств не меняется: устройство остаётся тем же, меняется ключ.
+//  Implementation: a new EnergyProducer record is created with the seed
+//  [b"producer", new_device_id] (the PDA is determined by the new key), and
+//  the state (nonce, energy, tier, owner, state) is copied into it. The old
+//  record is marked revoked + rotated_to = new_device_id (audit trail). The
+//  active-device counter does not change: the device stays the same, the key changes.
 #[derive(Accounts)]
 #[instruction(new_device_id: Pubkey)]
 pub struct RotateDeviceKey<'info> {
-    /// Владелец устройства ИЛИ протокольный админ (vault.authority).
-    /// mut — т.к. является payer для init новой записи.
+    /// Device owner OR protocol admin (vault.authority).
+    /// mut — it is the payer for the init of the new record.
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    /// Текущая запись устройства (PDA от старого device_id).
+    /// Current device record (PDA of the old device_id).
     #[account(
         mut,
         seeds = [b"producer", old_producer.device_id.as_ref()],
@@ -572,14 +572,14 @@ pub struct RotateDeviceKey<'info> {
     )]
     pub old_producer: Account<'info, EnergyProducer>,
 
-    /// Новый публичный ключ устройства (Ed25519, 32 байта) — новый seed PDA.
-    /// CHECK: используется только для вывода PDA seeds и проверки подписи.
+    /// New device public key (Ed25519, 32 bytes) — new PDA seed.
+    /// CHECK: used only for deriving PDA seeds and verifying the signature.
     #[account(
         constraint = new_device_id.key() != Pubkey::default() @ ErrorCode::InvalidParameter
     )]
     pub new_device_id: UncheckedAccount<'info>,
 
-    /// Новая запись устройства (PDA от нового device_id) — наследует состояние.
+    /// New device record (PDA of the new device_id) — inherits the state.
     #[account(
         init,
         payer = authority,
@@ -589,12 +589,12 @@ pub struct RotateDeviceKey<'info> {
     )]
     pub new_producer: Account<'info, EnergyProducer>,
 
-    /// Vault — проверка админ-роли (authority == vault.authority).
-    /// Опционален: owner-ротация работает без vault (обратная совместимость).
+    /// Vault — admin-role check (authority == vault.authority).
+    /// Optional: owner rotation works without the vault (backward compatibility).
     #[account(seeds = [b"vault"], bump)]
     pub vault: Option<Account<'info, Vault>>,
 
-    /// CHECK: sysvar Instructions — ed25519-precompile с подписью НОВОГО ключа.
+    /// CHECK: sysvar Instructions — ed25519 precompile with the NEW key signature.
     #[account(
         constraint = instructions.key() == INSTRUCTIONS_SYSVAR_ID @ ErrorCode::InvalidInstructionsAccount
     )]
@@ -612,7 +612,7 @@ pub fn rotate_device_key(
 ) -> Result<()> {
     let old = &mut ctx.accounts.old_producer;
 
-    // ADR-0007: отозванное устройство не ротируем.
+    // ADR-0007: a revoked device is not rotated.
     require!(!old.revoked, ErrorCode::DeviceAlreadyRevoked);
     require!(old.device_id != new_device_id, ErrorCode::InvalidParameter);
     require!(
@@ -621,7 +621,7 @@ pub fn rotate_device_key(
     );
     require!(old.state != DeviceState::Revoked, ErrorCode::DeviceAlreadyRevoked);
 
-    // Авторизация: владелец ИЛИ протокольный админ (vault.authority).
+    // Authorization: owner OR protocol admin (vault.authority).
     let is_owner = old.authority == ctx.accounts.authority.key();
     let is_admin = ctx
         .accounts
@@ -637,10 +637,10 @@ pub fn rotate_device_key(
         rotate_timestamp <= clock.unix_timestamp + MAX_CLOCK_SKEW,
         ErrorCode::FutureTimestamp
     );
-    // Anti-replay: rotate-nonce строго возрастает относительно claim_nonce.
+    // Anti-replay: the rotate nonce strictly increases relative to claim_nonce.
     require!(rotate_nonce > old.claim_nonce, ErrorCode::InvalidNonce);
 
-    // ── Подпись НОВОГО ключа (ADR-0007: proof-of-possession нового ключа) ──
+    // ── NEW key signature (ADR-0007: proof-of-possession of the new key) ──
     let owner = old.authority;
     let message = device_rotate_message(&new_device_id, &owner, rotate_nonce, rotate_timestamp);
     verify_ed25519_signature(
@@ -650,7 +650,7 @@ pub fn rotate_device_key(
         &ctx.accounts.instructions.to_account_info(),
     )?;
 
-    // ── Новая запись: копируем состояние ──
+    // ── New record: copy the state ──
     let new_producer = &mut ctx.accounts.new_producer;
     new_producer.authority = owner;
     new_producer.device_id = new_device_id;
@@ -666,7 +666,7 @@ pub fn rotate_device_key(
     new_producer.revoked = false;
     new_producer.rotated_to = Pubkey::default();
 
-    // ── Старая запись — терминальное состояние + аудит-след ──
+    // ── Old record — terminal state + audit trail ──
     old.state = DeviceState::Revoked;
     old.revoked = true;
     old.rotated_to = new_device_id;
@@ -694,7 +694,7 @@ pub struct ReleaseFromQuarantine<'info> {
     )]
     pub producer: Account<'info, EnergyProducer>,
 
-    /// Per-owner registry — счётчик активных устройств (BLOCK 4).
+    /// Per-owner registry — active-device counter (BLOCK 4).
     #[account(
         mut,
         seeds = [b"owner-devices", authority.key().as_ref()],
@@ -711,7 +711,7 @@ pub fn release_from_quarantine(ctx: Context<ReleaseFromQuarantine>) -> Result<()
         producer.state.can_transition_to(DeviceState::Active),
         ErrorCode::InvalidStateTransition
     );
-    // Возврат в Active — инкремент счётчика (лимит проверяется).
+    // Return to Active — increment the counter (the limit is checked).
     let owner_devices = &mut ctx.accounts.owner_devices;
     require!(
         owner_devices.active_count < MAX_DEVICES_PER_OWNER,

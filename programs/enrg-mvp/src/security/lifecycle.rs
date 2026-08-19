@@ -1,27 +1,27 @@
-//! Канонические сообщения, подписываемые УСТРОЙСТВОМ в lifecycle-флоу.
+//! Canonical messages signed by the DEVICE in the lifecycle flow.
 //!
-//! Формат зафиксирован на уровне протокола (ADR-0001 / ADR-0002 / ADR-0005):
-//! менять его нельзя без одновременной миграции прошивок устройств.
-//! Клиент/устройство обязаны собирать байты ТОЧНО так же, как здесь,
-//! и подписывать их Ed25519-ключом, чей публичный ключ == device_id.
+//! The format is fixed at the protocol level (ADR-0001 / ADR-0002 / ADR-0005):
+//! it cannot be changed without a coordinated migration of device firmware.
+//! Clients/devices MUST assemble the bytes EXACTLY as here and sign them
+//! with an Ed25519 key whose public key == device_id.
 //!
-//! Domain-separation prefixes исключают коллизии между сообщениями
-//! (register vs claim vs proof-сообщения из mint_energy).
+//! Domain-separation prefixes prevent collisions between messages
+//! (register vs claim vs proof messages from mint_energy).
 
 use anchor_lang::prelude::*;
 
-/// Prefix сообщения регистрации.
+/// Registration message prefix.
 pub const DEVICE_REGISTER_MESSAGE_PREFIX: &[u8] = b"enrg:device:register";
 
-/// Prefix сообщения claim.
+/// Claim message prefix.
 pub const DEVICE_CLAIM_MESSAGE_PREFIX: &[u8] = b"enrg:device:claim";
 
-/// Сообщение, которое устройство подписывает при регистрации
-/// (доказывает владение ключом, ADR-0001 / ADR-0002 / Provisioning spec):
+/// The message the device signs at registration
+/// (proves key ownership, ADR-0001 / ADR-0002 / Provisioning spec):
 ///
 /// ```text
 /// b"enrg:device:register" (20 bytes)
-/// || device_id            (32 bytes) — публичный Ed25519-ключ устройства
+/// || device_id            (32 bytes) — device public Ed25519 key
 /// || register_timestamp   (8 bytes,  little-endian)
 /// ```
 pub fn device_register_message(device_id: &Pubkey, register_timestamp: i64) -> Vec<u8> {
@@ -32,20 +32,20 @@ pub fn device_register_message(device_id: &Pubkey, register_timestamp: i64) -> V
     buf
 }
 
-/// Сообщение, которое устройство подписывает при claim'е — согласие
-/// устройства на привязку к КОНКРЕТНОМУ кошельку (ADR-0005):
+/// The message the device signs when claiming — the device's consent to be
+/// bound to a SPECIFIC wallet (ADR-0005):
 ///
 /// ```text
 /// b"enrg:device:claim" (17 bytes)
-/// || device_id        (32 bytes) — публичный Ed25519-ключ устройства
-/// || owner            (32 bytes) — кошелёк, которому устройство передаётся
+/// || device_id        (32 bytes) — device public Ed25519 key
+/// || owner            (32 bytes) — the wallet the device is transferred to
 /// || claim_nonce      (8 bytes,  little-endian) — anti-replay
 /// || claim_timestamp  (8 bytes,  little-endian) — freshness
 /// ```
 ///
-/// Owner вшит в сообщение: перехваченную подпись нельзя «перенаправить»
-/// на другой кошелёк — ончейн пересобирает сообщение из фактического
-/// authority транзакции и сверяет его с подписью.
+/// The owner is embedded in the message: an intercepted signature cannot be
+/// "redirected" to another wallet — on-chain rebuilds the message from the
+/// actual transaction authority and checks it against the signature.
 pub fn device_claim_message(
     device_id: &Pubkey,
     owner: &Pubkey,
@@ -61,16 +61,16 @@ pub fn device_claim_message(
     buf
 }
 
-/// Prefix сообщения ротации ключа.
+/// Key rotation message prefix.
 pub const DEVICE_ROTATE_MESSAGE_PREFIX: &[u8] = b"enrg:device:rotate";
 
-/// Сообщение, которое подписывает НОВЫЙ ключ устройства при ротации
-/// (ADR-0007: ротация подтверждается новым ключом — proof-of-possession):
+/// The message signed by the device's NEW key during rotation
+/// (ADR-0007: rotation is confirmed by the new key — proof-of-possession):
 ///
 /// ```text
 /// b"enrg:device:rotate" (18 bytes)
-/// || new_device_id      (32 bytes) — новый публичный Ed25519-ключ устройства
-/// || owner              (32 bytes) — текущий владелец (authority)
+/// || new_device_id      (32 bytes) — the device's new public Ed25519 key
+/// || owner              (32 bytes) — the current owner (authority)
 /// || rotate_nonce       (8 bytes,  little-endian) — anti-replay
 /// || rotate_timestamp   (8 bytes,  little-endian) — freshness
 /// ```

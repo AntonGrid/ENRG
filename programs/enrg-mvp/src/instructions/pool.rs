@@ -38,8 +38,8 @@ pub struct JoinPool<'info> {
     )]
     pub producer: Account<'info, EnergyProducer>,
 
-    /// Вклад участника пула (PDA [b"pool-share", pool, producer]) —
-    /// создаётся при первом join (v7.0 §14).
+    /// Pool member contribution (PDA [b"pool-share", pool, producer]) —
+    /// created on the first join (v7.0 §14).
     #[account(
         init_if_needed,
         payer = authority,
@@ -98,7 +98,7 @@ pub fn join_pool(
 
     pool.producers.push(producer);
 
-    // Первый join: инициализируем вклад участника (v7.0 §14).
+    // First join: initialize the member contribution (v7.0 §14).
     let now = Clock::get()?.unix_timestamp;
     let pool_share = &mut ctx.accounts.pool_share;
     if pool_share.pool == Pubkey::default() {
@@ -120,13 +120,13 @@ pub fn join_pool(
 // ══════════════════════════════════════════════════════════════
 //  DISTRIBUTE POOL (v7.0 §14)
 // ══════════════════════════════════════════════════════════════
-//  При pool.total_energy >= pool.threshold (по умолчанию 1 МВт·ч) награда
-//  распределяется ПРОПОРЦИОНАЛЬНО вкладу участников. Каждый участник
-//  передаётся группой из 4 remaining-аккаунтов:
+//  When pool.total_energy >= pool.threshold (1 MWh by default) the reward
+//  is distributed PROPORTIONALLY to member contributions. Each member is
+//  passed as a group of 4 remaining accounts:
 //    [producer, pool_share (PDA [b"pool-share", pool, producer]),
 //     member_ata, reputation]
-//  Доли взвешиваются ERS-бонусом (v7.0 §16) и нормализуются так, что
-//  сумма выплат == total_reward (сумма долей = 100%).
+//  Shares are weighted by the ERS bonus (v7.0 §16) and normalized so that
+//  the total payout == total_reward (sum of shares = 100%).
 #[derive(Accounts)]
 pub struct DistributePool<'info> {
     #[account(
@@ -157,7 +157,7 @@ pub struct DistributePool<'info> {
     )]
     pub mint: Box<Account<'info, Mint>>,
 
-    /// CHECK: Mint Authority PDA — signer для token::mint_to (seeds).
+    /// CHECK: Mint Authority PDA — signer for token::mint_to (seeds).
     #[account(
         seeds = [b"mint-authority"],
         bump = token_mint.mint_authority_bump
@@ -166,7 +166,7 @@ pub struct DistributePool<'info> {
 
     pub token_program: Program<'info, Token>,
 
-    /// Инициатор — pool authority.
+    /// Initiator — pool authority.
     #[account(mut)]
     pub authority: Signer<'info>,
 }
@@ -193,7 +193,7 @@ pub fn distribute_pool<'info>(
     let ra = ctx.remaining_accounts;
     require!(ra.len() == members * 4, ErrorCode::InvalidParameter);
 
-    // ── Pass 1: weighted shares (вклад × ERS-бонус) ──
+    // ── Pass 1: weighted shares (contribution × ERS bonus) ──
     let energy_total = pool.total_energy;
     let mut weighted_sum: u128 = 0;
     let mut rewards: Vec<u64> = Vec::with_capacity(members);
@@ -235,7 +235,7 @@ pub fn distribute_pool<'info>(
     }
     require!(weighted_sum > 0, ErrorCode::InvalidParameter);
 
-    // ── Награда пула и supply-cap ──
+    // ── Pool reward and supply cap ──
     let total_reward = crate::math::calculate_reward(
         energy_total.min(u64::MAX as u128) as u64,
         ctx.accounts.vault.total_supply,
@@ -250,7 +250,7 @@ pub fn distribute_pool<'info>(
         .ok_or(ErrorCode::ArithmeticOverflow)?;
     require!(new_supply <= ctx.accounts.vault.max_supply, ErrorCode::SupplyLimitExceeded);
 
-    // ── Pass 2: выплаты (последний участник забирает остаток) ──
+    // ── Pass 2: payouts (the last member takes the remainder) ──
     let mint_authority_seeds = &[
         b"mint-authority".as_ref(),
         &[ctx.accounts.token_mint.mint_authority_bump],
@@ -298,7 +298,7 @@ pub fn distribute_pool<'info>(
 
 
 
-    // ── Сброс вкладов участников ──
+    // ── Reset member contributions ──
     for i in 0..members {
         let share_info = &ra[i * 4 + 1];
         let mut share = Account::<PoolContribution>::try_from(share_info)?;
@@ -306,7 +306,7 @@ pub fn distribute_pool<'info>(
         share.updated_at = Clock::get()?.unix_timestamp;
     }
 
-    // ── Итоги распределения ──
+    // ── Distribution summary ──
     ctx.accounts.vault.total_supply = new_supply;
     pool.total_energy = 0;
 

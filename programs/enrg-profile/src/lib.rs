@@ -9,19 +9,19 @@ declare_id!("78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt");
 /// Re-export generated CPI module for external programs.
 pub use self::enrg_profile::*;
 
-/// Максимальная номинальная мощность устройства (Вт).
+/// Maximum device rated power (W).
 ///
-/// Верхняя граница rated_power — защита от манипуляций (BLOCK 4 аудита):
-/// без неё владелец мог бы выставить произвольно большую мощность и тем
-/// самым завысить потолок mint (enrg-mvp::mint_energy сверяет
+/// Upper bound of rated_power — manipulation protection (audit BLOCK 4):
+/// without it, an owner could set an arbitrarily large power and thus
+/// inflate the mint cap (enrg-mvp::mint_energy checks
 /// `report.energy_wh <= profile.rated_power`).
-/// M-4: снижено со 100 ГВт до 1 МВт (1_000_000 Вт) — для неподтверждённых
-/// устройств потолок одного отчёта теперь ≤ 1 МВт·ч. Подтверждённые профили
-/// с более высокой мощностью требуют отдельной процедуры верификации/апгрейда.
+/// M-4: lowered from 100 GW to 1 MW (1_000_000 W) — for unverified devices
+/// the per-report cap is now ≤ 1 MWh. Verified profiles with higher power
+/// require a separate verification/upgrade procedure.
 pub const MAX_RATED_POWER: u64 = 1_000_000; // 1 MW
 
-/// Обновляет скользящее окно энергии устройства (30-дневное окно).
-/// Вычитает энергию, которая вышла за пределы окна, и добавляет новую.
+/// Updates the device rolling energy window (30-day window).
+/// Subtracts the energy that left the window and adds the new energy.
 fn update_energy_window_u128(
     current_window: u128,
     last_updated_at: i64,
@@ -33,16 +33,16 @@ fn update_energy_window_u128(
     let elapsed = now - last_updated_at;
 
     if elapsed <= 0 {
-        // Время не ушло вперёд — просто добавляем
+        // Time did not move forward — just add
         return current_window.saturating_add(new_energy);
     }
 
     if elapsed >= THIRTY_DAYS_SECONDS {
-        // Прошло больше 30 дней — окно полностью сбрасывается
+        // More than 30 days passed — the window resets completely
         return new_energy;
     }
 
-    // Пропорциональное уменьшение старого окна
+    // Proportional decay of the old window
     let decay = (current_window as u128)
         .saturating_mul(elapsed as u128)
         .saturating_div(THIRTY_DAYS_SECONDS as u128);
@@ -55,7 +55,7 @@ fn update_energy_window_u128(
 pub mod enrg_profile {
     use super::*;
 
-    /// Создаёт PDA EnergyProfile для указанного authority.
+    /// Creates the EnergyProfile PDA for the given authority.
     ///
     /// Seeds: [b"profile", authority.key().as_ref()]
     pub fn initialize_profile(
@@ -91,13 +91,14 @@ pub mod enrg_profile {
         Ok(())
     }
 
-    /// Обновляет метаданные устройства (rated_power, device_type, location).
-    /// Может вызывать только authority профиля.
+    /// Updates device metadata (rated_power, device_type, location).
+    /// Only the profile authority can call it.
     ///
-    /// M-4: rated_power ИММУТАБЕЛЕН после первого назначения — владелец не может
-    /// «поднять себе потолок» минта. Изменение возможно только через процедуру
-    /// верификации/апгрейда (вне рамок MVP; требует upgrade-инструкции с
-    /// governance-контролем). Изменение фиксируется событием RatedPowerChanged.
+    /// M-4: rated_power is IMMUTABLE after the first assignment — the owner
+    /// cannot "raise their own mint cap". A change is only possible via a
+    /// verification/upgrade procedure (beyond the MVP scope; requires an
+    /// upgrade instruction with governance control). The change is recorded
+    /// by the RatedPowerChanged event.
     pub fn update_metadata(
         ctx: Context<UpdateMetadata>,
         rated_power: u64,
@@ -119,8 +120,8 @@ pub mod enrg_profile {
 
         let profile = &mut ctx.accounts.profile;
 
-        // M-4: первый вызов (0 → N) задаёт мощность; любые последующие
-        // изменения rated_power отклоняются (RatedPowerImmutable).
+        // M-4: the first call (0 → N) sets the power; any subsequent
+        // rated_power changes are rejected (RatedPowerImmutable).
         let old_rated_power = profile.rated_power;
         if old_rated_power != 0 && rated_power != old_rated_power {
             return err!(ErrorCode::RatedPowerImmutable);
@@ -143,8 +144,8 @@ pub mod enrg_profile {
         Ok(())
     }
 
-    /// Записывает производство энергии в скользящее окно устройства.
-    /// Вызывается CPI из enrg-mvp при каждом минте.
+    /// Records energy production into the device rolling window.
+    /// Called via CPI from enrg-mvp on every mint.
     pub fn record_production(
         ctx: Context<RecordProduction>,
         energy_wh: u64,
@@ -168,8 +169,8 @@ pub mod enrg_profile {
         Ok(())
     }
 
-    /// View-функция для чтения профиля.
-    /// Возвращает все поля EnergyProfile.
+    /// View function to read the profile.
+    /// Returns all EnergyProfile fields.
     pub fn read_profile(ctx: Context<ReadProfile>) -> Result<EnergyProfile> {
         let profile = &ctx.accounts.profile;
         Ok(EnergyProfile {
@@ -191,11 +192,11 @@ pub mod enrg_profile {
 
 #[derive(Accounts)]
 pub struct InitializeProfile<'info> {
-    /// Владелец профиля (подписывает транзакцию).
+    /// Profile owner (signs the transaction).
     #[account(mut)]
     pub authority: Signer<'info>,
 
-    /// PDA EnergyProfile, создаётся с seeds [b"profile", authority.key().as_ref()].
+    /// EnergyProfile PDA, created with seeds [b"profile", authority.key().as_ref()].
     #[account(
         init,
         seeds = [b"profile", authority.key().as_ref()],
@@ -210,7 +211,7 @@ pub struct InitializeProfile<'info> {
 
 #[derive(Accounts)]
 pub struct UpdateMetadata<'info> {
-    /// Владелец профиля (подписывает транзакцию).
+    /// Profile owner (signs the transaction).
     pub authority: Signer<'info>,
 
     /// PDA EnergyProfile.
@@ -224,10 +225,10 @@ pub struct UpdateMetadata<'info> {
 
 #[derive(Accounts)]
 pub struct RecordProduction<'info> {
-    /// Владелец профиля (authority) — подписывает CPI.
+    /// Profile owner (authority) — signs the CPI.
     pub authority: Signer<'info>,
 
-    /// PDA EnergyProfile (mut для обновления скользящего окна).
+    /// EnergyProfile PDA (mut for updating the rolling window).
     #[account(
         mut,
         seeds = [b"profile", authority.key().as_ref()],
@@ -238,15 +239,15 @@ pub struct RecordProduction<'info> {
 
 #[derive(Accounts)]
 pub struct ReadProfile<'info> {
-    /// PDA EnergyProfile (только для чтения).
+    /// EnergyProfile PDA (read-only).
     #[account(
         seeds = [b"profile", authority.key().as_ref()],
         bump = profile.bump
     )]
     pub profile: Account<'info, EnergyProfile>,
 
-    /// Authority, чей профиль читаем (не обязательно подписант).
-    /// CHECK: используется только для derivation seeds.
+    /// Authority whose profile is read (not necessarily the signer).
+    /// CHECK: used only for deriving the PDA seeds.
     pub authority: UncheckedAccount<'info>,
 }
 
@@ -262,13 +263,13 @@ pub enum ErrorCode {
     LocationTooLong,
     #[msg("Rated power exceeds the maximum allowed (1 MW)")]
     RatedPowerTooHigh,
-    // M-4: изменение rated_power после первого назначения запрещено
-    // (только процедура верификации/апгрейда через governance).
+    // M-4: changing rated_power after the first assignment is forbidden
+    // (only a verification/upgrade procedure via governance).
     #[msg("Rated power is immutable after initial assignment")]
     RatedPowerImmutable,
 }
 
-// M-4: событие аудита изменения rated_power.
+// M-4: audit event for rated_power changes.
 #[event]
 pub struct RatedPowerChanged {
     pub profile: Pubkey,

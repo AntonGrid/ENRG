@@ -40,7 +40,7 @@ pub struct OracleRemoved {
     pub oracle: Pubkey,
 }
 
-/// Emitted when the oracle admin role changes (BLOCK 2 — разделение ролей).
+/// Emitted when the oracle admin role changes (BLOCK 2 — role separation).
 #[event]
 pub struct OracleAdminChanged {
     pub old_oracle_admin: Pubkey,
@@ -97,7 +97,7 @@ pub struct FundsWithdrawn {
 }
 
 /// Emitted when a device is registered
-/// (ADR-0005: UNREGISTERED → REGISTERED; требует Ed25519-подпись устройства).
+/// (ADR-0005: UNREGISTERED → REGISTERED; requires the device Ed25519 signature).
 #[event]
 pub struct DeviceRegistered {
     pub device_id: Pubkey,
@@ -106,7 +106,7 @@ pub struct DeviceRegistered {
 }
 
 /// Emitted when a device is claimed by an owner
-/// (ADR-0005: REGISTERED → CLAIMED; требует Ed25519-подпись устройства).
+/// (ADR-0005: REGISTERED → CLAIMED; requires the device Ed25519 signature).
 #[event]
 pub struct DeviceClaimed {
     pub device_id: Pubkey,
@@ -161,17 +161,17 @@ pub struct DeviceRevoked {
 }
 
 /// Emitted when a device key is rotated (ADR-0007).
-/// Старая запись помечается revoked/rotated_to; новая запись наследует
-/// состояние (nonce, энергия, tier, owner).
+/// The old record is marked revoked/rotated_to; the new record inherits the
+/// state (nonce, energy, tier, owner).
 #[event]
 pub struct DeviceKeyRotated {
-    /// Старый (отозванный) device_id.
+    /// Old (revoked) device_id.
     pub device_id: Pubkey,
-    /// Новый device_id (публичный ключ устройства).
+    /// New device_id (device public key).
     pub new_device_id: Pubkey,
-    /// Владелец (authority) — остаётся прежним.
+    /// Owner (authority) — stays the same.
     pub owner: Pubkey,
-    /// Кто инициировал ротацию (owner или протокольный админ).
+    /// Who initiated the rotation (owner or protocol admin).
     pub changed_by: Pubkey,
     pub timestamp: i64,
 }

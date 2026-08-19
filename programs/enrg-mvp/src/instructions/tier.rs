@@ -3,11 +3,11 @@ use anchor_lang::prelude::*;
 use crate::error::ErrorCode;
 use crate::state::*;
 
-/// Назначение/смена tier устройства (v7.0 §15 — Device Trust Levels).
+/// Assign/change a device tier (v7.0 §15 — Device Trust Levels).
 ///
-/// Тир назначается **протокольным администратором** (Vault authority):
-/// tier — это уровень доверия, а не самодекларация владельца. Меняя тир,
-/// администратор сбрасывает месячный счётчик энергии (новый лимит).
+/// The tier is assigned by the **protocol administrator** (Vault authority):
+/// the tier is a trust level, not an owner self-declaration. When changing a
+/// tier, the administrator resets the monthly energy counter (new limit).
 #[derive(Accounts)]
 pub struct SetDeviceTier<'info> {
     #[account(
@@ -29,11 +29,11 @@ pub struct SetDeviceTier<'info> {
 }
 
 pub fn set_device_tier(ctx: Context<SetDeviceTier>, tier: DeviceTier) -> Result<()> {
-    // tier — не может быть «снят»; Basic/Verified/Industrial/Institutional.
+    // The tier cannot be "removed"; Basic/Verified/Industrial/Institutional.
     let producer = &mut ctx.accounts.producer;
 
     producer.tier = tier;
-    // Новый тир — новый лимит: сбрасываем месячное окно.
+    // New tier — new limit: reset the monthly window.
     let now = Clock::get()?.unix_timestamp;
     producer.month_energy_wh = 0;
     producer.month_start_ts = now;

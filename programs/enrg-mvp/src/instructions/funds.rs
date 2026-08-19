@@ -4,25 +4,25 @@ use anchor_spl::token::{self, Token, TokenAccount};
 use crate::error::ErrorCode;
 use crate::state::*;
 
-/// Теги протокольных фондов для `withdraw_fund` (единый паттерн вывода).
+/// Protocol fund tags for `withdraw_fund` (single withdrawal pattern).
 pub const FUND_BUYBACK: u8 = 0;
 pub const FUND_STAKING: u8 = 1;
 pub const FUND_DAO: u8 = 2;
 pub const FUND_EMERGENCY: u8 = 3;
 
-/// Вывод уже выпущенных SRC из ATA протокольного фонда на ATA получателя.
+/// Withdraw already-issued SRC from a protocol fund ATA to a recipient ATA.
 ///
-/// Это перевод (transfer), а не mint: новые токены не создаются.
-/// Управляется единым паттерном для всех четырёх фондов
-/// (buyback / staking / dao / emergency) через аргумент `fund_tag`.
+/// This is a transfer, not a mint: no new tokens are created.
+/// Managed by a single pattern for all four funds
+/// (buyback / staking / dao / emergency) via the `fund_tag` argument.
 ///
-/// АВТОРИЗАЦИЯ (временная): пока отдельного governance нет, роль governor
-/// исполняет Vault.authority (см. BLOCK 2 аудита — set_authority и план
-/// multisig/timelock). TODO(audit): заменить Vault.authority на выделенного
-/// governor / мультисиг после внедрения governance.
+/// AUTHORIZATION (temporary): until separate governance exists, the governor
+/// role is played by Vault.authority (see audit BLOCK 2 — set_authority and
+/// the multisig/timelock plan). TODO(audit): replace Vault.authority with a
+/// dedicated governor / multisig once governance is in place.
 #[derive(Accounts)]
 pub struct WithdrawFund<'info> {
-    /// Vault PDA — глобальное состояние протокола (проверка authority).
+    /// Vault PDA — global protocol state (authority check).
     #[account(
         seeds = [b"vault"],
         bump,
@@ -30,25 +30,25 @@ pub struct WithdrawFund<'info> {
     )]
     pub vault: Box<Account<'info, Vault>>,
 
-    /// TokenMint PDA — хранит адреса фондовых ATA.
+    /// TokenMint PDA — holds the fund ATA addresses.
     #[account(
         seeds = [b"token-mint"],
         bump = token_mint.bump
     )]
     pub token_mint: Box<Account<'info, TokenMint>>,
 
-    /// Временный governor — Vault.authority.
+    /// Temporary governor — Vault.authority.
     pub authority: Signer<'info>,
 
-    /// ATA конкретного фонда (источник вывода).
+    /// ATA of the specific fund (withdrawal source).
     #[account(mut)]
     pub fund_account: Box<Account<'info, TokenAccount>>,
 
-    /// CHECK: PDA фонда — владелец `fund_account`, подписывает CPI-перевод
-    /// через seeds. Соответствие тегу проверяется в handler.
+    /// CHECK: the fund PDA — owner of `fund_account`, signs the CPI transfer
+    /// via seeds. The tag match is checked in the handler.
     pub fund_authority: UncheckedAccount<'info>,
 
-    /// ATA получателя (для того же mint).
+    /// Recipient ATA (for the same mint).
     #[account(mut)]
     pub destination: Box<Account<'info, TokenAccount>>,
 
@@ -56,7 +56,7 @@ pub struct WithdrawFund<'info> {
 }
 
 pub fn withdraw_fund(ctx: Context<WithdrawFund>, fund_tag: u8, amount: u64) -> Result<()> {
-    // ── Авторизация: Vault.authority как временный governor ──
+    // ── Authorization: Vault.authority as temporary governor ──
     require!(
         ctx.accounts.vault.authority == ctx.accounts.authority.key(),
         ErrorCode::Unauthorized
@@ -65,7 +65,7 @@ pub fn withdraw_fund(ctx: Context<WithdrawFund>, fund_tag: u8, amount: u64) -> R
 
     let token_mint = &ctx.accounts.token_mint;
 
-    // ── Определяем seed и ожидаемую ATA по тегу фонда ──
+    // ── Determine the seed and the expected ATA by the fund tag ──
     let (seed, expected_fund_account) = match fund_tag {
         FUND_BUYBACK => (b"fund-buyback".as_ref(), token_mint.buyback_account),
         FUND_STAKING => (b"fund-staking".as_ref(), token_mint.staking_account),
@@ -74,13 +74,13 @@ pub fn withdraw_fund(ctx: Context<WithdrawFund>, fund_tag: u8, amount: u64) -> R
         _ => return Err(ErrorCode::InvalidParameter.into()),
     };
 
-    // ── Фонд обязан быть тем, что записан в TokenMint для этого тега ──
+    // ── The fund must be the one recorded in TokenMint for this tag ──
     require!(
         ctx.accounts.fund_account.key() == expected_fund_account,
         ErrorCode::InvalidParameter
     );
 
-    // ── fund_authority обязан быть PDA фонда, а ATA принадлежать ему ──
+    // ── fund_authority must be the fund PDA and the ATA must belong to it ──
     let (fund_pda, fund_bump) = Pubkey::find_program_address(&[seed], ctx.program_id);
     require!(
         ctx.accounts.fund_authority.key() == fund_pda,
@@ -91,19 +91,19 @@ pub fn withdraw_fund(ctx: Context<WithdrawFund>, fund_tag: u8, amount: u64) -> R
         ErrorCode::Unauthorized
     );
 
-    // ── Получатель обязан быть ATA того же mint ──
+    // ── The recipient must be an ATA of the same mint ──
     require!(
         ctx.accounts.destination.mint == ctx.accounts.fund_account.mint,
         ErrorCode::InvalidParameter
     );
 
-    // ── Лимит по балансу фонда ──
+    // ── Limit by the fund balance ──
     require!(
         ctx.accounts.fund_account.amount >= amount,
         ErrorCode::InsufficientStake
     );
 
-    // ── CPI transfer: фонд (fund PDA) -> получатель ──
+    // ── CPI transfer: fund (fund PDA) -> recipient ──
     let signer_seeds: &[&[u8]] = &[seed, &[fund_bump]];
     token::transfer(
         CpiContext::new_with_signer(

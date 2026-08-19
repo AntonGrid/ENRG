@@ -6,13 +6,13 @@ use crate::security::validation::verify_timestamp_with_skew;
 use crate::state::*;
 
 // ══════════════════════════════════════════════════════════════
-//  Policy Registry (ADR-0003) — отдельный компонент принятия
-//  решений о допустимости Proof'ов и минта.
+//  Policy Registry (ADR-0003) — a separate component that makes
+//  decisions about proof and mint admissibility.
 //
-//  Verifier (`mint_energy`) является ИСПОЛНИТЕЛЕМ, а не источником
-//  политик. Все решения (whitelist оракулов, состояние устройства,
-//  freshness, tier-лимиты, энергия, пауза минта, supply cap)
-//  принимаются PolicyEngine в этом модуле.
+//  The Verifier (`mint_energy`) is an EXECUTOR, not a source of
+//  policies. All decisions (oracle whitelist, device state, freshness,
+//  tier limits, energy, mint pause, supply cap) are made by the
+//  PolicyEngine in this module.
 // ══════════════════════════════════════════════════════════════
 
 #[derive(Accounts)]
@@ -27,7 +27,7 @@ pub struct InitializePolicyRegistry<'info> {
     )]
     pub policy_registry: Account<'info, PolicyRegistry>,
 
-    /// Protocol deployer (H-2-паттерн: защита от front-running захвата).
+    /// Protocol deployer (H-2 pattern: front-running capture protection).
     #[account(mut)]
     pub authority: Signer<'info>,
 
@@ -60,7 +60,7 @@ pub struct SetPolicyAuthority<'info> {
     pub authority: Signer<'info>,
 }
 
-/// Полный срез обновляемых политик (передаётся в `update_policy`).
+/// Full snapshot of the updatable policies (passed to `update_policy`).
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct PolicyUpdate {
     pub mint_enabled: bool,
@@ -73,8 +73,8 @@ pub struct PolicyUpdate {
     pub max_clock_skew_sec: i64,
 }
 
-/// Инициализация Policy Registry. Только `EXPECTED_DEPLOYER`.
-/// Дефолты повторяют поведение протокола до Policy Engine.
+/// Initialize the Policy Registry. `EXPECTED_DEPLOYER` only.
+/// Defaults mirror the pre-Policy Engine protocol behavior.
 pub fn initialize_policy_registry(
     ctx: Context<InitializePolicyRegistry>,
 ) -> Result<()> {
@@ -97,13 +97,13 @@ pub fn initialize_policy_registry(
     Ok(())
 }
 
-/// Обновление набора политик (authority реестра).
+/// Update the policy set (registry authority).
 pub fn update_policy(
     ctx: Context<UpdatePolicy>,
     update: PolicyUpdate,
 ) -> Result<()> {
-    // Санитизация параметров: bps ∈ (0, 1_000_000] (до 10000 % от rated_power),
-    // skew ∈ [0, 3600] сек.
+    // Parameter sanitization: bps ∈ (0, 1_000_000] (up to 10000% of rated_power),
+    // skew ∈ [0, 3600] sec.
     require!(update.max_energy_bps > 0, ErrorCode::InvalidParameter);
     require!(update.max_energy_bps <= 1_000_000, ErrorCode::InvalidParameter);
     require!(update.max_clock_skew_sec >= 0, ErrorCode::InvalidParameter);
@@ -156,7 +156,7 @@ pub fn update_policy(
 }
 
 
-/// Смена администратора политик (возможен перевод роли под Governance ADR-0009).
+/// Change the policy administrator (the role may go to Governance ADR-0009).
 pub fn set_policy_authority(
     ctx: Context<SetPolicyAuthority>,
     new_authority: Pubkey,
@@ -182,47 +182,47 @@ pub fn set_policy_authority(
 }
 
 // ══════════════════════════════════════════════════════════════
-//  Policy Engine — единая точка принятия решений (ADR-0003)
+//  Policy Engine — single decision point (ADR-0003)
 // ══════════════════════════════════════════════════════════════
 
-/// Входные данные «предикатной» части политики (проверки до минта).
+/// Inputs of the "predicate" part of the policy (pre-mint checks).
 pub struct MintPreambleInput<'a> {
-    /// Набор политик; `None` → дефолты протокола (обратная совместимость).
+    /// Policy set; `None` → protocol defaults (backward compatibility).
     pub policy: Option<&'a PolicyRegistry>,
-    /// Устройство (EnergyProducer) из Device Registry.
+    /// Device (EnergyProducer) from the Device Registry.
     pub producer: &'a EnergyProducer,
-    /// Отчёт оракула, подлежащий оценке.
+    /// Oracle report to be evaluated.
     pub report: &'a OracleReport,
-    /// C-0: `report.oracle` содержится в OracleRegistry.
+    /// C-0: `report.oracle` is present in the OracleRegistry.
     pub oracle_trusted: bool,
-    /// Номинальная мощность устройства (EnergyProfile.rated_power).
+    /// Device rated power (EnergyProfile.rated_power).
     pub profile_rated_power: u64,
-    /// Текущее время (clock.unix_timestamp).
+    /// Current time (clock.unix_timestamp).
     pub now: i64,
 }
 
-/// Входные данные «результирующей» части политики (после расчёта награды).
+/// Inputs of the "reward" part of the policy (after reward calculation).
 pub struct MintRewardInput<'a> {
-    /// Набор политик; `None` → дефолты протокола (обратная совместимость).
+    /// Policy set; `None` → protocol defaults (backward compatibility).
     pub policy: Option<&'a PolicyRegistry>,
-    /// Рассчитанная награда (SRC, атомарные единицы).
+    /// Calculated reward (SRC, atomic units).
     pub reward: u64,
-    /// Текущий total_supply (атомарные единицы).
+    /// Current total_supply (atomic units).
     pub vault_total_supply: u64,
-    /// Жёсткий потолок эмиссии (vault.max_supply).
+    /// Hard emission cap (vault.max_supply).
     pub vault_max_supply: u64,
 }
 
 /// Policy Engine (ADR-0003).
 ///
-/// Verifier (`mint_energy`) не принимает решений: он передаёт сюда
-/// верифицированные данные и исполняет результат. Дефолты (policy = None)
-/// полностью повторяют поведение протокола до введения Policy Registry.
+/// The Verifier (`mint_energy`) makes no decisions: it passes the verified
+/// data here and executes the result. Defaults (policy = None) fully mirror
+/// the pre-Policy Registry protocol behavior.
 pub struct PolicyEngine;
 
 impl PolicyEngine {
-    /// Предикатная часть: глобальный выключатель, whitelist оракулов,
-    /// состояние устройства, freshness timestamp, tier-лимиты, энергия.
+    /// Predicate part: global switch, oracle whitelist, device state,
+    /// timestamp freshness, tier limits, energy.
     pub fn evaluate_preamble(input: MintPreambleInput<'_>) -> Result<()> {
         let policy = input.policy;
 
@@ -234,15 +234,15 @@ impl PolicyEngine {
         let max_energy_bps = policy.map_or(DEFAULT_MAX_ENERGY_BPS, |p| p.max_energy_bps);
         let max_clock_skew = policy.map_or(MAX_CLOCK_SKEW, |p| p.max_clock_skew_sec);
 
-        // 0. Глобальный выключатель (maintenance / pause).
+        // 0. Global switch (maintenance / pause).
         require!(mint_enabled, ErrorCode::MintPaused);
 
-        // 1. C-0: отчёт должен исходить от доверенного оракула (OracleRegistry).
+        // 1. C-0: the report must come from a trusted oracle (OracleRegistry).
         if enforce_whitelist {
             require!(input.oracle_trusted, ErrorCode::UntrustedOracle);
         }
 
-        // 2. Состояние устройства (ADR-0005): mint только из Active.
+        // 2. Device state (ADR-0005): mint only from Active.
         if enforce_state {
             require!(
                 input.producer.can_mint(input.now),
@@ -250,10 +250,10 @@ impl PolicyEngine {
             );
         }
 
-        // 3. Freshness verified_at (политика задаёт допустимый сдвиг часов).
+        // 3. verified_at freshness (the policy sets the allowed clock skew).
         verify_timestamp_with_skew(input.now, input.report.verified_at, max_clock_skew)?;
 
-        // 4. Tier-лимит месяца (v7.0 §15).
+        // 4. Monthly tier limit (v7.0 §15).
         if enforce_tier {
             require!(
                 input.producer.tier.allows_increment(
@@ -264,7 +264,7 @@ impl PolicyEngine {
             );
         }
 
-        // 5. Энергия за proof ≤ rated_power × max_energy_bps / 10_000.
+        // 5. Energy per proof ≤ rated_power × max_energy_bps / 10_000.
         if enforce_energy {
             let max_energy = input
                 .profile_rated_power
@@ -277,12 +277,12 @@ impl PolicyEngine {
         Ok(())
     }
 
-    /// Результирующая часть: награда > 0 и supply cap.
+    /// Reward part: reward > 0 and supply cap.
     pub fn evaluate_reward(input: MintRewardInput<'_>) -> Result<()> {
         let policy = input.policy;
         let enforce_supply = policy.map_or(true, |p| p.enforce_supply_cap);
 
-        // Никаких «пустых» минтов — всегда (не отключается политикой).
+        // No "empty" mints — always (not disabled by policy).
         require!(input.reward > 0, ErrorCode::ZeroAmountMint);
 
         if enforce_supply {
@@ -373,7 +373,7 @@ mod tests {
         u32::from(e)
     }
 
-    // ── Предикатная часть ──
+    // ── Predicate part ──
 
     #[test]
     fn defaults_without_registry_match_legacy_behavior() {
@@ -450,7 +450,7 @@ mod tests {
         let reg = default_policy();
         let p = producer_with(DeviceState::Active, DeviceTier::Industrial, 0, 0);
 
-        // Старый proof: verified_at сильно в прошлом (> MAX_PROOF_AGE).
+        // Stale proof: verified_at far in the past (> MAX_PROOF_AGE).
         let old = report_with(1_000, 1_000);
         let res = PolicyEngine::evaluate_preamble(MintPreambleInput {
             policy: Some(&reg),
@@ -462,7 +462,7 @@ mod tests {
         });
         assert_eq!(err_code(res), code(ErrorCode::StaleProof));
 
-        // Будущий proof: verified_at > now + skew.
+        // Future proof: verified_at > now + skew.
         let fut = report_with(1_000, 1_000);
         let res = PolicyEngine::evaluate_preamble(MintPreambleInput {
             policy: Some(&reg),
@@ -478,7 +478,7 @@ mod tests {
     #[test]
     fn tier_limit_rejected_when_enforced() {
         let reg = default_policy();
-        // Basic: 60_000 + 50_000 = 110_000 > 100_000 лимита.
+        // Basic: 60_000 + 50_000 = 110_000 > 100_000 limit.
         let p = producer_with(DeviceState::Active, DeviceTier::Basic, 60_000, 1_000);
         let r = report_with(50_000, 1_100);
         let res = preamble(Some(&reg), &p, &r);
@@ -491,8 +491,8 @@ mod tests {
         reg.enforce_tier_limits = false;
         let p = producer_with(DeviceState::Active, DeviceTier::Basic, 60_000, 1_000);
         let r = report_with(50_000, 1_100);
-        // rated_power поднят, чтобы энергия не упиралась в energy-кап:
-        // проверяем именно ослабление tier-лимита (60_000+50_000 > 100_000).
+        // rated_power raised so the energy does not hit the energy cap:
+        // we check specifically the tier-limit relaxation (60_000+50_000 > 100_000).
         let res = PolicyEngine::evaluate_preamble(MintPreambleInput {
             policy: Some(&reg),
             producer: &p,
@@ -508,7 +508,7 @@ mod tests {
     fn excessive_energy_rejected() {
         let reg = default_policy();
         let p = producer_with(DeviceState::Active, DeviceTier::Industrial, 0, 0);
-        // rated_power = 10_000 Wh, bps = 10_000 → max 10_000 Wh; отчёт 11_000.
+        // rated_power = 10_000 Wh, bps = 10_000 → max 10_000 Wh; report 11_000.
         let r = report_with(11_000, 1_100);
         let res = preamble(Some(&reg), &p, &r);
         assert_eq!(err_code(res), code(ErrorCode::ExcessiveEnergy));
@@ -519,13 +519,13 @@ mod tests {
         let mut reg = default_policy();
         reg.max_energy_bps = 150_000; // 1500 %
         let p = producer_with(DeviceState::Active, DeviceTier::Industrial, 0, 0);
-        // rated_power = 10_000 × 1500 % = 150_000 Wh; отчёт 100_000 проходит.
+        // rated_power = 10_000 × 1500% = 150_000 Wh; a 100_000 report passes.
         let r = report_with(100_000, 1_100);
         let res = preamble(Some(&reg), &p, &r);
         assert!(res.is_ok(), "scaled cap must accept 100k Wh: {:?}", res);
     }
 
-    // ── Результирующая часть ──
+    // ── Reward part ──
 
     #[test]
     fn zero_reward_rejected() {

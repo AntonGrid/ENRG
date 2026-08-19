@@ -5,8 +5,8 @@ use crate::constants::{EXPECTED_DEPLOYER, PROPOSAL_TITLE_MAX_LEN};
 use crate::error::ErrorCode;
 use crate::state::*;
 
-/// Инициализация governance (PDA [b"governance"]). authority = signer,
-/// задаётся первичный список members (3..=5 уникальных).
+/// Initialize governance (PDA [b"governance"]). authority = signer,
+/// the initial members list (3..=5 unique) is set.
 #[derive(Accounts)]
 pub struct InitializeGovernance<'info> {
     #[account(
@@ -28,8 +28,8 @@ pub fn initialize_governance(
     ctx: Context<InitializeGovernance>,
     members: Vec<Pubkey>,
 ) -> Result<()> {
-    // H-2: только EXPECTED_DEPLOYER может инициализировать governance —
-    // защита от front-running захвата роли governance authority.
+    // H-2: only EXPECTED_DEPLOYER can initialize governance —
+    // protection against front-running capture of the governance authority role.
     require!(
         ctx.accounts.authority.key() == EXPECTED_DEPLOYER,
         ErrorCode::UnauthorizedDeployer
@@ -47,7 +47,7 @@ pub fn initialize_governance(
     Ok(())
 }
 
-/// Обновление списка members. Только authority.
+/// Update the members list. Authority only.
 #[derive(Accounts)]
 pub struct UpdateMembers<'info> {
     #[account(
@@ -74,11 +74,11 @@ pub fn update_members(
     Ok(())
 }
 
-/// Создание предложения (PDA [b"proposal", id]). Только authority.
+/// Create a proposal (PDA [b"proposal", id]). Authority only.
 ///
-/// Одно активное предложение в момент времени: если active_proposal_id != 0,
-/// клиент передаёт предыдущее предложение (`prev_proposal`, адрес вычисляется
-/// через [b"proposal", active_proposal_id]) — оно помечается Cancelled.
+/// One active proposal at a time: if active_proposal_id != 0, the client
+/// passes the previous proposal (`prev_proposal`, derived via
+/// [b"proposal", active_proposal_id]) — it is marked Cancelled.
 #[derive(Accounts)]
 #[instruction(id: u64)]
 pub struct CreateProposal<'info> {
@@ -90,7 +90,7 @@ pub struct CreateProposal<'info> {
     )]
     pub governance: Account<'info, GovernanceState>,
 
-    /// Предыдущее активное предложение (передаётся при существующем активном).
+    /// The previous active proposal (passed when one is active).
     #[account(mut)]
     pub prev_proposal: Option<Account<'info, Proposal>>,
 
@@ -118,20 +118,20 @@ pub fn create_proposal(
 ) -> Result<()> {
     let governance = &mut ctx.accounts.governance;
 
-    // id обязан быть следующим (монотонный счётчик).
+    // The id must be the next one (monotonic counter).
     let expected_id = next_proposal_id(governance.proposal_count)
         .ok_or(ErrorCode::ArithmeticOverflow)?;
     require!(id == expected_id, ErrorCode::InvalidParameter);
 
-    // Лимит эмиссии (атомарные единицы).
+    // Emission cap (atomic units).
     validate_amount_atomic(amount_atomic)?;
     require!(
         title.len() <= PROPOSAL_TITLE_MAX_LEN,
         ErrorCode::InvalidParameter
     );
 
-    // Одно активное предложение: при наличии активного клиент обязан передать
-    // prev_proposal (cancel). Иначе — коллизия.
+    // One active proposal: if one is active, the client must pass
+    // prev_proposal (cancel). Otherwise — collision.
     let prev_provided = ctx.accounts.prev_proposal.is_some();
     require_no_collision(governance.active_proposal_id, prev_provided)?;
 
@@ -171,11 +171,11 @@ pub fn create_proposal(
     Ok(())
 }
 
-/// Голосование по активному предложению. Только member; один голос на member.
+/// Vote on the active proposal. Member only; one vote per member.
 ///
-/// После каждого голоса проверяется кворум: `yes > no` И `yes+no > members/2`
-/// (от снапшота) → Approved + фиксируется approved_at. Если проголосовали все
-/// и кворума нет → Rejected.
+/// After each vote the quorum is checked: `yes > no` AND `yes+no > members/2`
+/// (from the snapshot) → Approved + approved_at is set. If all voted
+/// and there is no quorum → Rejected.
 #[derive(Accounts)]
 #[instruction(proposal_id: u64)]
 pub struct Vote<'info> {
@@ -204,12 +204,12 @@ pub fn vote(
     let governance = &mut ctx.accounts.governance;
     let proposal = &mut ctx.accounts.proposal;
 
-    // Только member.
+    // Member only.
     require!(
         governance.is_member(&ctx.accounts.voter.key()),
         ErrorCode::NotGovernanceMember
     );
-    // Должно быть активное предложение и именно это.
+    // There must be an active proposal and it must be this one.
     require!(
         governance.active_proposal_id != 0,
         ErrorCode::NoActiveProposal
@@ -218,12 +218,12 @@ pub fn vote(
         governance.active_proposal_id == proposal_id,
         ErrorCode::ProposalNotActive
     );
-    // Предложение в процессе голосования.
+    // The proposal is being voted on.
     require!(
         proposal.status == ProposalStatus::Pending,
         ErrorCode::ProposalNotActive
     );
-    // Однократное голосование.
+    // Single vote.
     require!(
         !proposal.has_voted(&ctx.accounts.voter.key()),
         ErrorCode::MemberAlreadyVoted
@@ -258,11 +258,11 @@ pub fn vote(
 }
 
 
-/// Исполнение одобренного предложения после TIMELOCK_DELAY: mint через
-/// Mint Authority PDA на ATA получателя + засчёт в vault.total_supply.
+/// Execute an approved proposal after TIMELOCK_DELAY: mint via the
+/// Mint Authority PDA to the recipient ATA + count into vault.total_supply.
 ///
-/// Mint-authority остаётся PDA [b"mint-authority"] (не меняется). Эмиссия
-/// возможна ТОЛЬКО после Approved + истёкшего timelock.
+/// The mint authority stays the PDA [b"mint-authority"] (unchanged). Emission
+/// is possible ONLY after Approved + the elapsed timelock.
 #[derive(Accounts)]
 #[instruction(proposal_id: u64)]
 pub struct GovernanceMint<'info> {
@@ -287,14 +287,14 @@ pub struct GovernanceMint<'info> {
     )]
     pub vault: Box<Account<'info, Vault>>,
 
-    /// TokenMint PDA — конфигурация токена.
+    /// TokenMint PDA — token configuration.
     #[account(
         seeds = [b"token-mint"],
         bump = token_mint.bump
     )]
     pub token_mint: Box<Account<'info, TokenMint>>,
 
-    /// SRC Mint (writable — CPI token::mint_to увеличивает supply).
+    /// SRC Mint (writable — the CPI token::mint_to increases supply).
     #[account(
         mut,
         seeds = [b"src-mint"],
@@ -303,14 +303,14 @@ pub struct GovernanceMint<'info> {
     )]
     pub mint: Box<Account<'info, Mint>>,
 
-    /// CHECK: Mint Authority PDA — signer для token::mint_to (seeds).
+    /// CHECK: Mint Authority PDA — signer for token::mint_to (seeds).
     #[account(
         seeds = [b"mint-authority"],
         bump = token_mint.mint_authority_bump
     )]
     pub mint_authority: UncheckedAccount<'info>,
 
-    /// ATA получателя: тот же mint, владелец == proposer.
+    /// Recipient ATA: same mint, owner == proposer.
     #[account(
         mut,
         constraint = destination.mint == mint.key() @ ErrorCode::DestinationMintMismatch,
@@ -342,7 +342,7 @@ pub fn governance_mint(
         ErrorCode::TimelockNotElapsed
     );
 
-    // Лимит эмиссии (атомарные единицы; total_supply + amount <= MAX).
+    // Emission cap (atomic units; total_supply + amount <= MAX).
     let vault = &mut ctx.accounts.vault;
     let new_supply = vault
         .total_supply
@@ -353,7 +353,7 @@ pub fn governance_mint(
         ErrorCode::SupplyLimitExceeded
     );
 
-    // Реальный mint_to через Mint Authority PDA.
+    // Actual mint_to via the Mint Authority PDA.
     let mint_authority_bump = ctx.accounts.token_mint.mint_authority_bump;
     let signer_seeds: &[&[u8]] = &[b"mint-authority".as_ref(), &[mint_authority_bump]];
     token::mint_to(

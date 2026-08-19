@@ -68,8 +68,8 @@ pub struct InitializeToken<'info> {
 }
 
 pub fn initialize_token(ctx: Context<InitializeToken>) -> Result<()> {
-    // H-2: только EXPECTED_DEPLOYER может инициализировать протокол
-    // (защита от front-running захвата mint/token-конфигурации).
+    // H-2: only EXPECTED_DEPLOYER can initialize the protocol
+    // (protection against front-running capture of the mint/token configuration).
     require!(
         ctx.accounts.authority.key() == EXPECTED_DEPLOYER,
         ErrorCode::UnauthorizedDeployer

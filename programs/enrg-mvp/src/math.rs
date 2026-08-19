@@ -1,30 +1,30 @@
 use crate::constants::*;
 
 // ══════════════════════════════════════════════════════════════
-//  FIXED-POINT (u128, масштаб 1e18)
+//  FIXED-POINT (u128, scale 1e18)
 //
-//  BLOCK 5 аудита: убрана потеря точности f64 из эмиссионных формул.
-//  Все доли/множители считаются в целых с фиксированной точкой:
-//    1.0 == FP_SCALE (1e18). Численное поведение сохранено.
+//  Audit BLOCK 5: removed f64 precision loss from the emission formulas.
+//  All shares/multipliers are computed in integers with fixed point:
+//    1.0 == FP_SCALE (1e18). Numeric behavior is preserved.
 // ══════════════════════════════════════════════════════════════
 
-/// Масштаб фиксированной точки: 1.0 == FP_SCALE (1e18).
+/// Fixed-point scale: 1.0 == FP_SCALE (1e18).
 pub const FP_SCALE: u128 = 1_000_000_000_000_000_000; // 1e18
 
-/// ln(10) в фиксированной точке (floor(ln(10) * 1e18)).
+/// ln(10) in fixed point (floor(ln(10) * 1e18)).
 const LN10_FP: u128 = 2_302_585_092_994_045_684;
 
-/// ln(2) в фиксированной точке (floor(ln(2) * 1e18)).
+/// ln(2) in fixed point (floor(ln(2) * 1e18)).
 const LN2_FP: u128 = 693_147_180_559_945_309;
 
-/// Fixed-point умножение: (a * b) / FP_SCALE, checked.
+/// Fixed-point multiplication: (a * b) / FP_SCALE, checked.
 pub(crate) fn fp_mul(a: u128, b: u128) -> u128 {
     a.checked_mul(b)
         .map(|v| v / FP_SCALE)
         .unwrap_or(0)
 }
 
-/// exp(x) в фиксированной точке (ряд Тейлора). x_fp ∈ [0, ~2.31e18].
+/// exp(x) in fixed point (Taylor series). x_fp ∈ [0, ~2.31e18].
 fn exp_fp(x_fp: u128) -> u128 {
     // e^x = 1 + x + x^2/2! + x^3/3! + ...
     let mut term = FP_SCALE;
@@ -42,11 +42,11 @@ fn exp_fp(x_fp: u128) -> u128 {
     sum
 }
 
-/// ln(1 + u) в фиксированной точке для u_fp ∈ [0, FP_SCALE].
+/// ln(1 + u) in fixed point for u_fp ∈ [0, FP_SCALE].
 ///
-/// Для u < 1/2 — знакопеременный ряд u - u^2/2 + u^3/3 - ...
-/// Для u >= 1/2 — приведение: ln(1+u) = ln(2) + ln(1 - v), v = (1-u)/2 <= 1/4
-/// (ряд сходится быстро).
+/// For u < 1/2 — alternating series u - u^2/2 + u^3/3 - ...
+/// For u >= 1/2 — reduction: ln(1+u) = ln(2) + ln(1 - v), v = (1-u)/2 <= 1/4
+/// (the series converges quickly).
 fn ln_1p_fp(u_fp: u128) -> u128 {
     if u_fp < FP_SCALE / 2 {
         let mut term = u_fp;
@@ -87,7 +87,7 @@ fn ln_1p_fp(u_fp: u128) -> u128 {
     }
 }
 
-/// log10(1 + u) в фиксированной точке для u_fp ∈ [0, FP_SCALE].
+/// log10(1 + u) in fixed point for u_fp ∈ [0, FP_SCALE].
 fn log10_1p_fp(u_fp: u128) -> u128 {
     let ln = ln_1p_fp(u_fp);
     ln.checked_mul(FP_SCALE)
@@ -95,10 +95,10 @@ fn log10_1p_fp(u_fp: u128) -> u128 {
         .unwrap_or(0)
 }
 
-/// Доля эмиссии [0.0 .. 1.0] как фиксированная точка (1.0 == FP_SCALE).
+/// Emission share [0.0 .. 1.0] as a fixed point (1.0 == FP_SCALE).
 ///
-/// Supply измеряется в ATOMIC единицах (1 SRC == 10^9 atomics).
-/// Прогресс = 1.0, когда добыта вся 1_000_000_000 SRC (== 10^18 atomics).
+/// Supply is measured in ATOMIC units (1 SRC == 10^9 atomics).
+/// Progress = 1.0 when the whole 1_000_000_000 SRC (== 10^18 atomics) is mined.
 pub fn emission_share(total_supply_atomic: u64) -> u128 {
     (total_supply_atomic as u128)
         .checked_mul(FP_SCALE)
@@ -106,15 +106,15 @@ pub fn emission_share(total_supply_atomic: u64) -> u128 {
         .unwrap_or(0)
 }
 
-/// Коэффициент асимптотической сложности 10^share как фиксированная точка
-/// (share ∈ [0,1]; результат ∈ [FP_SCALE, 10*FP_SCALE]).
+/// Asymptotic difficulty coefficient 10^share as a fixed point
+/// (share ∈ [0,1]; result ∈ [FP_SCALE, 10*FP_SCALE]).
 pub fn emission_difficulty(total_supply_atomic: u64) -> u128 {
     let share = emission_share(total_supply_atomic);
     let x = fp_mul(share, LN10_FP);
     exp_fp(x)
 }
 
-/// Wh за одну SRC-единицу (в SRC_BASIS-терминах).
+/// Wh per one SRC unit (in SRC_BASIS terms).
 pub fn energy_per_src(total_supply_atomic: u64) -> u128 {
     let difficulty = emission_difficulty(total_supply_atomic);
     (INITIAL_ENERGY_PER_SRC as u128)
@@ -123,12 +123,12 @@ pub fn energy_per_src(total_supply_atomic: u64) -> u128 {
         .unwrap_or(0)
 }
 
-/// Множитель динамической сложности конкретного устройства:
-/// 1 + log10(1 + share), где share = device_energy_30d / network_energy_30d.
+/// Dynamic difficulty multiplier for a specific device:
+/// 1 + log10(1 + share), where share = device_energy_30d / network_energy_30d.
 ///
-/// Фиксированная точка; при network_energy_30d == 0 возвращает 1.0 (FP_SCALE).
-/// Доля клампится к [0, 1]: устройство — часть сети, его 30-дневная энергия
-/// не может превышать сетевую. Множитель всегда >= 1.0.
+/// Fixed point; returns 1.0 (FP_SCALE) when network_energy_30d == 0.
+/// The share is clamped to [0, 1]: a device is part of the network, so its
+/// 30-day energy cannot exceed the network energy. Multiplier is always >= 1.0.
 pub fn device_difficulty_multiplier(device_energy_30d: u64, network_energy_30d: u128) -> u128 {
     if network_energy_30d == 0 {
         return FP_SCALE;
@@ -147,7 +147,7 @@ pub fn device_difficulty_multiplier(device_energy_30d: u64, network_energy_30d: 
         .unwrap_or(u128::MAX)
 }
 
-/// Эффективная энергия за SRC для конкретного устройства (base × multiplier).
+/// Effective energy per SRC for a specific device (base × multiplier).
 pub fn effective_energy_per_src(
     total_supply_atomic: u64,
     device_energy_30d: u64,
@@ -160,7 +160,7 @@ pub fn effective_energy_per_src(
         .unwrap_or(0)
 }
 
-/// Конвертирует подтверждённую энергию в SRC-единицы (в SRC_BASIS-терминах).
+/// Converts confirmed energy into SRC units (in SRC_BASIS terms).
 pub fn reward_for_energy(energy_wh: u64, energy_per_src: u128) -> u64 {
     if energy_per_src == 0 {
         return 0;
@@ -168,12 +168,12 @@ pub fn reward_for_energy(energy_wh: u64, energy_per_src: u128) -> u64 {
     ((energy_wh as u128 * SRC_BASIS as u128) / energy_per_src) as u64
 }
 
-/// Удобная обёртка — глобальная сложность (оригинальная).
+/// Convenience wrapper — global difficulty (original).
 pub fn calculate_reward(energy_wh: u64, total_supply_atomic: u64) -> u64 {
     reward_for_energy(energy_wh, energy_per_src(total_supply_atomic))
 }
 
-/// Расчёт награды с динамической сложностью по устройству.
+/// Reward calculation with per-device dynamic difficulty.
 pub fn calculate_reward_dynamic(
     energy_wh: u64,
     total_supply_atomic: u64,
@@ -185,7 +185,7 @@ pub fn calculate_reward_dynamic(
 }
 
 /// Updates sliding-window energy counter (u64).
-/// Если прошло >= 30 дней — сброс; иначе — накопление.
+/// If >= 30 days have passed — reset; otherwise — accumulate.
 pub fn update_energy_window(current_energy: u64, last_update: i64, now: i64, new_energy: u64) -> u64 {
     const THIRTY_DAYS: i64 = 30 * 24 * 60 * 60;
     if last_update == 0 || now - last_update >= THIRTY_DAYS {
@@ -195,7 +195,7 @@ pub fn update_energy_window(current_energy: u64, last_update: i64, now: i64, new
     }
 }
 
-/// Updates sliding-window energy counter (u128 — для сети).
+/// Updates sliding-window energy counter (u128 — for the network).
 pub fn update_energy_window_u128(current_energy: u128, last_update: i64, now: i64, new_energy: u128) -> u128 {
     const THIRTY_DAYS: i64 = 30 * 24 * 60 * 60;
     if last_update == 0 || now - last_update >= THIRTY_DAYS {
@@ -260,16 +260,16 @@ mod tests {
         let e90 = energy_per_src(MAX_SUPPLY_ATOMIC * 9 / 10);
         assert_eq!(e90, 7_943_282);
 
-        // reward для 10 kWh при 0 supply: 10_000_000 * 1000 / 1_000_000 = 10_000
+        // reward for 10 kWh at 0 supply: 10_000_000 * 1000 / 1_000_000 = 10_000
         assert_eq!(calculate_reward(10_000_000, 0), 10_000);
 
-        // multiplier при share=0.001: 1 + log10(1.001) ≈ 1.0004340775
+        // multiplier at share=0.001: 1 + log10(1.001) ≈ 1.0004340775
         let m = device_difficulty_multiplier(1_000, 1_000_000);
         let log10_fp = m - FP_SCALE;
         assert!(log10_fp >= 434_000_000_000_000); // >= 0.000434
         assert!(log10_fp <= 435_000_000_000_000); // <= 0.000435
 
-        // multiplier при share=0.5: 1 + log10(1.5) ≈ 1.1760912591
+        // multiplier at share=0.5: 1 + log10(1.5) ≈ 1.1760912591
         let m_half = device_difficulty_multiplier(500_000, 1_000_000);
         let log10_fp_half = m_half - FP_SCALE;
         assert!(log10_fp_half >= 176_090_000_000_000_000);
@@ -295,22 +295,22 @@ mod tests {
         assert_eq!(update_energy_window(0, 0, 1_000_000, 500), 500);
     }
 
-    /// v7.0 §17: E(S) = 1 МВт·ч × k^S, k = 10.
-    /// На старте (S=0): 1_000_000 Wh (1 МВт·ч); при полном supply (S=1): 10_000_000 Wh.
+    /// v7.0 §17: E(S) = 1 MWh × k^S, k = 10.
+    /// At the start (S=0): 1_000_000 Wh (1 MWh); at full supply (S=1): 10_000_000 Wh.
     #[test]
     fn emission_formula_is_1mwh_times_10_to_s() {
-        assert_eq!(INITIAL_ENERGY_PER_SRC, 1_000_000); // 1 МВт·ч
+        assert_eq!(INITIAL_ENERGY_PER_SRC, 1_000_000); // 1 MWh
         assert_eq!(EMISSION_DIFFICULTY_K, 10);
 
-        // E(0) = 1 МВт·ч × 10^0 = 1_000_000 Wh
+        // E(0) = 1 MWh × 10^0 = 1_000_000 Wh
         assert_eq!(energy_per_src(0), 1_000_000);
-        // E(MAX) = 1 МВт·ч × 10^1 = 10_000_000 Wh.
-        // Fixed-point floor ряда Тейлора даёт 9_999_999 — допуск ±1.
+        // E(MAX) = 1 MWh × 10^1 = 10_000_000 Wh.
+        // The fixed-point floor of the Taylor series gives 9_999_999 — tolerance ±1.
         let e_max = energy_per_src(MAX_SUPPLY_ATOMIC);
         assert!(e_max >= 9_999_999 && e_max <= 10_000_000, "e_max={e_max}");
-        // E(MAX/2) = 1 МВт·ч × 10^0.5 ≈ 3_162_277 Wh (floor)
+        // E(MAX/2) = 1 MWh × 10^0.5 ≈ 3_162_277 Wh (floor)
         assert_eq!(energy_per_src(MAX_SUPPLY_ATOMIC / 2), 3_162_277);
-        // Монотонность: сложность растёт с supply.
+        // Monotonicity: difficulty grows with supply.
         assert!(energy_per_src(MAX_SUPPLY_ATOMIC / 4) > energy_per_src(0));
         assert!(energy_per_src(MAX_SUPPLY_ATOMIC) > energy_per_src(MAX_SUPPLY_ATOMIC / 2));
     }

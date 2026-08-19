@@ -4,7 +4,7 @@ use crate::constants::ERS_MAX_SCORE;
 use crate::error::ErrorCode;
 use crate::state::*;
 
-/// Инициализация Reputation PDA (v7.0 §16 — Energy Reputation Score).
+/// Initialize the Reputation PDA (v7.0 §16 — Energy Reputation Score).
 #[derive(Accounts)]
 pub struct InitializeReputation<'info> {
     #[account(
@@ -32,16 +32,16 @@ pub fn initialize_reputation(ctx: Context<InitializeReputation>) -> Result<()> {
     reputation.total_energy_wh = 0;
     reputation.first_seen = now;
     reputation.anomaly_count = 0;
-    reputation.percentile = 20; // стартовый процентиль (аппроксимация)
+    reputation.percentile = 20; // starting percentile (approximation)
     reputation.bump = ctx.bumps.reputation;
 
     Ok(())
 }
 
-/// Фиксация аномалии профиля генерации (v7.0 §27).
+/// Record a generation profile anomaly (v7.0 §27).
 ///
-/// Подписывает доверенный оракул (OracleRegistry). Аномалия (например,
-/// постоянная мощность ночью) снижает ERS и инкрементирует anomaly_count.
+/// Signed by a trusted oracle (OracleRegistry). An anomaly (for example,
+/// constant power at night) lowers ERS and increments anomaly_count.
 #[derive(Accounts)]
 pub struct ReportAnomaly<'info> {
     #[account(
@@ -81,8 +81,8 @@ pub fn report_anomaly(ctx: Context<ReportAnomaly>, severity: u8) -> Result<()> {
     Ok(())
 }
 
-/// Премиум-доступ к ENRG Market (v7.0 §16, §30) — интерфейс-заглушка.
-/// Возвращает `true`, если ERS >= ERS_PREMIUM_THRESHOLD.
+/// Premium access to ENRG Market (v7.0 §16, §30) — interface stub.
+/// Returns `true` if ERS >= ERS_PREMIUM_THRESHOLD.
 #[derive(Accounts)]
 pub struct ErsPremiumAccess<'info> {
     #[account(
@@ -97,8 +97,8 @@ pub fn ers_premium_access(ctx: Context<ErsPremiumAccess>) -> Result<bool> {
     Ok(crate::state::reputation::ers_premium_eligible(score))
 }
 
-/// Обновление ERS после успешного минта (вызывается из mint_energy).
-/// Чистая логика в state/reputation.rs; здесь — запись в аккаунт.
+/// Update ERS after a successful mint (called from mint_energy).
+/// Pure logic lives in state/reputation.rs; here — the account write.
 pub fn update_reputation_after_mint(
     reputation: &mut Account<Reputation>,
     energy_wh: u64,
@@ -110,14 +110,15 @@ pub fn update_reputation_after_mint(
         .ok_or(ErrorCode::ArithmeticOverflow)?;
     let uptime = now.saturating_sub(reputation.first_seen);
     let new_score = crate::state::reputation::compute_ers_score(reputation.total_energy_wh, uptime);
-    // Штрафы сохраняются: score не может вырасти выше без аномалий не вернётся
-    // автоматически — берём максимум(новый, текущий) только если аномалий нет,
-    // иначе рост ограничен сниженным уровнем. MVP: score = max(score, new) если
-    // аномалий нет; при наличии аномалий score растёт только до pre-penalty максимума.
+    // Penalties persist: the score cannot grow above without anomalies returning
+    // automatically — we take max(new, current) only when there are no anomalies;
+    // otherwise growth is limited by the reduced level. MVP: score = max(score, new)
+    // when there are no anomalies; with anomalies the score grows only up to the
+    // pre-penalty maximum.
     if reputation.anomaly_count == 0 {
         reputation.score = new_score;
     } else {
-        // С аномалиями: рост замедлен — половинный прирост к текущему.
+        // With anomalies: growth is slowed — half of the increment to the current value.
         let cap = new_score.min(ERS_MAX_SCORE);
         let target = reputation
             .score

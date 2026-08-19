@@ -37,7 +37,7 @@ pub const STAKING_PERCENT: u64 = 40;
 /// DAO fund share (per cent) of the commission.
 pub const DAO_PERCENT: u64 = 30;
 /// Emergency fund share (per cent) of the commission.
-/// Остаток комиссии после buyback/staking/dao достаётся emergency-фонду.
+/// The commission remainder after buyback/staking/dao goes to the emergency fund.
 pub const EMERGENCY_PERCENT: u64 = 10;
 
 /// --- SRC total supply ---
@@ -80,92 +80,92 @@ pub const FOUNDER_ALLOCATION_ATOMIC: u64 =
 pub const FOUNDER_VESTING_DURATION: i64 =
     FOUNDER_VESTING_CLIFF + FOUNDER_VESTING_RELEASE;
 
-/// Максимум активных устройств на одного владельца (BLOCK 4 аудита —
-/// защита от «дробления» устройств).
+/// Maximum active devices per owner (audit BLOCK 4 —
+/// protection against device "fragmentation").
 pub const MAX_DEVICES_PER_OWNER: u64 = 100;
 
-/// Founder wallet (prod) — единый бенефициар founder-вестинга и источник
-/// всех founder-ролей. Адрес зашит в программу: вестинг-аккаунт можно
-/// инициализировать и получать средства только этим кошельком.
-/// (Devnet продолжает использовать текущий program authority.)
+/// Founder wallet (prod) — single beneficiary of the founder vesting and the
+/// source of all founder roles. The address is hard-coded into the program: the
+/// vesting account can be initialized and funded only by this wallet.
+/// (Devnet continues to use the current program authority.)
 pub const FOUNDER_WALLET: Pubkey =
     pubkey!("6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8");
 
-/// H-2 (front-running): адрес, которому разрешена инициализация протокола
+/// H-2 (front-running): the address allowed to initialize the protocol
 /// (initialize_token / initialize_vault / initialize_oracle_registry /
 /// init_config / initialize_governance / initialize_manifest_registry).
-/// Только этот кошелёк может быть первым инициализатором PDA — иначе атакующий,
-/// наблюдающий за мемпулом, мог бы захватить роль oracle_admin/governance.
-/// По умолчанию — адрес основателя (FOUNDER_WALLET); для другого деплоера
-/// изменить эту константу и пересобрать программу.
+/// Only this wallet can be the first PDA initializer — otherwise an attacker
+/// watching the mempool could take the oracle_admin/governance role.
+/// Defaults to the founder address (FOUNDER_WALLET); for another deployer,
+/// change this constant and rebuild the program.
 pub const EXPECTED_DEPLOYER: Pubkey = FOUNDER_WALLET;
 
 // ══════════════════════════════════════════════════════════════
 //  Governance MVP (ADR-0009)
-//  Числа — атомарные единицы (1 SRC = 1e9 атомар; MAX_SUPPLY_ATOMIC = 1e18).
+//  Numbers are atomic units (1 SRC = 1e9 atomics; MAX_SUPPLY_ATOMIC = 1e18).
 // ══════════════════════════════════════════════════════════════
 
-/// Timelock: предложение исполняется не раньше, чем через 7 дней после одобрения.
+/// Timelock: a proposal executes no earlier than 7 days after approval.
 pub const TIMELOCK_DELAY: u64 = 7 * 24 * 60 * 60; // 604_800 s
 
-/// Максимум членов governance-списка.
+/// Maximum members in the governance list.
 pub const GOVERNANCE_MEMBER_MAX: usize = 5;
 
-/// Минимум членов governance-списка.
+/// Minimum members in the governance list.
 pub const GOVERNANCE_MIN_MEMBERS: usize = 3;
 
-/// Лимит эмиссии на одно governance-предложение (атомарные единицы).
-/// 1e15 атомар = 1_000_000 SRC = 0.1% от MAX_SUPPLY_ATOMIC.
+/// Emission cap per governance proposal (atomic units).
+/// 1e15 atomics = 1_000_000 SRC = 0.1% of MAX_SUPPLY_ATOMIC.
 pub const PROPOSAL_AMOUNT_MAX_ATOMIC: u64 = 1_000_000_000_000_000; // 1e15
 
-/// Максимальная длина заголовка предложения (байт).
+/// Maximum proposal title length (bytes).
 pub const PROPOSAL_TITLE_MAX_LEN: usize = 64;
 
 // ══════════════════════════════════════════════════════════════
 //  Device Trust Levels (v7.0 §15)
-//  Лимиты майнинга на tier устройства (Wh за месяц).
-//  Basic ≤ 100 kWh/мес; Verified ≤ 10 MWh/мес;
-//  Industrial / Institutional — без ограничений.
+//  Mining limits per device tier (Wh per month).
+//  Basic ≤ 100 kWh/month; Verified ≤ 10 MWh/month;
+//  Industrial / Institutional — no limits.
 // ══════════════════════════════════════════════════════════════
 
-/// Базовый тир: до 100 kWh в месяц (100_000 Wh).
+/// Basic tier: up to 100 kWh per month (100_000 Wh).
 pub const BASIC_MONTHLY_LIMIT_WH: u64 = 100_000;
 
-/// Verified: сертифицированный бытовой счётчик — до 10 MWh в месяц.
+/// Verified: certified household meter — up to 10 MWh per month.
 pub const VERIFIED_MONTHLY_LIMIT_WH: u64 = 10_000_000;
 
-/// Окно «месяца» для tier-лимитов (30 дней, секунды).
+/// The "month" window for tier limits (30 days, seconds).
 pub const TIER_MONTH_SECS: i64 = 30 * 24 * 60 * 60;
 
-/// Максимальный балл ERS (Energy Reputation Score, v7.0 §16).
+/// Maximum ERS score (Energy Reputation Score, v7.0 §16).
 pub const ERS_MAX_SCORE: u32 = 1_000;
 
-/// Порог ERS для премиум-доступа к ENRG Market (v7.0 §16, §30).
+/// ERS threshold for premium access to ENRG Market (v7.0 §16, §30).
 pub const ERS_PREMIUM_THRESHOLD: u32 = 700;
 
-/// Порог пула для распределения (v7.0 §14): 1 МВт·ч = 1_000_000 Wh.
+/// Pool distribution threshold (v7.0 §14): 1 MWh = 1_000_000 Wh.
 pub const POOL_THRESHOLD_MWH: u64 = 1;
 
-/// Масштаб фиксированной точки для долей пула (1.0 == 1e18).
-/// Переиспользуем масштаб из math.rs (FP_SCALE) через алиас.
+/// Fixed-point scale for pool shares (1.0 == 1e18).
+/// Reuse the scale from math.rs (FP_SCALE) via an alias.
 pub const POOL_FP_SCALE: u128 = crate::math::FP_SCALE;
 
-/// Дефолтный `max_energy_bps` Policy Registry: 10_000 == 100 % от rated_power
-/// (поведение протокола до введения Policy Engine, ADR-0003).
+/// Default `max_energy_bps` for the Policy Registry: 10_000 == 100% of rated_power
+/// (protocol behavior before the Policy Engine, ADR-0003).
 pub const DEFAULT_MAX_ENERGY_BPS: u64 = 10_000;
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    /// v7.0 §17: токен с 9 десятичными знаками.
+    /// v7.0 §17: token with 9 decimal places.
     #[test]
     fn decimals_is_nine() {
         assert_eq!(SRC_DECIMALS, 9);
         assert_eq!(10u64.pow(SRC_DECIMALS as u32), 1_000_000_000);
     }
 
-    /// Атомарные единицы: 1 SRC = 1e9 атомар; MAX = 1e18 атомар = 1e9 SRC.
+    /// Atomic units: 1 SRC = 1e9 atomics; MAX = 1e18 atomics = 1e9 SRC.
     #[test]
     #[allow(deprecated)]
     fn max_supply_in_atomic_units() {
@@ -174,14 +174,14 @@ mod tests {
         assert_eq!(MAX_SUPPLY_ATOMIC / (10u64.pow(SRC_DECIMALS as u32)), 1_000_000_000);
     }
 
-    /// Founder allocation = 20% от MAX_SUPPLY_ATOMIC = 2e17 атомар.
+    /// Founder allocation = 20% of MAX_SUPPLY_ATOMIC = 2e17 atomics.
     #[test]
     fn founder_allocation_is_twenty_percent() {
         assert_eq!(FOUNDER_ALLOCATION_ATOMIC, 200_000_000_000_000_000); // 2e17
         assert_eq!(FOUNDER_ALLOCATION_ATOMIC * 5, MAX_SUPPLY_ATOMIC);
     }
 
-    /// v7.0 §18: комиссия 15% распределяется 20/40/30/10 — в сумме 100%.
+    /// v7.0 §18: the 15% commission is split 20/40/30/10 — summing to 100%.
     #[test]
     fn commission_percentages_sum_to_100() {
         assert_eq!(COMMISSION_PERCENT, 15);
@@ -191,8 +191,8 @@ mod tests {
         );
     }
 
-    /// Проверка: награда = 85% пользователю + 15% комиссия, и доли фондов
-    /// в сумме равны комиссии (emergency — остаток).
+    /// Check: reward = 85% to the user + 15% commission, and the fund shares
+    /// sum to the commission (emergency — the remainder).
     #[test]
     fn distribution_applies_to_15_percent_commission() {
         let reward: u64 = 10_000_000;
@@ -204,13 +204,13 @@ mod tests {
         let buyback = fee * BUYBACK_PERCENT / 100;
         let staking = fee * STAKING_PERCENT / 100;
         let dao = fee * DAO_PERCENT / 100;
-        let emergency = fee - buyback - staking - dao; // остаток
+        let emergency = fee - buyback - staking - dao; // remainder
         assert_eq!(buyback + staking + dao + emergency, fee);
         assert!(emergency >= fee * EMERGENCY_PERCENT / 100 - 1);
         assert!(emergency <= fee * EMERGENCY_PERCENT / 100 + 1);
     }
 
-    /// v7.0 §17: 1e18 атомар ≈ 1e9 ENRG (SRC), 1 SRC = 1e9 атомар.
+    /// v7.0 §17: 1e18 atomics ≈ 1e9 ENRG (SRC), 1 SRC = 1e9 atomics.
     #[test]
     fn atomic_scale_matches_spec() {
         let src_in_atomics = 10u64.pow(SRC_DECIMALS as u32);

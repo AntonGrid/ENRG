@@ -55,12 +55,12 @@ pub fn initialize_manifest_registry(ctx: Context<InitializeManifestRegistry>) ->
     let registry = &mut ctx.accounts.registry;
     let clock = Clock::get()?;
 
-    // Guard: поля инициализации записываются ТОЛЬКО при первом создании.
-    // Иначе любой вызывающий мог бы повторным вызовом init_if_needed
-    // перезаписать authority и oracle_authority и захватить реестр.
+    // Guard: initialization fields are written ONLY at first creation.
+    // Otherwise any caller could re-run init_if_needed to overwrite
+    // authority and oracle_authority and take over the registry.
     if registry.authority == Pubkey::default() {
-        // H-2: первым инициализатором обязан быть EXPECTED_DEPLOYER —
-        // защита от front-running захвата manifest registry.
+        // H-2: the first initializer must be EXPECTED_DEPLOYER —
+        // protection against front-running capture of the manifest registry.
         require!(
             ctx.accounts.payer.key() == EXPECTED_DEPLOYER,
             ErrorCode::UnauthorizedDeployer

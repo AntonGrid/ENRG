@@ -12,25 +12,25 @@ pub use validation::*;
 pub use ed25519::*;
 pub use lifecycle::*;
 
-/// Максимальная глубина сканирования sysvar Instructions назад от текущей
-/// инструкции. Ed25519-precompile-инструкции размещаются клиентом ПЕРЕД
-/// инструкцией программы в одной транзакции, поэтому их относительные
-/// индексы отрицательны (-1, -2, ...).
+/// Maximum scan depth of the sysvar Instructions backward from the current
+/// instruction. Ed25519 precompile instructions are placed by the client BEFORE
+/// the program instruction in the same transaction, so their relative
+/// indices are negative (-1, -2, ...).
 const MAX_SCAN_BACK: i64 = 8;
 
 /// Verify an Ed25519 signature on-chain using the sysvar Instructions
 /// account and Solana's built-in Ed25519 precompile program.
 ///
-/// Паттерн (стандарт Axis/Solana):
-/// 1. Клиент кладёт в транзакцию ПЕРЕД нашей инструкцией precompile-инструкцию
-///    Ed25519 с (pubkey, message, signature). Рантайм Solana сам проверяет
-///    подпись — недействительная подпись роняет всю транзакцию.
-/// 2. Здесь мы читаем sysvar Instructions, находим эту precompile-инструкцию
-///    и убеждаемся, что её (signature, public_key, message) совпадают
-///    с ожидаемыми. Это связывает проверенную рантаймом подпись
-///    с обрабатываемыми данными.
+/// Pattern (Axis/Solana standard):
+/// 1. The client puts an Ed25519 precompile instruction with
+///    (pubkey, message, signature) BEFORE our instruction in the transaction.
+///    The Solana runtime itself verifies the signature — an invalid signature
+///    fails the whole transaction.
+/// 2. Here we read the sysvar Instructions, find that precompile instruction,
+///    and ensure its (signature, public_key, message) match the expected values.
+///    This binds the runtime-verified signature to the data being processed.
 ///
-/// Никаких обходов и «debug/test» веток: проверка выполняется всегда.
+/// No bypasses or "debug/test" branches: the check always runs.
 pub fn verify_ed25519_signature(
     signature: &[u8; 64],
     public_key: &[u8; 32],
@@ -62,12 +62,12 @@ pub fn verify_ed25519_signature(
                     return Ok(());
                 }
             }
-            // Аккаунт не является sysvar Instructions — сработает только если
-            // constraint в Accounts не был задан; страхуемся и здесь.
+            // The account is not the Instructions sysvar — this only happens if
+            // the constraint in Accounts was not set; we guard here too.
             Err(anchor_lang::solana_program::program_error::ProgramError::UnsupportedSysvar) => {
                 return Err(ErrorCode::InvalidInstructionsAccount.into())
             }
-            // Вышли за пределы списка инструкций транзакции.
+            // Went past the end of the transaction's instruction list.
             Err(_) => break,
         }
     }
@@ -79,8 +79,8 @@ pub fn verify_ed25519_signature(
 mod tests {
     use super::*;
 
-    /// Тест-вектор сгенерирован offline (tweetnacl, Ed25519):
-    /// message = [0,1,...,31], ключ и подпись фиксированы.
+    /// Test vector generated offline (tweetnacl, Ed25519):
+    /// message = [0,1,...,31], the key and signature are fixed.
     const TEST_PUBKEY: [u8; 32] = [
         77, 14, 195, 160, 208, 63, 239, 255, 147, 169, 188, 206, 42, 36, 180, 6,
         212, 111, 68, 174, 255, 31, 119, 135, 218, 237, 177, 60, 170, 250, 64, 44,
@@ -96,7 +96,7 @@ mod tests {
         16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31,
     ];
 
-    /// Формирует data ed25519 precompile-инструкции (layout как в web3.js).
+    /// Builds the data of an ed25519 precompile instruction (layout as in web3.js).
     fn build_ed25519_data(signature: &[u8; 64], public_key: &[u8; 32], message: &[u8]) -> Vec<u8> {
         let mut data = Vec::with_capacity(16 + 64 + 32 + message.len());
         data.push(1); // num_signatures
@@ -117,7 +117,7 @@ mod tests {
         data
     }
 
-    /// Оборачивает готовые данные sysvar в AccountInfo.
+    /// Wraps ready sysvar data into an AccountInfo.
     fn sysvar_account<'a>(data: &'a mut Vec<u8>, lamports: &'a mut u64) -> AccountInfo<'a> {
         AccountInfo::new(
             &crate::constants::INSTRUCTIONS_SYSVAR_ID,
@@ -131,8 +131,8 @@ mod tests {
         )
     }
 
-    /// Строит данные sysvar Instructions с одной ed25519-инструкцией
-    /// на текущем индексе 0 (имитация транзакции [ed25519Ix, ...]).
+    /// Builds sysvar Instructions data with a single ed25519 instruction
+    /// at the current index 0 (simulating a transaction [ed25519Ix, ...]).
     fn build_sysvar_data(signature: &[u8; 64], public_key: &[u8; 32], message: &[u8]) -> Vec<u8> {
         let ix_data = build_ed25519_data(signature, public_key, message);
         let borrowed = solana_instruction::BorrowedInstruction {
@@ -205,10 +205,10 @@ mod tests {
         assert!(res.is_err(), "expected Err for non-sysvar account");
     }
 
-    /// Формирует data ed25519-инструкции в layout web3.js >= 1.9x:
-    /// индексы инструкций пишутся как u16 со значением 0xffff
-    /// («текущая инструкция»). Это формат, который реально отправляет
-    /// @solana/web3.js 1.98.4 без явного instructionIndex.
+    /// Builds ed25519 instruction data in the web3.js >= 1.9x layout:
+    /// instruction indices are written as u16 with value 0xffff
+    /// ("current instruction"). This is the format actually sent by
+    /// @solana/web3.js 1.98.4 without an explicit instructionIndex.
     fn build_ed25519_data_web3js(
         signature: &[u8; 64],
         public_key: &[u8; 32],
@@ -232,7 +232,7 @@ mod tests {
 
     #[test]
     fn verify_web3js_layout_signature() {
-        // Прямая проверка парсера на layout web3.js 1.98.4 (0xffff).
+        // Direct parser check against the web3.js 1.98.4 layout (0xffff).
         let data = build_ed25519_data_web3js(&TEST_SIGNATURE, &TEST_PUBKEY, &TEST_MESSAGE);
         assert!(
             ed25519::verify_ed25519_instruction_data(
@@ -241,10 +241,10 @@ mod tests {
                 &TEST_PUBKEY,
                 &TEST_MESSAGE,
             ),
-            "web3js layout (0xffff) должен приниматься"
+            "web3js layout (0xffff) must be accepted"
         );
 
-        // Полный путь: sysvar Instructions + verify_ed25519_signature.
+        // Full path: sysvar Instructions + verify_ed25519_signature.
         let mut sysvar_data = build_sysvar_data_web3js(&TEST_SIGNATURE, &TEST_PUBKEY, &TEST_MESSAGE);
         let mut lamports: u64 = 0;
         let sysvar = sysvar_account(&mut sysvar_data, &mut lamports);
@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn reject_foreign_instruction_index() {
-        // Индекс, ссылающийся на ЧУЖУЮ инструкцию (не 0 и не 0xffff), отклоняется.
+        // An index referencing a FOREIGN instruction (not 0 and not 0xffff) is rejected.
         let mut data = build_ed25519_data(&TEST_SIGNATURE, &TEST_PUBKEY, &TEST_MESSAGE);
         data[4] = 1; // signature_instruction_index = 1
         assert!(
@@ -264,11 +264,11 @@ mod tests {
                 &TEST_PUBKEY,
                 &TEST_MESSAGE,
             ),
-            "foreign instruction index должен отклоняться"
+            "foreign instruction index must be rejected"
         );
     }
 
-    /// build_sysvar_data для layout web3.js (0xffff-индексы).
+    /// build_sysvar_data for the web3.js layout (0xffff indices).
     fn build_sysvar_data_web3js(
         signature: &[u8; 64],
         public_key: &[u8; 32],

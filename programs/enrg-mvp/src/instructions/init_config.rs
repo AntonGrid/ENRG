@@ -32,8 +32,8 @@ pub fn init_config(
     oracle: Pubkey,
     mint: Pubkey,
 ) -> Result<()> {
-    // H-2: только EXPECTED_DEPLOYER может инициализировать config (активная пара
-    // oracle+mint) — защита от front-running захвата конфигурации протокола.
+    // H-2: only EXPECTED_DEPLOYER can initialize the config (the active
+    // oracle+mint pair) — protection against front-running capture of the protocol configuration.
     require!(
         ctx.accounts.authority.key() == EXPECTED_DEPLOYER,
         ErrorCode::UnauthorizedDeployer

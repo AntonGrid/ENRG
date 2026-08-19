@@ -6,7 +6,7 @@ use crate::constants::{
 };
 use crate::error::ErrorCode;
 
-/// Статус предложения (ADR-0009).
+/// Proposal status (ADR-0009).
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq)]
 pub enum ProposalStatus {
     Pending,
@@ -22,23 +22,23 @@ impl Default for ProposalStatus {
     }
 }
 
-/// Единый governance-аккаунт (PDA [b"governance"]).
+/// Single governance account (PDA [b"governance"]).
 ///
-/// Двухуровневая модель: `authority` (владелец контракта) + `members`
-/// (3–5 адресов, имеющих право голоса). `authority` создаёт предложения
-/// и управляет списком members; члены голосуют.
+/// Two-level model: `authority` (contract owner) + `members`
+/// (3–5 addresses with voting rights). `authority` creates proposals
+/// and manages the members list; members vote.
 #[account]
 pub struct GovernanceState {
-    /// Текущий владелец контракта (создаёт предложения, управляет members).
+    /// Current contract owner (creates proposals, manages members).
     pub authority: Pubkey,
 
-    /// Список членов с правом голоса (3..=GOVERNANCE_MEMBER_MAX).
+    /// Members with voting rights (3..=GOVERNANCE_MEMBER_MAX).
     pub members: Vec<Pubkey>,
 
-    /// Счётчик созданных предложений (монотонный).
+    /// Counter of created proposals (monotonic).
     pub proposal_count: u64,
 
-    /// id активного предложения (0 = нет активного; одно активное в момент времени).
+    /// id of the active proposal (0 = none active; one active at a time).
     pub active_proposal_id: u64,
 }
 
@@ -54,25 +54,25 @@ impl GovernanceState {
     }
 }
 
-/// Governance-предложение (PDA [b"proposal", id.to_le_bytes()]).
+/// Governance proposal (PDA [b"proposal", id.to_le_bytes()]).
 ///
-/// `member_snapshot_count` фиксируется при создании (кворум считается от него).
-/// Эмиссия после одобрения и timelock — через `governance_mint`.
+/// `member_snapshot_count` is fixed at creation (quorum is computed from it).
+/// Emission after approval and timelock happens via `governance_mint`.
 #[account]
 pub struct Proposal {
-    /// Монотонный id (== GovernanceState.proposal_count на момент создания).
+    /// Monotonic id (== GovernanceState.proposal_count at creation time).
     pub id: u64,
 
-    /// Authority, создавший предложение (получатель в `destination` — его ATA).
+    /// Authority that created the proposal (the recipient in `destination` is its ATA).
     pub proposer: Pubkey,
 
-    /// Заголовок/короткий payload (≤ PROPOSAL_TITLE_MAX_LEN байт).
+    /// Title / short payload (≤ PROPOSAL_TITLE_MAX_LEN bytes).
     pub title: String,
 
-    /// Запрашиваемая эмиссия в атомарных единицах (≤ PROPOSAL_AMOUNT_MAX_ATOMIC).
+    /// Requested emission in atomic units (≤ PROPOSAL_AMOUNT_MAX_ATOMIC).
     pub amount_atomic: u64,
 
-    /// ATA получателя (mint == SRC mint; owner == proposer).
+    /// Recipient ATA (mint == SRC mint; owner == proposer).
     pub destination: Pubkey,
 
     pub status: ProposalStatus,
@@ -80,19 +80,19 @@ pub struct Proposal {
     pub approved_at: i64,
     pub executed_at: i64,
 
-    /// Количество голосов «за» / «против».
+    /// Vote counts: "for" / "against".
     pub yes_votes: u32,
     pub no_votes: u32,
 
-    /// Размер списка members на момент создания (для расчёта кворума).
+    /// Size of the members list at creation time (for quorum calculation).
     pub member_snapshot_count: u32,
 
-    /// Адреса проголосовавших членов (однократное голосование).
+    /// Addresses of members who voted (single vote each).
     pub voted_members: Vec<Pubkey>,
 }
 
 impl Proposal {
-    /// Максимальный размер аккаунта Proposal (дискриминатор + поля).
+    /// Maximum Proposal account size (discriminator + fields).
     pub const LEN: usize =
         8 + // discriminator
         8 + // id
@@ -109,15 +109,15 @@ impl Proposal {
         4 + // member_snapshot_count
         4 + GOVERNANCE_MEMBER_MAX * 32; // voted_members (Vec<Pubkey>)
 
-    /// Кворум (ADR-0009): большинство «за» среди проголосовавших
-    /// (`yes > no`) И проголосовало больше половины members (> members/2).
+    /// Quorum (ADR-0009): majority "for" among those who voted
+    /// (`yes > no`) AND more than half of the members voted (> members/2).
     pub fn quorum_met(&self) -> bool {
         let threshold = self.member_snapshot_count / 2;
         self.yes_votes > self.no_votes
             && (self.yes_votes + self.no_votes) > threshold
     }
 
-    /// Все члены снапшота проголосовали.
+    /// All snapshot members have voted.
     pub fn all_voted(&self) -> bool {
         (self.yes_votes + self.no_votes) as usize >= self.member_snapshot_count as usize
     }
@@ -126,14 +126,14 @@ impl Proposal {
         self.voted_members.contains(member)
     }
 
-    /// Исполнение разрешено: статус Approved и прошёл TIMELOCK_DELAY после approved_at.
+    /// Execution allowed: status Approved and TIMELOCK_DELAY elapsed since approved_at.
     pub fn executable(&self, now: i64) -> bool {
         self.status == ProposalStatus::Approved
             && now >= self.approved_at.saturating_add(TIMELOCK_DELAY as i64)
     }
 }
 
-/// Валидация списка members: 3..=5 уникальных адресов.
+/// Validate the members list: 3..=5 unique addresses.
 pub fn validate_members(members: &[Pubkey]) -> Result<()> {
     if members.len() < GOVERNANCE_MIN_MEMBERS || members.len() > GOVERNANCE_MEMBER_MAX {
         return Err(ErrorCode::InvalidMemberList.into());
@@ -146,12 +146,12 @@ pub fn validate_members(members: &[Pubkey]) -> Result<()> {
     Ok(())
 }
 
-/// Следующий монотонный id предложения.
+/// Next monotonic proposal id.
 pub fn next_proposal_id(proposal_count: u64) -> Option<u64> {
     proposal_count.checked_add(1)
 }
 
-/// Валидация суммы предложения: > 0 и <= PROPOSAL_AMOUNT_MAX_ATOMIC (атомарные единицы).
+/// Validate the proposal amount: > 0 and <= PROPOSAL_AMOUNT_MAX_ATOMIC (atomic units).
 pub fn validate_amount_atomic(amount: u64) -> Result<()> {
     if amount == 0 {
         return Err(ErrorCode::ZeroAmountMint.into());
@@ -162,8 +162,8 @@ pub fn validate_amount_atomic(amount: u64) -> Result<()> {
     Ok(())
 }
 
-/// Правило «одно активное предложение»: при наличии активного новый create
-/// обязан сопровождаться передачей prev-предложения (cancel). Иначе — коллизия.
+/// "One active proposal" rule: if one is active, a new create MUST be
+/// accompanied by the previous proposal (cancel). Otherwise — collision.
 pub fn require_no_collision(active_proposal_id: u64, prev_provided: bool) -> Result<()> {
     if active_proposal_id != 0 && !prev_provided {
         return Err(ErrorCode::ProposalNotActive.into());
@@ -203,25 +203,25 @@ mod tests {
 
     #[test]
     fn approved_after_majority_and_timelock() {
-        // members=5, yes=3 → кворум (3 > 2 и 3 > 2); после TIMELOCK_DELAY — executable.
+        // members=5, yes=3 → quorum (3 > 2 and 3 > 2); after TIMELOCK_DELAY — executable.
         let p = proposal_with(ProposalStatus::Approved, 3, 0, 5, 1_000_000);
         assert!(p.quorum_met());
-        assert!(!p.executable(1_000_000 + TIMELOCK_DELAY as i64 - 1), "до timelock — нельзя");
-        assert!(p.executable(1_000_000 + TIMELOCK_DELAY as i64), "на границе timelock — можно");
+        assert!(!p.executable(1_000_000 + TIMELOCK_DELAY as i64 - 1), "before timelock — not allowed");
+        assert!(p.executable(1_000_000 + TIMELOCK_DELAY as i64), "at the timelock boundary — allowed");
         assert!(p.executable(1_000_000 + TIMELOCK_DELAY as i64 + 1));
     }
 
     #[test]
     fn vetoed_if_minority() {
-        // Формула (BLOCK 2): approved если `yes > no` И `yes+no > members/2`.
-        // members=5, проголосовало 2 (yes=2): 2 не > 2 → кворума нет (меньшинство).
+        // Formula (BLOCK 2): approved if `yes > no` AND `yes+no > members/2`.
+        // members=5, 2 voted (yes=2): 2 is not > 2 → no quorum (minority).
         let p = proposal_with(ProposalStatus::Pending, 2, 0, 5, 0);
         assert!(!p.quorum_met());
-        // yes=1, no=3: yes не > no → не approved.
+        // yes=1, no=3: yes is not > no → not approved.
         let p2 = proposal_with(ProposalStatus::Pending, 1, 3, 5, 0);
         assert!(!p2.quorum_met());
-        // все проголосовали (2 за, 3 против) → all_voted, но не кворум
-        // (инструкция пометит Rejected).
+        // all voted (2 for, 3 against) → all_voted, but no quorum
+        // (the instruction will mark it Rejected).
         let p3 = proposal_with(ProposalStatus::Pending, 2, 3, 5, 0);
         assert!(p3.all_voted());
         assert!(!p3.quorum_met());
@@ -230,53 +230,53 @@ mod tests {
     #[test]
     fn no_double_vote() {
         let p = proposal_with(ProposalStatus::Pending, 1, 0, 5, 0);
-        // member(1) уже проголосовал (в voted_members).
+        // member(1) already voted (in voted_members).
         assert!(p.has_voted(&member(1)));
         assert!(!p.has_voted(&member(3)));
     }
 
     #[test]
     fn no_active_proposal_collision() {
-        // Активного нет → можно создавать без prev.
+        // No active proposal → can create without prev.
         assert!(require_no_collision(0, false).is_ok());
-        // Активное есть без prev → коллизия.
+        // Active proposal without prev → collision.
         assert!(require_no_collision(3, false).is_err());
-        // Активное есть + prev передан → ок (cancel).
+        // Active proposal + prev passed → ok (cancel).
         assert!(require_no_collision(3, true).is_ok());
     }
 
     #[test]
     fn governance_mint_respects_pda_authority() {
-        // Mint-authority остаётся PDA [b"mint-authority"] — эмиссия только через него.
+        // Mint-authority stays the PDA [b"mint-authority"] — emission only through it.
         let (pda, bump) = Pubkey::find_program_address(&[b"mint-authority".as_ref()], &crate::id());
-        // find_program_address гарантирует off-curve адрес; bump может быть любым
-        // (для HkuC3… он равен 255 — это валидно). Проверяем реальный инвариант:
-        // возвращённый bump деривирует тот же PDA.
+        // find_program_address guarantees an off-curve address; the bump may be anything
+        // (for HkuC3… it is 255 — valid). Check the real invariant:
+        // the returned bump derives the same PDA.
         assert_eq!(
             Pubkey::create_program_address(&[b"mint-authority".as_ref(), &[bump]], &crate::id()).unwrap(),
             pda,
-            "bump должен быть валидным seed для mint-authority PDA"
+            "bump must be a valid seed for the mint-authority PDA"
         );
         let (pda2, _) = Pubkey::find_program_address(&[b"mint-authority".as_ref()], &crate::id());
-        assert_eq!(pda, pda2, "PDA детерминирован");
-        // Пока статус не Approved — исполнение невозможно (ProposalNotApproved путь).
+        assert_eq!(pda, pda2, "PDA is deterministic");
+        // Until the status is Approved — execution is impossible (ProposalNotApproved path).
         let p = proposal_with(ProposalStatus::Pending, 3, 0, 5, 1_000_000);
         assert!(!p.executable(1_000_000 + TIMELOCK_DELAY as i64));
     }
 
     #[test]
     fn amount_cap_enforced() {
-        assert!(validate_amount_atomic(0).is_err(), "0 запрещено");
+        assert!(validate_amount_atomic(0).is_err(), "0 is forbidden");
         assert!(validate_amount_atomic(PROPOSAL_AMOUNT_MAX_ATOMIC).is_ok());
         assert!(validate_amount_atomic(PROPOSAL_AMOUNT_MAX_ATOMIC + 1).is_err());
     }
 
     #[test]
     fn atomic_units_no_decimal_leakage() {
-        // Числа — атомарные единицы: 1 SRC = 10^SRC_DECIMALS.
+        // Numbers are atomic units: 1 SRC = 10^SRC_DECIMALS.
         let one_src = 10u64.pow(SRC_DECIMALS as u32);
         assert_eq!(one_src, 1_000_000_000);
-        // Кап кратен атомарной единице (нет «вейев»/десятичных).
+        // The cap is a multiple of an atomic unit (no "wei"-like decimals).
         assert_eq!(PROPOSAL_AMOUNT_MAX_ATOMIC % one_src, 0);
         assert!(PROPOSAL_AMOUNT_MAX_ATOMIC < crate::constants::MAX_SUPPLY_ATOMIC);
     }
@@ -298,15 +298,15 @@ mod tests {
 
     #[test]
     fn emission_paths_are_capped_and_gated() {
-        // Пути эмиссии SRC: mint_energy (PoP) + governance_mint. Governance-эмиссия
-        // за один проход ограничена капом предложения; вместе с founder-премайном
-        // не может исчерпать MAX_SUPPLY_ATOMIC.
+        // SRC emission paths: mint_energy (PoP) + governance_mint. Governance emission
+        // in one pass is capped by the proposal cap; together with the founder premine
+        // it cannot exhaust MAX_SUPPLY_ATOMIC.
         assert!(
             PROPOSAL_AMOUNT_MAX_ATOMIC
                 <= crate::constants::MAX_SUPPLY_ATOMIC
                     - crate::constants::FOUNDER_ALLOCATION_ATOMIC
         );
-        // Non-approved предложение не исполняется никогда (timelock не помогает).
+        // A non-approved proposal is never executed (timelock does not help).
         let pending = proposal_with(ProposalStatus::Pending, 0, 0, 5, 0);
         let rejected = proposal_with(ProposalStatus::Rejected, 0, 0, 5, 0);
         assert!(!pending.executable(TIMELOCK_DELAY as i64 + 1));

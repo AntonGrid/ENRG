@@ -10,9 +10,9 @@ pub struct OracleRegistry {
     /// Registry authority (protocol admin / governance root).
     pub authority: Pubkey,
 
-    /// Oracle admin — управляет списком доверенных оракулов.
-    /// Разделение ролей: protocol_admin (vault/funds/безопасность)
-    /// vs oracle_admin (add/remove оракулов).
+    /// Oracle admin — manages the list of trusted oracles.
+    /// Role separation: protocol_admin (vault/funds/security)
+    /// vs oracle_admin (add/remove oracles).
     pub oracle_admin: Pubkey,
 
     /// Trusted Oracle identities.

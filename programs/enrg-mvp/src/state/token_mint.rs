@@ -24,10 +24,10 @@ pub struct TokenMint {
     /// Emergency reserve ATA.
     pub emergency_account: Pubkey,
 
-    /// Founder ATA — куда минтятся founder-токены при launch (премайн).
+    /// Founder ATA — where founder tokens are minted at launch (premine).
     pub founder_account: Pubkey,
 
-    /// Одноразовый флаг: 1 после founder-премайна (повторный запрещён).
+    /// One-shot flag: 1 after the founder premine (repeat forbidden).
     pub founder_minted: u8,
 
     /// Token decimals.
@@ -63,8 +63,8 @@ impl TokenMint {
         1;   // bump
 }
 
-/// Возвращает true, если founder-премайн ещё не производился.
-/// (Вынесено для юнит-теста одноразовости.)
+/// Returns true if the founder premine has not been performed yet.
+/// (Extracted for the unit test of one-shot semantics.)
 pub fn founder_premine_not_minted(founder_minted: u8) -> bool {
     founder_minted == 0
 }
@@ -75,7 +75,7 @@ mod tests {
 
     #[test]
     fn founder_premine_is_one_shot() {
-        // 7. Одноразовость: премайн разрешён только при founder_minted == 0.
+        // 7. One-shot: premine is allowed only when founder_minted == 0.
         assert!(founder_premine_not_minted(0));
         assert!(!founder_premine_not_minted(1));
         assert!(!founder_premine_not_minted(255));

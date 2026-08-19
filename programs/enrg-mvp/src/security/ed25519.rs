@@ -1,9 +1,9 @@
-/// Парсер data встроенной Ed25519-инструкции Solana (precompile).
+/// Parser for the data of Solana's built-in Ed25519 instruction (precompile).
 ///
-/// Проверяет, что data содержит ровно одну подпись и что извлечённые
-/// подпись, публичный ключ и сообщение совпадают с ожидаемыми.
+/// Checks that the data contains exactly one signature and that the extracted
+/// signature, public key, and message match the expected values.
 ///
-/// Формат data (см. `@solana/web3.js` `Ed25519Program.createInstructionWithPublicKey`):
+/// Data format (see `@solana/web3.js` `Ed25519Program.createInstructionWithPublicKey`):
 /// ```text
 /// [0]    u8   num_signatures                = 1
 /// [1]    u8   padding                       = 0
@@ -14,33 +14,33 @@
 /// [10..12] u16 message_data_offset          (LE)
 /// [12..14] u16 message_data_size            (LE)
 /// [14..16] u16 message_instruction_index    (LE)
-/// [16..] данные: signature(64) | public_key(32) | message
+/// [16..] data: signature(64) | public_key(32) | message
 /// ```
 ///
-/// Индексы инструкций, в которых лежат signature/public_key/message:
-/// - `0xffff` (u16::MAX) — «текущая инструкция», т.е. сама ed25519-инструкция
-///   (стандарт web3.js >= 1.9x, значение по умолчанию);
-/// - `0` — «инструкция с индексом 0» — та же ed25519-инструкция, когда она
-///   идёт первой в транзакции (старые клиенты или явный `instructionIndex: 0`).
-/// Другие значения означают, что данные читаются из ЧУЖОЙ инструкции —
-/// такой layout мы НЕ принимаем (это разорвало бы привязку подписи).
+/// Instruction indices where signature/public_key/message live:
+/// - `0xffff` (u16::MAX) — the "current instruction", i.e. the ed25519 instruction
+///   itself (web3.js >= 1.9x standard, default value);
+/// - `0` — "instruction with index 0" — the same ed25519 instruction when it
+///   is first in the transaction (older clients or explicit `instructionIndex: 0`).
+/// Other values mean the data is read from a FOREIGN instruction — we do NOT
+/// accept such a layout (it would break the signature binding).
 ///
-/// ВАЖНО: сама криптографическая проверка подписи выполняется рантаймом
-/// Solana при обработке precompile-инструкции (недействительная подпись
-/// роняет всю транзакцию). Здесь мы лишь связываем precompile-инструкцию
-/// из sysvar с ожидаемыми (signature, public_key, message).
+/// IMPORTANT: the actual cryptographic signature check is performed by the Solana
+/// runtime when processing the precompile instruction (an invalid signature fails
+/// the whole transaction). Here we only bind the precompile instruction from the
+/// sysvar to the expected (signature, public_key, message).
 pub fn verify_ed25519_instruction_data(
     data: &[u8],
     signature: &[u8; 64],
     public_key: &[u8; 32],
     message: &[u8],
 ) -> bool {
-    // Полный заголовок — 16 байт.
+    // Full header is 16 bytes.
     if data.len() < 16 {
         return false;
     }
 
-    // Поддерживаем ровно одну подпись на инструкцию.
+    // Support exactly one signature per instruction.
     if data[0] != 1 {
         return false;
     }
@@ -53,7 +53,7 @@ pub fn verify_ed25519_instruction_data(
     let msg_size = u16::from_le_bytes([data[12], data[13]]) as usize;
     let msg_ix_index = u16::from_le_bytes([data[14], data[15]]);
 
-    // Данные подписи/ключа/сообщения должны лежать в самой ed25519-инструкции.
+    // Signature/key/message data must live in the ed25519 instruction itself.
     let is_self = |i: u16| i == 0 || i == u16::MAX;
     if !is_self(sig_ix_index) || !is_self(pk_ix_index) || !is_self(msg_ix_index) {
         return false;

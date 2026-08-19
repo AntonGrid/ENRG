@@ -1,25 +1,25 @@
 use anchor_lang::prelude::*;
 
-/// EnergyProfile — хранит метаданные устройства и скользящее окно энергии.
+/// EnergyProfile — stores device metadata and the rolling energy window.
 ///
 /// Seeds PDA: [b"profile", authority.key().as_ref()]
 #[account]
 pub struct EnergyProfile {
-    /// Владелец профиля (authority).
+    /// Profile owner (authority).
     pub authority: Pubkey,
-    /// ID устройства (из Device Registry).
+    /// Device ID (from the Device Registry).
     pub device_id: Pubkey,
-    /// Номинальная мощность устройства (Вт).
+    /// Device rated power (W).
     pub rated_power: u64,
-    /// Тип устройства (строка до 32 байт).
+    /// Device type (string up to 32 bytes).
     pub device_type: String,
-    /// Локация (строка до 64 байт).
+    /// Location (string up to 64 bytes).
     pub location: String,
-    /// Скользящее окно энергии за 30 дней (Вт·ч).
+    /// Rolling energy window for 30 days (Wh).
     pub device_energy_30d: u128,
-    /// Время последнего обновления окна.
+    /// Time of the last window update.
     pub device_energy_updated_at: i64,
-    /// Bump seed для PDA.
+    /// Bump seed for the PDA.
     pub bump: u8,
 }
 

@@ -7,16 +7,16 @@ use crate::constants::{
 use crate::error::ErrorCode;
 use crate::state::*;
 
-/// Bootstrap-путь для FounderVesting.
+/// Bootstrap path for FounderVesting.
 ///
-/// Аккаунт можно получить двумя способами (обратно совместимо):
-/// 1. **Генезис/пре-сид** (localnet `solana-test-validator --account`,
-///    файл `tests/genesis/founder-vesting.json`): аккаунт уже существует по
-///    адресу `findProgramAddress([b"founder-vesting"])` и принадлежит программе —
-///    `init_if_needed` пропускает инициализацию, поля перезаписываются.
-/// 2. **On-chain bootstrap** (Devnet/mainnet): аккаунт отсутствует — `init_if_needed`
-///    создаёт его программой по тому же seed (payer = founder), далее обработчик
-///    заполняет поля. Никакой внешней genesis-инъекции не требуется.
+/// The account can be obtained in two ways (backward compatible):
+/// 1. **Genesis/pre-seed** (localnet `solana-test-validator --account`,
+///    file `tests/genesis/founder-vesting.json`): the account already exists at
+///    `findProgramAddress([b"founder-vesting"])` and belongs to the program —
+///    `init_if_needed` skips initialization and the fields are overwritten.
+/// 2. **On-chain bootstrap** (Devnet/mainnet): the account is absent — `init_if_needed`
+///    creates it via the program with the same seed (payer = founder); the handler
+///    then fills the fields. No external genesis injection is required.
 #[derive(Accounts)]
 pub struct InitializeFounderVesting<'info> {
     #[account(
@@ -39,8 +39,8 @@ pub struct ClaimVested<'info> {
     #[account(mut)]
     pub vesting: Account<'info, FounderVesting>,
 
-    /// Источник — тот же founder ATA, на который был заминчен премайн
-    /// (владелец — FOUNDER_WALLET). Токены нельзя вывести откуда-либо ещё.
+    /// Source — the same founder ATA where the premine was minted
+    /// (owner — FOUNDER_WALLET). Tokens cannot be withdrawn from anywhere else.
     #[account(
         mut,
         constraint = founder_ata.owner == FOUNDER_WALLET
@@ -48,7 +48,7 @@ pub struct ClaimVested<'info> {
     )]
     pub founder_ata: Account<'info, TokenAccount>,
 
-    /// Куда переводим — ATA кошелька основателя.
+    /// Destination — the founder wallet ATA.
     #[account(mut)]
     pub destination_ata: Account<'info, TokenAccount>,
 
@@ -62,8 +62,8 @@ pub fn initialize_founder_vesting(
     ctx: Context<InitializeFounderVesting>,
 ) -> Result<()> {
 
-    // Единый бенефициар founder-вестинга зашит в программу:
-    // инициализировать вестинг может только FOUNDER_WALLET.
+    // The single founder-vesting beneficiary is hard-coded into the program:
+    // only FOUNDER_WALLET can initialize the vesting.
     require!(
         ctx.accounts.authority.key() == FOUNDER_WALLET,
         ErrorCode::Unauthorized
@@ -73,10 +73,10 @@ pub fn initialize_founder_vesting(
     let now = Clock::get()?.unix_timestamp;
 
     vesting.founder = FOUNDER_WALLET;
-    vesting.total_amount = FOUNDER_ALLOCATION_ATOMIC; // 2e17 зашито
+    vesting.total_amount = FOUNDER_ALLOCATION_ATOMIC; // 2e17 hard-coded
     vesting.start_time = now;
-    vesting.cliff = FOUNDER_VESTING_CLIFF;      // 1 год
-    vesting.release = FOUNDER_VESTING_RELEASE;  // 3 года
+    vesting.cliff = FOUNDER_VESTING_CLIFF;      // 1 year
+    vesting.release = FOUNDER_VESTING_RELEASE;  // 3 years
     vesting.withdrawn = 0;
     vesting.last_claim = now;
 
@@ -96,7 +96,7 @@ pub fn claim_vested(
 
     let now = Clock::get()?.unix_timestamp;
 
-    // Cliff + линейный release (чистая функция из state::vesting).
+    // Cliff + linear release (pure function from state::vesting).
     let vested = vesting.vested_at(now);
 
     require!(
@@ -113,11 +113,11 @@ pub fn claim_vested(
         ErrorCode::NothingToClaim
     );
 
-    // РЕАЛЬНЫЙ перевод с founder_ata на destination_ata.
-    // authority (Signer = FOUNDER_WALLET) подписывает transfer, потому что
-    // founder_ata принадлежит FOUNDER_WALLET. Источник строго founder_ata
-    // (создаётся и пополняется только премайном), сумма ограничена vested —
-    // вывести раньше времени невозможно.
+    // ACTUAL transfer from founder_ata to destination_ata.
+    // authority (Signer = FOUNDER_WALLET) signs the transfer because
+    // founder_ata belongs to FOUNDER_WALLET. The source is strictly founder_ata
+    // (created and funded only by the premine), the amount is capped by vested —
+    // early withdrawal is impossible.
     token::transfer(
         CpiContext::new(
             ctx.accounts.token_program.to_account_info(),

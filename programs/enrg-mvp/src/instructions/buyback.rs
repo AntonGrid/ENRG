@@ -6,17 +6,17 @@ use crate::state::*;
 
 /// Burns SRC tokens from the buyback fund.
 ///
-/// Только Vault.authority (protocol admin / временный governor) может
-/// инициировать buyback & burn. Tokens are burned
+/// Only Vault.authority (protocol admin / temporary governor) can
+/// initiate buyback & burn. Tokens are burned
 /// from the protocol-owned buyback account, reducing total supply.
 /// Buyback PDA (fund-buyback) signs for burn because it is the owner of buyback_account.
 ///
-/// TODO(audit, BLOCK 3): authority-only сейчас; при внедрении governance
-/// заменить на governor/мультисиг + (опционально) rate-limit.
+/// TODO(audit, BLOCK 3): authority-only for now; when governance is added,
+/// replace with governor/multisig + (optionally) rate-limit.
 pub fn buyback_and_burn(ctx: Context<BuybackAndBurn>, amount: u64) -> Result<()> {
     require!(amount > 0, ErrorCode::ZeroAmountMint);
 
-    // Авторизация: только Vault.authority (убирает "Anyone can burn").
+    // Authorization: only Vault.authority (removes "Anyone can burn").
     require!(
         ctx.accounts.vault.authority == ctx.accounts.authority.key(),
         ErrorCode::Unauthorized
@@ -87,7 +87,7 @@ pub struct BuybackAndBurn<'info> {
     )]
     pub vault: Box<Account<'info, Vault>>,
 
-    /// Временный governor — Vault.authority (BLOCK 3: убрали "Anyone can burn").
+    /// Temporary governor — Vault.authority (BLOCK 3: removed "Anyone can burn").
     pub authority: Signer<'info>,
 
     #[account(
