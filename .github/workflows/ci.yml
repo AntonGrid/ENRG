@@ -20,23 +20,15 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # The ENRG python tests import the shared axis_core package.
-          # Pinned for CI reproducibility; bump deliberately.
-          # Pinned to the last commit before the Axis-core security hardening
-          # (anti-replay, PoP, oracle signing): the ENRG python tests are stale
-          # duplicates of Axis-core's and are incompatible with the hardened API
-          # until they are deduplicated.
-          pip install "git+https://github.com/AntonGrid/Axis-core.git@b71c4e6620b1c6135ce7a791a46bea7e107ef16e"
           # anchorpy's pytest plugin needs pytest-asyncio and pytest-xprocess.
           pip install pytest jsonschema eth-abi eth-utils pytest-asyncio pytest-xprocess
 
       - name: Run tests
-        # AXIS_ALLOW_MOCK=1 enables the dev-only mock signature algorithm used
-        # by the legacy test fixtures (production mode stays mock_disabled).
-        # The test `test_attestation_deny_example_validates_against_schema` reads
-        # the schema from a sibling `../Axis-core` checkout (workspace layout);
-        # it is deselected here — schema coverage lives in the Axis-core repo.
-        run: AXIS_ALLOW_MOCK=1 pytest -q -p no:anchorpy -k 'not attestation_deny_example_validates_against_schema'
+        # The ENRG python tests are ENRG-specific (tokenomics/mainnet-critical
+        # simulations) and no longer import the shared axis_core package —
+        # the duplicate Axis-core tests were removed in favour of the canonical
+        # suite in the Axis-core repository.
+        run: pytest -q -p no:anchorpy
 
   rust:
     name: Rust unit tests (cargo test -p enrg-mvp)
