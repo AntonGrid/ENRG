@@ -22,7 +22,11 @@ jobs:
           pip install -r requirements.txt
           # The ENRG python tests import the shared axis_core package.
           # Pinned for CI reproducibility; bump deliberately.
-          pip install "git+https://github.com/AntonGrid/Axis-core.git@b6024d99f7a967b46bb1ff6bf44b4c7b97832bb6"
+          # Pinned to the last commit before the Axis-core security hardening
+          # (anti-replay, PoP, oracle signing): the ENRG python tests are stale
+          # duplicates of Axis-core's and are incompatible with the hardened API
+          # until they are deduplicated.
+          pip install "git+https://github.com/AntonGrid/Axis-core.git@b71c4e6620b1c6135ce7a791a46bea7e107ef16e"
           # anchorpy's pytest plugin needs pytest-asyncio and pytest-xprocess.
           pip install pytest jsonschema eth-abi eth-utils pytest-asyncio pytest-xprocess
 
