@@ -3,15 +3,17 @@
  *
  * Changes relative to v1/v2:
  *   1. (H-3) NO hard-coded private key: the key is generated on the
- *      first boot and stored in NVS (Preferences) or in a protected
- *      ATECC608A slot (if ENRG_USE_ATECC608=1).
+ *      first boot and stored in NVS (Preferences) [tier: basic] or in a
+ *      protected ATECC608A slot (if ENRG_USE_ATECC608=1) [tier: hardware-aided].
  *   2. (H-4) Optional Secure Element ATECC608A as a protected store
  *      for the seed key. IMPORTANT: ATECC608A does NOT support Ed25519 — the signature
  *      is computed in the CPU; the chip is used as a protected Data-Zone slot
- *      (the seed is not in plain NVS). For FULL hardware Ed25519 signing
- *      an NXP SE050 path was added (ENRG_USE_SE050=1, env esp32dev-se050):
+ *      (the seed is not in plain NVS) [tier: hardware-aided].
+ *      For FULL hardware Ed25519 signing an NXP SE050 path was added
+ *      (ENRG_USE_SE050=1, env esp32dev-se050) [tier: conforming]:
  *      the key is generated and signing happens INSIDE the chip (ADR-0001).
  *      If the chip is unavailable — key in NVS + a warning.
+ *      Mainnet requires tier: conforming (see ADR-0007 trust tiers).
  *   3. Binary signature format (as on-chain OracleReport::device_message_to_sign):
  *        device_id(32) || nonce(8 LE) || timestamp(8 LE) || energy_wh(8 LE)
  *   4. Wall-clock via NTP (not millis()).

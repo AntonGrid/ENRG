@@ -14,14 +14,21 @@ Arduino sketches for ESP32 that read energy data from a PZEM-004T sensor, sign i
 ## v3 — security-hardened
 
 - **H-3**: нет захардкоженных ключей. Ed25519-ключ генерируется при первой
-  загрузке и хранится в NVS (`Preferences`) либо в защищённом Data-Zone слоте
-  ATECC608A (`ENRG_USE_ATECC608=1`).
+  загрузке и хранится в NVS (`Preferences`, tier `basic`) либо в защищённом
+  Data-Zone слоте ATECC608A (`ENRG_USE_ATECC608=1`, tier `hardware-aided`).
 - **H-4**: опциональный Secure Element ATECC608A. ВАЖНО: ATECC608A не умеет
   Ed25519 — чип используется как защищённое хранилище seed, подпись выполняется
-  в CPU. **Полная аппаратная подпись Ed25519** — NXP SE050
-  (`ENRG_USE_SE050=1`, env `esp32dev-se050`): ключ генерируется и подпись
-  выполняется ВНУТРИ чипа. См. **`SE050-HARDWARE-SIGNING.md`** (документированный
-  компромисс MVP + bring-up guide).
+  в CPU (tier `hardware-aided`). **Полная аппаратная подпись Ed25519** — NXP SE050
+  (`ENRG_USE_SE050=1`, env `esp32dev-se050`, tier `conforming`): ключ генерируется
+  и подпись выполняется ВНУТРИ чипа. См. **`SE050-HARDWARE-SIGNING.md`**
+  (документированный компромисс MVP + bring-up guide).
+
+> **Key storage trust tiers (ADR-0007):** `basic` — key in NVS/flash
+> (dev/education, NOT for production); `hardware-aided` — seed in a Secure
+> Element slot, CPU signing (key material appears in RAM);
+> `conforming` — key inside the Secure Element with on-chip Ed25519 signing.
+> Mainnet requires `conforming`; `hardware-aided` only with a documented risk
+> assessment and a governance decision.
 - **Бинарный формат подписи** (on-chain): `device_id(32) || nonce(8 LE) || timestamp(8 LE) || energy_wh(8 LE)`
   — совпадает с `OracleReport::device_message_to_sign()`.
 - **Wall-clock** через NTP (`time()`), а не `millis()`.
@@ -67,7 +74,7 @@ cd firmware/esp32_proof_sender
 # OTA-версия (dual-bank A/B + anti-rollback, ADR-0008) — для серийных устройств
 pio run -e esp32dev-ota
 
-# Базовая версия (ключ в NVS) / ATECC608A
+# Базовая версия (ключ в NVS — tier basic) / ATECC608A (tier hardware-aided)
 pio run -e esp32dev
 pio run -e esp32dev-atecc
 ```

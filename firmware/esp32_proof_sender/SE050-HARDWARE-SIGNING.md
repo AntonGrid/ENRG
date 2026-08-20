@@ -11,13 +11,20 @@
 | Аспект | Реализация | Оценка ADR-0001/0007 |
 |---|---|---|
 | Генерация ключа | На устройстве при первой загрузке (seed из CSPRNG) | ✅ |
-| Хранилище seed | **NVS** (flash) **или** Data-Zone слот **ATECC608A** (`ENRG_USE_ATECC608=1`) | ⚠️ Частично |
+| Хранилище seed | **NVS** (flash, tier `basic`) **или** Data-Zone слот **ATECC608A** (`ENRG_USE_ATECC608=1`, tier `hardware-aided`) | ⚠️ Частично |
 | Подпись Ed25519 | **В CPU** (rweather Crypto `Ed25519::sign`) | ⚠️ Частично |
-| Аппаратная подпись Ed25519 | **NXP SE050** — добавлен путь `ENRG_USE_SE050=1` (env `esp32dev-se050`), требует чипа и библиотеки `se050` | ✅ Полное (при наличии чипа) |
+| Аппаратная подпись Ed25519 | **NXP SE050** (tier `conforming`) — добавлен путь `ENRG_USE_SE050=1` (env `esp32dev-se050`), требует чипа и библиотеки `se050` | ✅ Полное (при наличии чипа) |
 
 > **ATECC608A не поддерживает Ed25519** — чип используется как защищённый
 > Data-Zone slot для seed (секрет не лежит в открытом NVS), но сама подпись
 > выполняется в CPU. Это **документированный компромисс** MVP.
+
+**Trust tiers (ADR-0007):** `basic` = key in NVS/flash (dev/education, NOT for
+production); `hardware-aided` = seed in a Secure Element slot, CPU signing
+(ATECC608A — key material appears in RAM); `conforming` = key inside the Secure
+Element with on-chip Ed25519 signing (SE050). Mainnet requires `conforming`;
+`hardware-aided` only with a documented risk assessment and a governance
+decision.
 
 ### Остаточные риски компромисса (NVS / CPU-подпись)
 
