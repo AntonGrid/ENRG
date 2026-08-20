@@ -22,10 +22,11 @@ pub const MAX_CLOCK_SKEW: i64 = 300;
 /// Number of decimal places for the SRC token.
 pub const SRC_DECIMALS: u8 = 9;
 
-/// Scaling basis used in reward formulas (atomars per "basis unit").
-/// SRC_BASIS = 10^(SRC_DECIMALS - 6) = 10^3.
-/// Kept separate from the supply cap; it only scales energy->reward math.
-pub const SRC_BASIS: u64 = 10u64.pow(SRC_DECIMALS as u32 - 6);
+/// Scaling factor from verified energy (Wh) to SRC atomic units.
+/// SRC_BASIS = 10^SRC_DECIMALS = 10^9 atomics per SRC, so the spec peg
+/// "1 MWh of verified energy production = 1 SRC" holds at genesis
+/// (reward_for_energy returns atomic units; 1 SRC = 10^9 atomics).
+pub const SRC_BASIS: u64 = 10u64.pow(SRC_DECIMALS as u32);
 
 /// Total commission (per cent) taken from each gross reward.
 pub const COMMISSION_PERCENT: u64 = 15;

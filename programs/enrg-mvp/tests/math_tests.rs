@@ -62,3 +62,18 @@ fn reward_decreases_as_supply_grows() {
 fn zero_energy_produces_zero_reward() {
     assert_eq!(calculate_reward(0, 0), 0);
 }
+
+#[test]
+fn golden_peg_one_mwh_equals_one_src() {
+    // Spec: "1 MWh of verified energy production = 1 SRC"
+    // (docs/protocol/blockchain/protocol-economics.md). At genesis (supply 0),
+    // 1 MWh (1_000_000 Wh) must mint exactly 1 SRC = 10^9 atomics.
+    assert_eq!(calculate_reward(1_000_000, 0), 1_000_000_000);
+    // Monotonicity: the same 1 MWh yields strictly fewer atomics as supply grows.
+    let r0 = calculate_reward(1_000_000, 0);
+    let r50 = calculate_reward(1_000_000, MAX_SUPPLY_ATOMIC / 2);
+    let r90 = calculate_reward(1_000_000, MAX_SUPPLY_ATOMIC * 9 / 10);
+    assert!(r0 > r50, "r0={r0} r50={r50}");
+    assert!(r50 > r90, "r50={r50} r90={r90}");
+    assert!(r90 > 0);
+}

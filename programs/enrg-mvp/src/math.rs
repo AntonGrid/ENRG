@@ -114,7 +114,7 @@ pub fn emission_difficulty(total_supply_atomic: u64) -> u128 {
     exp_fp(x)
 }
 
-/// Wh per one SRC unit (in SRC_BASIS terms).
+/// Wh of verified energy required to mint one SRC (emission difficulty).
 pub fn energy_per_src(total_supply_atomic: u64) -> u128 {
     let difficulty = emission_difficulty(total_supply_atomic);
     (INITIAL_ENERGY_PER_SRC as u128)
@@ -160,7 +160,8 @@ pub fn effective_energy_per_src(
         .unwrap_or(0)
 }
 
-/// Converts confirmed energy into SRC units (in SRC_BASIS terms).
+/// Converts confirmed energy (Wh) into SRC atomic units.
+/// 1 SRC = 10^9 atomics; at genesis 1 MWh (1_000_000 Wh) mints exactly 1 SRC.
 pub fn reward_for_energy(energy_wh: u64, energy_per_src: u128) -> u64 {
     if energy_per_src == 0 {
         return 0;
@@ -260,8 +261,8 @@ mod tests {
         let e90 = energy_per_src(MAX_SUPPLY_ATOMIC * 9 / 10);
         assert_eq!(e90, 7_943_282);
 
-        // reward for 10 kWh at 0 supply: 10_000_000 * 1000 / 1_000_000 = 10_000
-        assert_eq!(calculate_reward(10_000_000, 0), 10_000);
+        // reward for 10 MWh at 0 supply: 10_000_000 * 10^9 / 1_000_000 = 10_000_000_000
+        assert_eq!(calculate_reward(10_000_000, 0), 10_000_000_000);
 
         // multiplier at share=0.001: 1 + log10(1.001) ≈ 1.0004340775
         let m = device_difficulty_multiplier(1_000, 1_000_000);
