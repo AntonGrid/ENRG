@@ -67,6 +67,12 @@ jobs:
         run: npm ci
 
       - name: Run oracle tests (no validator / no external network)
+        env:
+          # Force the spawned oracle servers to fail fast (connection refused)
+          # instead of hanging on the public devnet RPC. The tests assert the
+          # "not registered on-chain" error path, which the oracle returns when
+          # it cannot reach the on-chain registry.
+          RPC_ENDPOINT: "http://127.0.0.1:1"
         run: |
           npm run test:policy
           npm run test:manifest
