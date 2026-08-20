@@ -61,7 +61,11 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          # The oracle tests are developed and verified against Node 24. The
+          # spawn-based suites (manifest/firmware/keyrotation) depend on the
+          # better-sqlite3 native binding, which fails to load on Node 20
+          # (ERR_DLOPEN_FAILED). Node 24 is used so the full mocha suite runs.
+          node-version: "24"
 
       - name: Install dependencies
         run: npm ci
