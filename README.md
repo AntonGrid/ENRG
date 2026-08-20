@@ -59,12 +59,18 @@ npm install
 pip install -r requirements.txt
 
 # Install Anchor dependencies
-cd programs && anchor build
-Run Oracle
-bash
+cd programs && anchor build && cd ..
+```
+
+### Run Oracle
+
+```bash
 node server.js
-Run Tests
-bash
+```
+
+### Run Tests
+
+```bash
 # Python tests
 pytest
 
@@ -73,32 +79,39 @@ anchor test
 
 # Foundry tests
 cd onchain && forge test
-Architecture
+```
+
+## Architecture
+
 ENRG follows the Axis Protocol trust pipeline:
 
-text
+```text
 Device → Proof → Oracle → Attestation → Smart Contract → SRC Token
-Components
-Component	Responsibility
-Device	Measures energy, signs Proof with Ed25519.
-Oracle	Verifies signatures, accumulates data, calls mint.
-Smart Contract	Mints SRC tokens based on verified Proofs.
-Owner	Receives tokens proportional to energy produced.
-Relationship with Axis Repositories
-Axis-protocol — the normative specification of the trust standard.
+```
 
-Axis-core — the universal reference implementation of the protocol.
+## Components
 
-ENRG (this repository) — the first application on Axis, focused on energy tokenization on Solana.
+| Component | Responsibility |
+| :--- | :--- |
+| Device | Measures energy, signs Proof with Ed25519. |
+| Oracle | Verifies signatures, accumulates data, calls mint. |
+| Smart Contract | Mints SRC tokens based on verified Proofs. |
+| Owner | Receives tokens proportional to energy produced. |
 
-Contributing
+## Relationship with Axis Repositories
+
+- **Axis-protocol** — the normative specification of the trust standard.
+- **Axis-core** — the universal reference implementation of the protocol.
+- **ENRG** (this repository) — the first application on Axis, focused on energy tokenization on Solana.
+
+## Contributing
+
 Contributions are welcome! Please read:
 
-CONTRIBUTING.md — guidelines for PRs and coding standards.
+- [CONTRIBUTING.md](./CONTRIBUTING.md) — guidelines for PRs and coding standards.
+- [SECURITY.md](./SECURITY.md) — for reporting security issues.
+- [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) — community standards.
 
-SECURITY.md — for reporting security issues.
+## License
 
-CODE_OF_CONDUCT.md — community standards.
-
-License
 Apache 2.0 © 2026 Anton Gulda
