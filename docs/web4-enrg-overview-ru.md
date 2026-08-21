@@ -1,166 +1,166 @@
-# ENRG как Web4: архитектурное отличие от Web3
+# ENRG as Web4: the architectural difference from Web3
 
-## 1. От Web3 к Web4
+## 1. From Web3 to Web4
 
-Web3 отвечает на вопрос:
+Web3 answers the question:
 
-> «Как сделать владение и операции с **цифровыми объектами** (токены, NFT, состояния смарт‑контрактов) децентрализованными и проверяемыми?»
+> "How do we make ownership and operations over **digital objects** (tokens, NFTs, smart-contract state) decentralized and verifiable?"
 
-Блокчейн Web3 видит мир через:
+The Web3 blockchain sees the world through:
 
-- адреса (аккаунты),
-- цифровые активы (балансы, токены),
-- состояние смарт‑контрактов.
+- addresses (accounts),
+- digital assets (balances, tokens),
+- smart-contract state.
 
-Всё, что происходит **вне блокчейна**, для Web3 по умолчанию:
+Everything that happens **off-chain** is for Web3 by default:
 
-- либо не существует,
-- либо существует как «данные в транзакции», которым нельзя доверять без внешней инфраструктуры (оракулы, API‑шлюзы и т.п.).
+- either nonexistent,
+- or exists as "transaction data" that cannot be trusted without external infrastructure (oracles, API gateways, etc.).
 
-**ENRG‑тип протокола** добавляет ещё один слой:
+**An ENRG-type protocol** adds another layer:
 
-> «Как сделать **события реального мира** частью децентрализованного консенсуса с такой же жёсткой проверяемостью, как балансы и хэши?»
+> "How do we make **real-world events** part of the decentralized consensus with the same strict verifiability as balances and hashes?"
 
-То есть:
+That is:
 
-- Web3: децентрализованные **цифровые состояния**.  
-- ENRG (в смысле Web4‑уровня): децентрализованные **достоверные события физического мира** + цифровые состояния и экономика вокруг них.
-
----
-
-## 2. Архитектура ENRG как Web4‑слоя
-
-ENRG вводит набор примитивов, которых нет “из коробки” в Web3:
-
-### 2.1. Real‑World Actors (устройства и процессы)
-
-В Web3 всё крутится вокруг:
-
-- пользователей (ключи, кошельки),
-- смарт‑контрактов.
-
-ENRG добавляет отдельный класс первоклассных сущностей:
-
-- устройства (счётчики, инверторы, ESP32, датчики и т.п.),
-- промышленные контроллеры,
-- и вообще любые физические акторы с криптографической идентичностью.
-
-Они становятся **полноценными участниками протокола**, а не просто источниками “данных в комментариях”.
-
-### 2.2. От измерений к доказательствам (Measurements → Proofs)
-
-ENRG описывает строгий путь:
-
-1. Устройство фиксирует измерение (`value`, `timestamp`, `nonce`).
-2. Формирует сообщение в заданном формате.
-3. Подписывает его своим ключом (например, Ed25519).
-4. Из последовательности сообщений и проверок получается **доказательство события** (proof), пригодное для on‑chain валидации.
-
-Это не произвольные данные в транзакции, а формализованный слой, к которому применимы строгие правила проверки.
-
-### 2.3. Оракулы как формальная часть протокола
-
-В Web3 оракулы — обычно внешний сервис “подвезите данные снаружи”. Формальная модель слабая.
-
-В ENRG:
-
-- определены роли оракулов,
-- формат их отчётов (Oracle Reports),
-- криптографические требования,
-- политики валидации.
-
-Отчёт оракула — это не просто payload, а **часть формального контура консенсуса о реальном событии**.
-
-### 2.4. Экономический движок, привязанный к физическим событиям
-
-В большинстве Web3‑систем токены:
-
-- выпускаются по фиксированному графику (инфляция, халвинги),
-- или “печатаются” по внутренним правилам dApp (staking, AMM, DAO).
-
-ENRG добавляет:
-
-- эмиссионную модель, которая **математически зависит** от потока подтверждённых событий физического мира,
-- экономику, которая “слушает” не только транзакции, но и **валидированные измерения устройств**.
+- Web3: decentralized **digital state**.  
+- ENRG (in the Web4-layer sense): decentralized **trustworthy physical-world events** + digital state and economics around them.
 
 ---
 
-## 3. ENRG‑Core, профили и токены
+## 2. ENRG architecture as a Web4 layer
 
-Чтобы не путать ядро с конкретным доменом, ENRG разделяется на три уровня:
+ENRG introduces a set of primitives that Web3 does not have "out of the box":
 
-### 3.1. ENRG‑Core (Web4‑слой)
+### 2.1. Real-World Actors (devices and processes)
 
-> **ENRG‑Core — это общий слой доказательств и стимулов для событий реального мира.**
+In Web3 everything revolves around:
 
-Он определяет:
+- users (keys, wallets),
+- smart contracts.
 
-- модель идентичности устройств,
-- формат сообщений и доказательств,
-- роли оракулов и правила верификации отчётов on‑chain,
-- общие экономические примитивы (эмиссия по функции `f(event, total_supply)`, фонды, staking, DAO).
+ENRG adds a separate class of first-class entities:
 
-ENRG‑Core **ничего не знает** о том, что измеряется: энергия, логистика, климат — это уже уровень профилей.
+- devices (meters, inverters, ESP32, sensors, etc.),
+- industrial controllers,
+- and, in general, any physical actor with a cryptographic identity.
+
+They become **full protocol participants**, not just sources of "data in comments".
+
+### 2.2. From measurements to proofs (Measurements → Proofs)
+
+ENRG describes a strict path:
+
+1. The device records a measurement (`value`, `timestamp`, `nonce`).
+2. Builds a message in a defined format.
+3. Signs it with its key (e.g. Ed25519).
+4. From the sequence of messages and checks we get a **proof of the event**, suitable for on-chain validation.
+
+This is not arbitrary transaction data but a formalized layer with strict validation rules.
+
+### 2.3. Oracles as a formal part of the protocol
+
+In Web3 oracles are usually an external "bring outside data" service. The formal model is weak.
+
+In ENRG:
+
+- oracle roles are defined,
+- the format of their reports (Oracle Reports),
+- the cryptographic requirements,
+- validation policies.
+
+An oracle report is not just a payload — it is **part of the formal consensus loop about a real event**.
+
+### 2.4. An economic engine bound to physical events
+
+In most Web3 systems tokens:
+
+- are issued on a fixed schedule (inflation, halvings),
+- or are "printed" by internal dApp rules (staking, AMM, DAO).
+
+ENRG adds:
+
+- an emission model that **mathematically depends** on the flow of confirmed physical-world events,
+- an economy that "listens" not only to transactions but also to **validated device measurements**.
+
+---
+
+## 3. ENRG-Core, profiles and tokens
+
+To avoid confusing the core with a concrete domain, ENRG is split into three levels:
+
+### 3.1. ENRG-Core (the Web4 layer)
+
+> **ENRG-Core is the common proof-and-incentive layer for real-world events.**
+
+It defines:
+
+- the device identity model,
+- the message and proof formats,
+- oracle roles and on-chain report verification rules,
+- common economic primitives (emission via `f(event, total_supply)`, funds, staking, DAO).
+
+ENRG-Core **knows nothing** about what is measured: energy, logistics, climate — that is the profiles level.
 
 ### 3.2. Deployment Profiles
 
-> **Deployment Profile — конкретный домен, в котором ENRG‑Core применяется к определённому типу событий.**
+> **Deployment Profile — a concrete domain where ENRG-Core is applied to a specific type of event.**
 
-Профиль задаёт:
+A profile defines:
 
-- что считается событием,
-- какие устройства и единицы измерения используются,
-- какие доппроверки нужны (границы, монотонность, география и т.п.),
-- какой **нативный токен профиля** выпускается.
+- what counts as an event,
+- which devices and units of measurement are used,
+- which extra checks are needed (bounds, monotonicity, geography, etc.),
+- which **profile-native token** is issued.
 
-Примеры:
+Examples:
 
-- ENRG‑Energy v1 (энергетика),
-- ENRG‑Logistics v1 (логистика),
-- ENRG‑Climate v1 (климатические данные),
-- и т.д.
+- ENRG-Energy v1 (energy),
+- ENRG-Logistics v1 (logistics),
+- ENRG-Climate v1 (climate data),
+- etc.
 
-### 3.3. SRC как токен энергетического профиля
+### 3.3. SRC as the energy-profile token
 
-Важно:
+Important:
 
-> **SRC — это нативный токен именно профиля ENRG‑Energy, а не универсальный токен “всех событий мира”.**
+> **SRC is the native token of the ENRG-Energy profile specifically, not a universal "all events in the world" token.**
 
-В ENRG‑Energy v1:
+In ENRG-Energy v1:
 
-- объектом событий является **подтверждённое производство электроэнергии**;
-- SRC выпускается только за валидированные энергетические события (Proof of Production);
-- экономическая модель SRC (эмиссия, фонды, staking, buyback) настроена под энергетику.
+- the event object is **confirmed electricity production**;
+- SRC is issued only for validated energy events (Proof of Production);
+- the SRC economic model (emission, funds, staking, buyback) is tuned for energy.
 
-Для других профилей:
+For other profiles:
 
-- используется тот же ENRG‑Core (схема device → proof → oracle → on‑chain),
-- но может вводиться **свой профиль‑нативный токен**:
-  - условный `LOG` для логистики,
-  - `CLM` для климатических событий и т.п.,
-- с собственной экономикой и фондами.
+- the same ENRG-Core is used (device → proof → oracle → on-chain),
+- but a **profile-native token** can be introduced:
+  - e.g. `LOG` for logistics,
+  - `CLM` for climate events, etc.,
+- with its own economics and funds.
 
-То есть:
+That is:
 
-- **SRC = токенизации подтверждённого производства электроэнергии;**
-- **Web4‑слой ENRG = архитектура доказательств и стимулов, поверх которой могут жить разные профили и их токены.**
+- **SRC = tokenization of confirmed electricity production;**
+- **The ENRG Web4 layer = a proof-and-incentive architecture on top of which different profiles and their tokens can live.**
 
 ---
 
-## 4. Почему это именно новый слой, а не просто Web3‑dApp
+## 4. Why this is a new layer, not just a Web3 dApp
 
-Сводка архитектурных отличий:
+Summary of the architectural differences:
 
-1. **Новый класс сущностей**  
-   - Web3: аккаунты, контракты.  
-   - ENRG/Web4: устройства и физические процессы как первоклассные акторы.
+1. **A new class of entities**  
+   - Web3: accounts, contracts.  
+   - ENRG/Web4: devices and physical processes as first-class actors.
 
-2. **Новая ось консенсуса**  
-   - Web3: транзакции и состояния внутри блокчейна.  
-   - ENRG/Web4: консенсус о том, **какие события реального мира произошли и были валидно зафиксированы**.
+2. **A new consensus axis**  
+   - Web3: transactions and state inside the blockchain.  
+   - ENRG/Web4: consensus about **which real-world events happened and were validly recorded**.
 
-3. **Формализованный путь “реальность → консенсус”**  
-   Не ad‑hoc оракулы, а детерминированный пайплайн:
+3. **A formalized "reality → consensus" path**  
+   Not ad-hoc oracles but a deterministic pipeline:
    ```text
    Physical Event
         ↓
@@ -175,7 +175,7 @@ ENRG‑Core **ничего не знает** о том, что измеряет�
    Domain-native Token Emission (SRC / LOG / ...)
    ```
 
-4. **Экономика поверх реальных событий, а не только поверх цифровых состояний**  
-   Награды и эмиссия зависят от подтверждённых физических процессов.
+4. **Economics over real events, not just over digital state**  
+   Rewards and emission depend on confirmed physical processes.
 
-Именно поэтому ENRG‑тип архитектуры можно честно называть **следующим слоем поверх Web3**: это не очередной токен, а **универсальный слой доверия и стимулов к событиям реального мира**, с первым профилем — энергетика и токен SRC.
+This is why an ENRG-type architecture can honestly be called the **next layer over Web3**: not another token, but a **universal layer of trust and incentives for real-world events**, with the first profile — energy and the SRC token.
