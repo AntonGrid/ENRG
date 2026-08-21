@@ -1,165 +1,165 @@
 ENRG Protocol Master Technical Specification v7.0
 
-Комплексное описание видения основателя, технической архитектуры, токеномики, модели безопасности и дорожной карты.
+A comprehensive description of the founder's vision, technical architecture, tokenomics, security model and roadmap.
 
-Основано на текущей реализации ENRG и запланированной архитектуре.
+Based on the current ENRG implementation and the planned architecture.
 
-Май 2026
+May 2026
 
 ---
 
 ### 1. Executive Summary
 
-ENRG Protocol спроектирован как децентрализованный протокол верификации и расчётов за энергию. В документе описаны архитектура, логика работы, механизмы безопасности, математическая модель эмиссии и дорожная карта развития.
+The ENRG Protocol is designed as a decentralized energy verification and settlement protocol. This document describes the architecture, operating logic, security mechanisms, the mathematical emission model and the development roadmap.
 
-Протокол опирается на концепцию Proof-of-Production — криптографическое доказательство генерации энергии, получаемое от IoT-устройств. Ключевая инновация — асимптотическая модель эмиссии, при которой сложность добычи токенов растёт экспоненциально, что гарантирует вечный дефицит. Протокол строится на четырёх уровнях: физическом (IoT), сетевом (оракулы и пулы), протокольном (смарт-контракты Solana) и рыночном (P2P-торговля и сертификаты). Текущая реализация включает работающий смарт-контракт, протестированное IoT-устройство и полностью описанную экономику токена.
+The protocol relies on the Proof-of-Production concept — a cryptographic proof of energy generation obtained from IoT devices. The key innovation is the asymptotic emission model, in which token-mining difficulty grows exponentially, guaranteeing perpetual scarcity. The protocol is built on four layers: physical (IoT), network (oracles and pools), protocol (Solana smart contracts) and market (P2P trading and certificates). The current implementation includes a working smart contract, a tested IoT device and a fully described token economy.
 
 ### 2. Mission and Vision
 
-Миссия ENRG — создать открытый, программируемый и децентрализованный рынок энергии, доступный любому производителю вне зависимости от масштаба. Протокол должен стать стандартом токенизации энергии, аналогично тому, как Биткоин стал стандартом децентрализованных денег. Видение — мир, в котором любая солнечная панель, ветряк или микро-ГЭС может монетизировать свою энергию без посредников.
+The ENRG mission is to create an open, programmable and decentralized energy market accessible to any producer regardless of scale. The protocol must become the standard for energy tokenization, just as Bitcoin became the standard for decentralized money. The vision is a world where any solar panel, wind turbine or micro-hydro plant can monetize its energy without intermediaries.
 
 ### 3. Energy Market Problem
 
-Текущий рынок энергии ($8 трлн) контролируется ограниченным кругом централизованных компаний. Малые производители не имеют прямого доступа к рынку и вынуждены продавать энергию по невыгодным ценам. Зелёные субсидии оседают у посредников, а не у реальных генераторов.
+The current energy market ($8 trillion) is controlled by a narrow circle of centralized companies. Small producers have no direct market access and are forced to sell energy at unfavorable prices. Green subsidies settle with intermediaries, not with the actual generators.
 
 ### 4. Protocol Overview
 
-ENRG — это DePIN-протокол, развёрнутый на Solana. Он связывает физическое устройство (IoT-счётчик) с ончейн-токеном через криптографический конвейер. Протокол фиксирует факт генерации, проверяет его и выпускает токены, распределяя их по заданной экономической модели. ENRG — не loyalty points, а реальный актив, обеспеченный математически доказуемой энергией.
+ENRG is a DePIN protocol deployed on Solana. It connects a physical device (an IoT meter) with an on-chain token through a cryptographic pipeline. The protocol records the generation fact, verifies it and issues tokens, distributing them according to the defined economic model. ENRG is not loyalty points but a real asset backed by mathematically provable energy.
 
 ### 5. Four Layer Architecture
 
-Архитектура ENRG состоит из четырёх уровней:
+The ENRG architecture consists of four layers:
 
-1. Физический уровень (Device Layer): IoT-устройства (ESP32+PZEM-004T, а в перспективе Siemens/ABB), измеряющие энергию и подписывающие данные Ed25519.
+1. Physical layer (Device Layer): IoT devices (ESP32+PZEM-004T, later Siemens/ABB) that measure energy and sign data with Ed25519.
 
-2. Сетевой уровень (Oracle Layer): Серверы-оракулы, проверяющие подписи, агрегирующие данные и управляющие пулами производителей.
+2. Network layer (Oracle Layer): oracle servers that verify signatures, aggregate data and manage producer pools.
 
-3. Протокольный уровень (ENRG Core): Смарт-контракты на Solana, отвечающие за минт, стейкинг, вестинг и распределение комиссий.
+3. Protocol layer (ENRG Core): Solana smart contracts responsible for minting, staking, vesting and commission distribution.
 
-4. Рыночный уровень (ENRG Market): Децентрализованный P2P-рынок для торговли энергией, углеродными кредитами и производными инструментами.
+4. Market layer (ENRG Market): a decentralized P2P market for trading energy, carbon credits and derivative instruments.
 
 ### 6. Device Layer
 
-Физические устройства служат источником достоверных данных. Поддерживаются различные классы точности: от любительских (ESP32+PZEM) до промышленных (Siemens SENTRON). Каждое устройство получает уникальную Ed25519-пару ключей, приватный ключ хранится в Secure Element (ATECC608). Данные подписываются на устройстве и отправляются оракулу.
+Physical devices are the source of trustworthy data. Various accuracy classes are supported: from hobbyist (ESP32+PZEM) to industrial (Siemens SENTRON). Each device gets a unique Ed25519 key pair; the private key lives in a Secure Element (ATECC608). Data is signed on the device and sent to the oracle.
 
 ### 7. Oracle Layer
 
-Оракулы выполняют роль моста между физическим и цифровым мирами. Они принимают подписанные пакеты данных, проверяют Ed25519-подпись, валидируют временные метки и nonce, а затем агрегируют показания в пулы. При накоплении пулом порогового значения (например, 1 МВт·ч) оракул отправляет транзакцию в смарт-контракт. В MVP роль оракула выполняет Node.js сервер, в перспективе — децентрализованная сеть Switchboard.
+Oracles act as the bridge between the physical and digital worlds. They receive signed data packets, verify the Ed25519 signature, validate timestamps and nonces, then aggregate readings into pools. When a pool accumulates a threshold value (e.g. 1 MWh), the oracle sends a transaction to the smart contract. In the MVP the oracle role is played by a Node.js server; later, by the decentralized Switchboard network.
 
 ### 8. ENRG Core Architecture
 
-Ядро системы — набор программ на Solana, написанных на Rust с использованием Anchor. Программы разделены по функциям: registry (регистрация устройств), mint_energy (чеканка), vault (управление доходами), buyback_burn, staking, founder_vesting. Взаимодействие между программами осуществляется через CPI (Cross-Program Invocation).
+The system core is a set of Solana programs written in Rust with Anchor. The programs are split by function: registry (device registration), mint_energy (minting), vault (revenue management), buyback_burn, staking, founder_vesting. Programs interact via CPI (Cross-Program Invocation).
 
 ### 9. Current Smart Contract Components
 
-В репозитории реализованы следующие инструкции:
+The following instructions are implemented in the repository:
 
-- initialize_vault — создание хранилища протокола.
+- initialize_vault — creates the protocol vault.
 
-- initialize_funds — инициализация фондов (buyback, стейкинг, DAO, emergency).
+- initialize_funds — initializes the funds (buyback, staking, DAO, emergency).
 
-- create_producer — регистрация производителя энергии.
+- create_producer — registers an energy producer.
 
-- mint_energy — чеканка токенов с распределением 85% пользователю и 15% комиссии.
+- mint_energy — mints tokens with an 85% user / 15% commission split.
 
-- buyback_and_burn — сжигание токенов из байбэк-фонда.
+- buyback_and_burn — burns tokens from the buyback fund.
 
-- stake / unstake — стейкинг и вывод токенов из стейкинга.
+- stake / unstake — staking and unstaking tokens.
 
-- claim_rewards — получение наград за стейкинг.
+- claim_rewards — claims staking rewards.
 
-- initialize_founder_vesting / claim_vested — вестинг токенов основателя.
+- initialize_founder_vesting / claim_vested — founder-token vesting.
 
-Все арифметические операции используют checked_add, checked_mul и т.д. Критические проверки включают валидацию mint_authority, соответствие PDA, защиту от replay-атак через nonce и лимиты мощности.
+All arithmetic uses checked_add, checked_mul, etc. Critical checks include mint_authority validation, PDA conformance, nonce-based replay protection and power limits.
 
 ### 10. Producer Account Model
 
-Аккаунт EnergyProducer хранит:
+The EnergyProducer account stores:
 
-- authority — владелец устройства.
+- authority — the device owner.
 
-- device_id — уникальный идентификатор.
+- device_id — the unique identifier.
 
-- nonce — счётчик для защиты от повторов.
+- nonce — a counter for replay protection.
 
-- energy_wh — накопленная энергия за всё время.
+- energy_wh — the cumulative energy.
 
-- timestamp — время последнего подтверждения.
+- timestamp — the last confirmation time.
 
-- max_power_w — паспортная мощность устройства.
+- max_power_w — the rated device power.
 
-- signature — последняя подпись.
+- signature — the last signature.
 
-- is_initialized — флаг инициализации.
+- is_initialized — the initialization flag.
 
-Аккаунт создаётся один раз и обновляется при каждом успешном минте.
+The account is created once and updated on every successful mint.
 
 ### 11. Vault Architecture
 
-Vault PDA — центральный управляющий аккаунт протокола. Он хранит ссылку на mint и authority (deployer). Vault является mint authority для токена ENRG, что гарантирует выпуск токенов только через протокол. Deployer фиксируется при первом вызове initialize_vault.
+The Vault PDA is the protocol's central management account. It stores the mint reference and the authority (deployer). The Vault is the mint authority for the ENRG token, guaranteeing that tokens are issued only through the protocol. The deployer is pinned on the first initialize_vault call.
 
 ### 12. Mint Energy Flow
 
-1. Оракул вызывает mint_energy, передавая Proof.
+1. The oracle calls mint_energy, passing a Proof.
 
-2. Контракт проверяет authority, nonce, timestamp (не старше 15 минут), mint_authority.
+2. The contract checks authority, nonce, timestamp (no older than 15 minutes), mint_authority.
 
-3. Вычисляется max_energy_wh по формуле max_power_w * 10 / 60.
+3. max_energy_wh is computed with the formula max_power_w * 10 / 60.
 
-4. Вычисляется total_mint = energy_wh * ENRG_BASIS (перевод в базовые единицы).
+4. total_mint = energy_wh * ENRG_BASIS (conversion into base units).
 
-5. Рассчитываются доли комиссии: 20% buyback, 40% стейкинг, 30% DAO, 10% emergency.
+5. The commission shares are calculated: 20% buyback, 40% staking, 30% DAO, 10% emergency.
 
-6. Через CPI mint_to токены распределяются по соответствующим аккаунтам.
+6. Via the CPI mint_to, tokens are distributed to the corresponding accounts.
 
 ### 13. Proof of Production
 
-PoP — криптографический конвейер:
+PoP — the cryptographic pipeline:
 
-1. Устройство измеряет энергию каждые 10 минут.
+1. The device measures energy every 10 minutes.
 
-2. Формирует пакет {device_id, timestamp, energy_wh, nonce}.
+2. Builds a packet {device_id, timestamp, energy_wh, nonce}.
 
-3. Подписывает его Ed25519 приватным ключом.
+3. Signs it with the Ed25519 private key.
 
-4. Отправляет оракулу.
+4. Sends it to the oracle.
 
-5. Оракул проверяет подпись, агрегирует данные в пул и вызывает mint_energy.
+5. The oracle verifies the signature, aggregates the data into a pool and calls mint_energy.
 
 ### 14. Pool Architecture
 
-Для мелких производителей предусмотрена модель пула. Оракул агрегирует данные от множества устройств, и при накоплении общей энергии в 1 МВт·ч инициирует минт. Токены распределяются пропорционально вкладу каждого участника. Это снижает порог входа и обеспечивает регулярные выплаты.
+A pool model is provided for small producers. The oracle aggregates data from many devices and, when the total energy reaches 1 MWh, triggers a mint. Tokens are distributed proportionally to each participant's contribution. This lowers the entry threshold and ensures regular payouts.
 
 ### 15. Device Trust Levels
 
-| Уровень | Оборудование | Лимит майнинга |
+| Tier | Hardware | Mining limit |
 |---------|--------------|----------------|
-| Basic   | ESP32 + PZEM | до 100 kWh/мес |
-| Verified| Сертифицированный бытовой счётчик | до 10 MWh/мес |
-| Industrial | Siemens, ABB | без ограничений |
-| Institutional | Энергокомпания с аудитом | без ограничений |
+| Basic   | ESP32 + PZEM | up to 100 kWh/mo |
+| Verified| Certified home meter | up to 10 MWh/mo |
+| Industrial | Siemens, ABB | unlimited |
+| Institutional | Audited energy company | unlimited |
 
-Уровень влияет на лимиты, требования к верификации и репутационный вес.
+The tier affects the limits, verification requirements and reputation weight.
 
 ### 16. Energy Reputation Score (ERS)
 
-Каждый производитель накапливает репутационный балл, зависящий от:
+Each producer accumulates a reputation score that depends on:
 
-- длительности безупречной работы;
+- the duration of flawless operation;
 
-- объёма верифицированной энергии;
+- the amount of verified energy;
 
-- отсутствия аномалий в профиле генерации.
+- the absence of anomalies in the generation profile.
 
-Высокий ERS даёт преимущества при распределении наград в пуле и доступ к премиальным функциям ENRG Market.
+A high ERS brings advantages in pool reward distribution and access to premium ENRG Market features.
 
 ### 17. Token Design
 
-Токен ENRG — SPL-токен на Solana с 9 десятичными знаками. Максимальное предложение: 1 000 000 000 ENRG. Токен обладает встроенной утилитой: стейкинг (доля от комиссий), доступ к энергоданным, голосование в DAO, расчёты в ENRG Market.
+ENRG is an SPL token on Solana with 9 decimal places. Maximum supply: 1,000,000,000 ENRG. The token has built-in utility: staking (a share of commissions), access to energy data, DAO voting, and settlements in ENRG Market.
 
 ### 18. Tokenomics
 
-Комиссия протокола 15% распределяется:
+The 15% protocol commission is distributed:
 
 - 20% → Buyback & Burn
 
@@ -169,29 +169,29 @@ PoP — криптографический конвейер:
 
 - 10% → Emergency Fund
 
-85% награды достаётся производителю энергии.
+85% of the reward goes to the energy producer.
 
 ### 19. Protocol Treasury
 
-Казначейство протокола состоит из четырёх PDA-аккаунтов: buyback, staking, dao, emergency. Каждый фонд пополняется при каждом минте. Управление средствами осуществляется через DAO-голосование.
+The protocol treasury consists of four PDA accounts: buyback, staking, dao, emergency. Each fund is funded on every mint. Funds are managed via DAO voting.
 
 ### 20. Buyback and Burn
 
-20% от комиссии каждого минта автоматически сжигаются. Это создаёт постоянное дефляционное давление. Механизм реализован через инструкцию buyback_and_burn, которая выполняет burn CPI к SPL Token Program.
+20% of each mint's commission is automatically burned. This creates constant deflationary pressure. The mechanism is implemented via the buyback_and_burn instruction, which performs a burn CPI to the SPL Token Program.
 
 ### 21. Staking Design
 
-Пользователи могут размещать ENRG в стейкинге и получать долю от комиссий протокола. Награды распределяются пропорционально доле в стейкинг-пуле. В текущей реализации используется простой механизм, в будущем планируется внедрение acc_reward_per_share.
+Users can stake ENRG and receive a share of the protocol commissions. Rewards are distributed proportionally to the staking-pool share. The current implementation uses a simple mechanism; acc_reward_per_share is planned for the future.
 
 ### 22. DAO Governance
 
-Управление протоколом будет передано держателям токенов через DAO. Параметры, доступные для голосования: коэффициент экспоненциального халвинга (k), размер комиссии, лимиты для устройств, распределение казначейства.
+Protocol governance will be handed to token holders via a DAO. The votable parameters: the exponential-halving coefficient (k), the commission size, device limits and treasury distribution.
 
 ### 23. Emission Mathematics
 
-Базовая формула: E(S) = 1 МВт·ч × k^S, где S — доля уже добытых токенов, k — коэффициент сложности. При k=10:
+The base formula: E(S) = 1 MWh × k^S, where S is the share of already-mined tokens and k is the difficulty coefficient. With k=10:
 
-| Доля (S) | МВт·ч за 1 ENRG |
+| Share (S) | MWh per 1 ENRG |
 |----------|-----------------|
 | 0%       | 1               |
 | 25%      | 1.78            |
@@ -200,87 +200,87 @@ PoP — криптографический конвейер:
 | 90%      | 1 000           |
 | 99%      | 10 000          |
 
-Модель асимптотическая: последний токен практически недостижим.
+The model is asymptotic: the last token is practically unreachable.
 
 ### 24. Economic Scenarios (k=3/5/10)
 
-При k=3 эмиссия более плавная, при k=10 — резко ускоряющаяся к финалу. Параметр k будет выбран на основе моделирования и утверждён через DAO.
+With k=3 the emission is smoother; with k=10 it accelerates sharply toward the end. The k parameter will be chosen from modeling and approved via the DAO.
 
 ### 25. Threat Model (STRIDE)
 
-Применена модель STRIDE:
+The STRIDE model is applied:
 
-- Spoofing: защита Ed25519-подписями, ATECC608.
+- Spoofing: protected by Ed25519 signatures, ATECC608.
 
-- Tampering: контроль целостности через подпись пакета.
+- Tampering: integrity control via the packet signature.
 
-- Repudiation: nonce и timestamp гарантируют неотказуемость.
+- Repudiation: nonce and timestamp guarantee non-repudiation.
 
-- Information Disclosure: минимизация on-chain данных.
+- Information Disclosure: minimized on-chain data.
 
-- Denial of Service: ограничение газа, проверка лимитов.
+- Denial of Service: gas limits, limit checks.
 
-- Elevation of Privilege: PDA-архитектура, фиксация deployer.
+- Elevation of Privilege: the PDA architecture, deployer pinning.
 
 ### 26. Security Architecture
 
-Многослойная защита:
+Layered protection:
 
-- Уровень устройства: Secure Element, OTA с подписью.
+- Device layer: a Secure Element, signed OTA.
 
-- Сетевой уровень: TLS, децентрализованные оракулы.
+- Network layer: TLS, decentralized oracles.
 
-- Уровень контракта: checked-арифметика, PDA, проверка authority.
+- Contract layer: checked arithmetic, PDAs, authority checks.
 
-- Уровень репутации: ERS понижает вес аномальных аккаунтов.
+- Reputation layer: ERS lowers the weight of anomalous accounts.
 
 ### 27. Anti-Fraud Framework
 
-Комбинация аппаратных (ATECC608), сетевых (профили генерации) и репутационных (ERS) методов. Аномалии в профиле (постоянная мощность ночью) приводят к снижению рейтинга и дополнительным проверкам.
+A combination of hardware (ATECC608), network (generation profiles) and reputation (ERS) methods. Profile anomalies (constant power at night) lower the rating and trigger extra checks.
 
 ### 28. Industrial Integration
 
-Для интеграции с промышленными счётчиками (Siemens, ABB) будет разработан специальный адаптер, преобразующий протоколы Modbus/Profibus в формат ENRG. Промышленные устройства будут получать статус "Industrial" без лимитов.
+A dedicated adapter will be developed to integrate industrial meters (Siemens, ABB), converting Modbus/Profibus protocols into the ENRG format. Industrial devices will get "Industrial" status without limits.
 
 ### 29. Energy Data Economy
 
-Верифицированные данные о производстве энергии становятся товаром. ENRG Market предоставляет платный доступ к агрегированным анонимизированным данным для аналитиков, трейдеров и исследователей.
+Verified energy-production data becomes a commodity. ENRG Market provides paid access to aggregated anonymized data for analysts, traders and researchers.
 
 ### 30. ENRG Market
 
-Децентрализованная P2P-площадка для торговли энергией, углеродными кредитами и производными. Смарт-контракты маркетплейса обеспечивают автоматическое сопоставление заявок и расчёты в ENRG.
+A decentralized P2P venue for trading energy, carbon credits and derivatives. The marketplace smart contracts provide automatic order matching and ENRG settlements.
 
 ### 31. Carbon Credits Vision
 
-Каждый верифицированный ENRG, полученный за зелёную энергию, может быть конвертирован в токенизированный углеродный кредит. Это создаёт дополнительный рынок и стимулирует зелёную генерацию.
+Every verified ENRG received for green energy can be converted into a tokenized carbon credit. This creates an additional market and incentivizes green generation.
 
 ### 32. API Specification
 
-REST API оракула:
+The oracle REST API:
 
-- POST /api/v1/proof/submit — принять подписанный пакет.
+- POST /api/v1/proof/submit — accept a signed packet.
 
-- GET /api/v1/device/{id}/status — статус устройства.
+- GET /api/v1/device/{id}/status — device status.
 
-- GET /api/v1/pool/{id}/stats — статистика пула.
+- GET /api/v1/pool/{id}/stats — pool statistics.
 
 ### 33. OpenAPI Draft
 
-В репозитории размещён openapi.yaml с описанием всех эндпоинтов.
+The repository ships openapi.yaml describing all endpoints.
 
 ### 34. Sequence Diagram Narrative
 
-1. IoT-устройство → подпись → оракул.
+1. IoT device → signature → oracle.
 
-2. Оракул → валидация → агрегация в пул.
+2. Oracle → validation → pool aggregation.
 
-3. Достижение порога → вызов mint_energy.
+3. Threshold reached → mint_energy call.
 
-4. Solana → проверка → минт → событие.
+4. Solana → verification → mint → event.
 
 ### 35. PDA Architecture Concept
 
-Все ключевые аккаунты — PDA с предопределёнными seeds:
+All key accounts are PDAs with predefined seeds:
 
 - vault: ["vault"]
 
@@ -296,40 +296,40 @@ REST API оракула:
 
 ### 36. Scaling Strategy
 
-Горизонтальное масштабирование через множество оракулов и шардирование пулов. Переход на Switchboard для децентрализации верификации. Оптимизация контракта для снижения compute units.
+Horizontal scaling via multiple oracles and pool sharding. A switch to Switchboard to decentralize verification. Contract optimization to reduce compute units.
 
 ### 37. KPI Framework
 
-- Количество зарегистрированных устройств.
+- The number of registered devices.
 
-- Суммарная верифицированная энергия (MWh).
+- The total verified energy (MWh).
 
-- Объём сожжённых токенов (ENRG).
+- The volume of burned tokens (ENRG).
 
-- TVL в стейкинге.
+- TVL in staking.
 
-- Количество активных пулов.
+- The number of active pools.
 
-- Средний ERS сети.
+- The network average ERS.
 
 ### 38. Grant Strategy
 
-Целевые гранты: Solana Foundation, Superteam Earn, Gitcoin Grants. Направления: разработка оракула, интеграция Ed25519, аудит контракта, расширение функциональности.
+Target grants: Solana Foundation, Superteam Earn, Gitcoin Grants. Directions: oracle development, Ed25519 integration, contract audit, feature expansion.
 
 ### 39. Roadmap 2026-2030
 
-- Q2-Q3 2026: Тестнет, IoT-прототип, первый минт на девнете.
+- Q2-Q3 2026: testnet, an IoT prototype, the first devnet mint.
 
-- Q4 2026 – Q1 2027: Mainnet, первые устройства, DEX листинг.
+- Q4 2026 – Q1 2027: mainnet, the first devices, DEX listing.
 
-- Q2-Q3 2027: Активация Vault, Buyback & Burn, промышленные производители.
+- Q2-Q3 2027: Vault activation, Buyback & Burn, industrial producers.
 
-- 2028: ENRG Market, P2P-торговля.
+- 2028: ENRG Market, P2P trading.
 
-- 2029: Кросс-чейн интеграция, углеродные кредиты.
+- 2029: cross-chain integration, carbon credits.
 
-- 2030: Полное DAO, институциональный уровень.
+- 2030: a full DAO, institutional level.
 
 ### 40. Long-Term Vision
 
-ENRG становится глобальным расчётным слоем для энергетического рынка, обеспечивая прозрачность, дефицит и справедливое вознаграждение для каждого производителя энергии. Протокол, который невозможно остановить и который не требует доверия к центральным органам.
+ENRG becomes the global settlement layer for the energy market, providing transparency, scarcity and fair rewards for every energy producer. A protocol that cannot be stopped and requires no trust in central authorities.
