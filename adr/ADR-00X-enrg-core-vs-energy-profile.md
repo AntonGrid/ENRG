@@ -6,312 +6,312 @@
 
 ## 1. Context
 
-Внутри команды и в внешней коммуникации часто смешиваются два разных слоя:
+Inside the team and in external communication, two different layers are often mixed up:
 
-1. **Собственно протокол ENRG**  
-   — абстрактный децентрализованный инфраструктурный слой для:
-   - криптографической идентификации реальных устройств и процессов;
-   - формирования и проверки доказательств событий реального мира (proofs);
-   - запуска экономических механизмов (эмиссия, вознаграждения, DAO) на основе этих доказательств.
+1. **The ENRG protocol itself**  
+   — an abstract decentralized infrastructure layer for:
+   - the cryptographic identification of real devices and processes;
+   - building and verifying proofs of real-world events;
+   - running economic mechanisms (emission, rewards, DAO) based on these proofs.
 
-2. **Конкретный энергетический сценарий (ENRG‑Energy Profile v1)**  
-   — первая инстанциация протокола в домене энергетики:
-   - устройства: инверторы, счётчики, ESP32‑шлюзы и т.п.;
-   - измеряемая величина: Wh/kWh/MWh;
-   - тип события: производство/потребление/балансировка энергии.
+2. **A concrete energy scenario (ENRG-Energy Profile v1)**  
+   — the first instantiation of the protocol in the energy domain:
+   - devices: inverters, meters, ESP32 gateways, etc.;
+   - the measured quantity: Wh/kWh/MWh;
+   - the event type: energy production/consumption/balancing.
 
-Исторически ENRG часто описывался как «энергетический протокол» или «протокол для возобновляемой энергии». Это удобно для объяснения, но:
+Historically ENRG was often described as an "energy protocol" or "a protocol for renewable energy". This is convenient for explanations, but:
 
-- создаёт ложное впечатление, что протокол **жёстко привязан к энергии**;
-- ограничивает мышление при проектировании других доменов (IoT, индустриальные датчики, климатические метрики и т.д.);
-- мешает отделить **ядро протокола** от конкретных профилей использования.
+- it creates the false impression that the protocol is **hard-wired to energy**;
+- it constrains thinking when designing other domains (IoT, industrial sensors, climate metrics, etc.);
+- it hinders separating the **protocol core** from the concrete usage profiles.
 
-Нужно формально зафиксировать в архитектуре:  
-**что именно является ENRG‑Core**, что такое **ENRG‑Energy Profile**, и как мы говорим об этом во всех документах.
+We need to formally fix in the architecture:  
+**what exactly ENRG-Core is**, what an **ENRG-Energy Profile** is, and how we talk about this in all documents.
 
 ---
 
 ## 2. Problem
 
-Если этого разделения нет, возникают системные проблемы:
+Without this separation, systemic problems arise:
 
-1. **Семантическая путаница**
-   - Текст вида «протокол платит за энергию» или «1 MWh = 1 SRC» создаёт ощущение, что:
-     - токен = товар,
-     - протокол = рынок электроэнергии.
-   - На самом деле:
-     - протокол вообще не «знает» об энергии как о товаре,
-     - он оперирует *событиями и доказательствами*.
+1. **Semantic confusion**
+   - Text like "the protocol pays for energy" or "1 MWh = 1 SRC" creates the impression that:
+     - token = a commodity,
+     - protocol = an electricity market.
+   - In reality:
+     - the protocol does not "know" about energy as a commodity at all,
+     - it operates with *events and proofs*.
 
-2. **Архитектурные ограничения**
-   - Разработчики и партнёры начинают считать, что:
-     - ENRG нельзя применить к IoT за пределами энергетики,
-     - все on‑chain модели навсегда зашиты под kWh/MWh.
-   - Это усложняет масштабирование на другие домены реального мира.
+2. **Architectural constraints**
+   - Developers and partners start to believe that:
+     - ENRG cannot be applied to IoT outside energy,
+     - all on-chain models are forever wired to kWh/MWh.
+   - This complicates scaling to other real-world domains.
 
-3. **Регуляторные и юридические риски**
-   - Формулировки про «оплату за электричество» или «цену MWh»:
-     - могут приводить к трактовке SRC как прямого суррогата товара или платежного средства,
-     - хотя фактически SRC — это **нативный токен стимулирования протокола**, а не прямой кэш‑эквивалент электроэнергии.
+3. **Regulatory and legal risks**
+   - Wording about "paying for electricity" or "the MWh price":
+     - can lead to SRC being treated as a direct commodity surrogate or a means of payment,
+     - although in fact SRC is the **protocol native incentive token**, not a direct cash equivalent of electricity.
 
-4. **Документальная неоднородность**
-   - В разных документах ENRG описан по‑разному:
-     - где‑то как энергетический протокол,
-     - где‑то как общий “proof + reward layer”.
-   - Новые участники команды, аудиторы и партнёры получают противоречивую картину.
+4. **Documentation inconsistency**
+   - ENRG is described differently across documents:
+     - somewhere as an energy protocol,
+     - somewhere as a general "proof + reward layer".
+   - New team members, auditors and partners get a contradictory picture.
 
-Необходима явная и устойчивая архитектурная договорённость.
+An explicit and stable architectural agreement is required.
 
 ---
 
 ## 3. Decision
 
-Мы разделяем понятия **ENRG Core Protocol** и **ENRG Deployment Profiles**, и формализуем **ENRG‑Energy Profile v1** как первый профиль развертывания.
+We separate the notions of **ENRG Core Protocol** and **ENRG Deployment Profiles**, and formalize **ENRG-Energy Profile v1** as the first deployment profile.
 
-### 3.1. Определение: ENRG Core Protocol
+### 3.1. Definition: ENRG Core Protocol
 
-> **ENRG Core — это открытый децентрализованный инфраструктурный протокол для криптографической фиксации и экономического вознаграждения достоверных событий реального мира.**
+> **ENRG Core is an open decentralized infrastructure protocol for the cryptographic recording and economic rewarding of trustworthy real-world events.**
 
-ENRG‑Core определяет:
+ENRG-Core defines:
 
-1. **Идентичность устройств / акторов**
-   - Модель device identity (ключи, привязка к владельцу/оператору).
-   - Регистры устройств (on‑chain / off‑chain с on‑chain якорями).
+1. **Device/actor identity**
+   - The device identity model (keys, binding to an owner/operator).
+   - Device registries (on-chain / off-chain with on-chain anchors).
 
-2. **Модель сообщений и доказательств (Proofs)**
-   - Формат сообщений от устройств (например, `{device_id, timestamp, value, nonce, signature}`).
-   - Криптографические требования (Ed25519 или др. схемы).
-   - Обязательные поля для валидации (nonce, диапазоны, монотонность и т.п.).
+2. **The message and proof model**
+   - The message format from devices (e.g. `{device_id, timestamp, value, nonce, signature}`).
+   - Cryptographic requirements (Ed25519 or other schemes).
+   - Mandatory validation fields (nonce, ranges, monotonicity, etc.).
 
-3. **Роль и интерфейсы оракулов**
-   - Как off‑chain оркестраторы:
-     - собирают и проверяют сырой поток данных,
-     - формируют агрегированные **Oracle Reports**,
-     - подписывают их и отправляют on‑chain.
+3. **Oracle roles and interfaces**
+   - As off-chain orchestrators:
+     - they collect and check the raw data flow,
+     - they build aggregated **Oracle Reports**,
+     - sign and send them on-chain.
 
-4. **On‑chain валидация отчётов**
-   - Проверка подписи и структуры отчёта.
-   - Проверка device identity, nonce, времени, лимитов и политик.
-   - Принятие или отклонение отчёта как события сети.
+4. **On-chain report validation**
+   - Report signature and structure checks.
+   - Device identity, nonce, time, limit and policy checks.
+   - Accepting or rejecting the report as a network event.
 
-5. **Экономические примитивы**
-   - Эмиссионная функция: `reward = f(event, total_supply)`  
-     (в текущей реализации — асимптотическая модель с увеличением сложности).
-   - Механизм mint’а нативного токена SRC.
-   - Распределение наград (producer vs protocol funds).
-   - Базовая модель staking / treasury / DAO.
+5. **Economic primitives**
+   - The emission function: `reward = f(event, total_supply)`  
+     (in the current implementation — an asymptotic model with increasing difficulty).
+   - The native SRC token mint mechanism.
+   - Reward distribution (producer vs protocol funds).
+   - A base staking / treasury / DAO model.
 
-6. **Гарантии и инварианты**
-   - Фиксированный `MAX_SUPPLY`.
-   - Эмиссия привязана только к верифицированным событиям.
-   - Явное разделение:
-     - **физический домен** (что именно измеряется),
-     - **протокольный домен** (какие события и доказательства считаются валидными).
+6. **Guarantees and invariants**
+   - A fixed `MAX_SUPPLY`.
+   - Emission is bound only to verified events.
+   - An explicit separation of:
+     - the **physical domain** (what is exactly measured),
+     - the **protocol domain** (which events and proofs count as valid).
 
-Важно: **в ENRG‑Core нет “энергии” как зашитой сущности**.  
-Есть абстрактные:
+Important: **in ENRG-Core there is no "energy" as an embedded entity**.  
+There are only abstract:
 
-- устройства,
-- измерения,
-- доказательства,
-- события,
-- экономические реакции на них.
+- devices,
+- measurements,
+- proofs,
+- events,
+- economic reactions to them.
 
-### 3.2. Определение: Deployment Profile
+### 3.2. Definition: Deployment Profile
 
-> **Deployment Profile — это конкретная инстанциация ENRG‑Core в заданном домене реального мира.**
+> **A Deployment Profile is a concrete instantiation of ENRG-Core in a given real-world domain.**
 
-Профиль задаёт:
+A profile defines:
 
-- что именно считается **событием** (event),
-- какие **типы устройств** и измерений поддерживаются,
-- какие **дополнительные правила валидации** действуют (бизнес‑логика домена),
-- как это всё отображается на модель ENRG‑Core (какие поля в proof’ах, какие границы, какая единица измерения и т.п.).
+- what exactly counts as an **event**,
+- which **device types** and measurements are supported,
+- which **additional validation rules** apply (domain business logic),
+- how all this maps onto the ENRG-Core model (which proof fields, bounds, units of measurement, etc.).
 
-Профили могут быть:
+Profiles can be:
 
-- ENRG‑Energy v1 (энергетика),
-- ENRG‑IoT v1 (общие сенсоры),
-- ENRG‑Climate v1 (климатические данные) и пр.
+- ENRG-Energy v1 (energy),
+- ENRG-IoT v1 (general sensors),
+- ENRG-Climate v1 (climate data), etc.
 
-### 3.3. Определение: ENRG‑Energy Profile v1
+### 3.3. Definition: ENRG-Energy Profile v1
 
-> **ENRG‑Energy v1 — это первый deployment profile, в котором объектом событий являются энергетические события (производство/потребление/балансировка энергии).**
+> **ENRG-Energy v1 is the first deployment profile whose event objects are energy events (production/consumption/balancing).**
 
-В ENRG‑Energy v1:
+In ENRG-Energy v1:
 
-- **Событие**:  
-  “Устройство X, принадлежащее участнику Y, в момент времени T зафиксировало изменение показаний счётчика энергии на ΔWh, что подтверждено подписью устройства и верифицировано оракулом.”
-- **Устройства**:  
-  инверторы, счётчики, ESP32‑шлюзы и подобные устройства, умеющие:
-  - стабильно измерять энергию,
-  - подписывать данные своим ключом.
-- **Измеряемая величина**:  
-  энергия в Wh/kWh/MWh (выбор единиц — часть профиля, а не ядра).
-- **Специфичные проверки профиля**:
-  - монотонность показаний,
-  - допустимые границы мощности и суммарной генерации,
-  - соответствие географии/сетевым параметрам (если требуется).
+- **Event**:  
+  "Device X, owned by participant Y, recorded at time T a change of the energy meter reading by ΔWh, confirmed by the device signature and verified by the oracle."
+- **Devices**:  
+  inverters, meters, ESP32 gateways and similar devices able to:
+  - measure energy reliably,
+  - sign data with their key.
+- **Measured quantity**:  
+  energy in Wh/kWh/MWh (the unit choice is part of the profile, not the core).
+- **Profile-specific checks**:
+  - reading monotonicity,
+  - allowed bounds for power and cumulative generation,
+  - geography/grid-parameter conformance (if required).
 
-Ключевой момент:  
-**это всего лишь конкретный “скин” на ENRG‑Core**, а не сущность протокола.
+The key point:  
+**this is just a concrete "skin" over ENRG-Core**, not a protocol entity.
 
-### 3.4. SRC в контексте Core и Profiles
+### 3.4. SRC in the Core and Profiles context
 
-> **SRC — это нативный токен стимулирования ENRG‑Core, выпускаемый за подтверждённые события реального мира.**
+> **SRC is the ENRG-Core native incentive token, issued for confirmed real-world events.**
 
-- В ENRG‑Energy v1 событие = энергетическое событие.
-- В другом профиле (например, ENRG‑IoT) событие может быть иным (трафик датчиков, промышленная телеметрия и т.п.).
-- На уровне Core:
-  - SRC **не является «оплатой за киловатт‑часы»**,
-  - SRC **не фиксирует “цену за MWh”**,
-  - SRC **привязан к валидированным событиям**, а не к товару.
+- In ENRG-Energy v1 the event = an energy event.
+- In another profile (e.g. ENRG-IoT) the event can be different (sensor traffic, industrial telemetry, etc.).
+- At the Core level:
+  - SRC is **not a "payment per kilowatt-hour"**,
+  - SRC **does not fix an "MWh price"**,
+  - SRC **is bound to validated events**, not to a commodity.
 
-Формулировка по умолчанию:
+The default wording:
 
-- «SRC — это экономический механизм протокола, обслуживающий слой доверия, а не цель протокола сама по себе».
+- "SRC is the protocol economic mechanism serving the trust layer, not the protocol goal itself".
 
 ---
 
 ## 4. Consequences
 
-### 4.1. Что меняется в документации
+### 4.1. What changes in the documentation
 
-1. **Во всех ключевых документах** (whitepaper, README, ADR по экономике, презентации):
-   - вводим явное разделение на:
-     - ENRG‑Core,
-     - ENRG‑Energy v1 (и последующие профили).
-   - Формулировки вида:
-     - «протокол платит за электричество»,
-     - «1 MWh = 1 SRC»  
-     **запрещаются** или помечаются как исторические/устаревшие.
+1. **In all key documents** (whitepaper, README, economics ADRs, presentations):
+   - we introduce an explicit separation into:
+     - ENRG-Core,
+     - ENRG-Energy v1 (and the following profiles).
+   - Wording like:
+     - "the protocol pays for electricity",
+     - "1 MWh = 1 SRC"  
+     is **forbidden** or marked as historical/outdated.
 
-2. **Новые разделы / правки**:
-   - `docs/core/what-is-enrg-core.md` — базовое доменно‑нейтральное описание.
-   - `docs/profiles/enrg-energy-v1.md` — специфика энергетического профиля.
-   - Экономические ADR (эмиссия, фонды, staking) описывают:
-     - общую модель (на уровне Core),
-     - конкретную привязку к энергетике — только в рамках соответствующего профиля.
+2. **New sections / edits**:
+   - `docs/core/what-is-enrg-core.md` — the base domain-neutral description.
+   - `docs/profiles/enrg-energy-v1.md` — the energy-profile specifics.
+   - The economics ADRs (emission, funds, staking) describe:
+     - the general model (at the Core level),
+     - the concrete energy binding — only within the corresponding profile.
 
-### 4.2. Что меняется в коммуникации
+### 4.2. What changes in communication
 
-- Внешне:
-  - «ENRG — протокол доверия и стимулов к событиям реального мира; наш первый профиль — энергетика».
-- Внутри команды:
-  - любая архитектурная дискуссия начинается с уточнения:
-    - мы говорим о **Core**,
-    - или о конкретном **Profile (Energy / IoT / …)**?
+- Externally:
+  - "ENRG is a protocol of trust and incentives for real-world events; our first profile is energy".
+- Inside the team:
+  - any architectural discussion starts by clarifying:
+    - are we talking about the **Core**,
+    - or a concrete **Profile (Energy / IoT / …)**?
 
-### 4.3. Плюсы
+### 4.3. Pros
 
-- Чёткое разделение ответственности:
-  - Core отвечает за криптографию, валидацию и экономику.
-  - Профили отвечают за доменную специфику.
-- Лёгкое масштабирование на другие домены без перелома ядра.
-- Снижение регуляторных/юридических рисков:
-  - токен не позиционируется как «прямая оплата за энергию».
-- Лучшая читаемость для аудита:
-  - аудитор видит, что протокол — это общий слой, а энергетика — конкретное применение.
+- A clear responsibility split:
+  - the Core handles cryptography, validation and economics.
+  - the Profiles handle the domain specifics.
+- Easy scaling to other domains without breaking the core.
+- Lower regulatory/legal risks:
+  - the token is not positioned as "direct payment for energy".
+- Better readability for audits:
+  - an auditor sees the protocol as a general layer and energy as a concrete application.
 
-### 4.4. Минусы / риски
+### 4.4. Cons / risks
 
-- Требуется:
-  - пройтись по всем существующим документам и вычистить «энергоцентричный» язык там, где речь должна идти о Core;
-  - ввести дисциплину использования терминов в коммуникации и коде.
-- Возможны переходные формулировки:
-  - некоторое время старые материалы будут противоречить новой структуре, пока не будут обновлены.
+- It requires:
+  - going through all existing documents and removing "energy-centric" language where the Core should be meant;
+  - introducing term-usage discipline in communication and code.
+- Transitional wording is possible:
+  - for a while old materials will contradict the new structure until they are updated.
 
 ---
 
 ## 5. Alternatives Considered
 
-1. **Оставить всё как есть (ENRG = energy‑protocol)**  
-   Отброшено как:
-   - ограничивающее масштабируемость,
-   - создающее лишние регуляторные риски,
-   - мешающее ясному разделению слоёв.
+1. **Leave everything as-is (ENRG = energy protocol)**  
+   Rejected as:
+   - limiting scalability,
+   - creating extra regulatory risks,
+   - hindering a clear layer separation.
 
-2. **Разветвить брендинг (отдельное имя для Core, отдельное для Energy)**  
-   Отброшено пока:
-   - усложняет бренд и коммуникацию,
-   - Core и Energy остаются в одном проекте, разделение в документации достаточно.
+2. **Split the branding (a separate name for Core, separate for Energy)**  
+   Rejected for now:
+   - it complicates the brand and communication,
+   - Core and Energy stay in one project; the documentation separation is enough.
 
 ---
 
 ## 6. Implementation Notes
 
-- Этот ADR должен быть:
-  - добавлен в `adr/`,
-  - линкуется из `README` и архитектурного обзора.
-- Следующие ADR (экономика, Proof‑модель, Ed25519/Oracle‑модель):
-  - должны явно указывать, относятся ли они:
-    - к ENRG‑Core,
-    - к конкретному deployment profile (и какому именно).
+- This ADR must be:
+  - added to `adr/`,
+  - linked from the `README` and the architecture overview.
+- The following ADRs (economics, the Proof model, the Ed25519/Oracle model):
+  - must explicitly state whether they belong:
+    - to ENRG-Core,
+    - to a concrete deployment profile (and which one).
 
 ---
 
-## 7. Осознанные MVP‑отклонения от Axis Core (ADR‑0002/0003/0006)
+## 7. Deliberate MVP deviations from Axis Core (ADR-0002/0003/0006)
 
-Статус ревизии: **v7.0‑совместимая**. В реализации `enrg_mvp` (Solana/Anchor)
-приняты три осознанных компромисса ради стоимости и сложности MVP. Каждый
-компромисс зафиксирован с причиной и планом выноса.
+Revision status: **v7.0-compatible**. The `enrg_mvp` implementation (Solana/Anchor)
+makes three deliberate trade-offs for the MVP cost and complexity. Each
+trade-off is recorded with its reason and an extraction plan.
 
-### 7.1. Verifier и Policy Engine on-chain (ADR-0003) — статус: РАЗДЕЛЕНО (2026-08-17)
+### 7.1. On-chain Verifier and Policy Engine (ADR-0003) — status: SPLIT (2026-08-17)
 
-- **Спека Axis Core (ADR-0003):** Verifier отвечает только за криптографию и
-  передачу данных; решения о допустимости Proof принимает Policy Engine —
-  отдельный компонент.
-- **Статус (после 2026-08-17, закрытие P0-блокера D-2):** разделение ВЫПОЛНЕНО.
-  - On-chain `PolicyRegistry` (PDA `[b"policy-registry"]`) + `PolicyEngine`
+- **Axis Core spec (ADR-0003):** the Verifier handles only cryptography and
+  data passing; the Proof admissibility decision is made by the Policy Engine —
+  a separate component.
+- **Status (after 2026-08-17, closing P0 blocker D-2):** the split is DONE.
+  - The on-chain `PolicyRegistry` (PDA `[b"policy-registry"]`) + `PolicyEngine`
     (`instructions/policy_engine.rs`, `state/policy.rs`).
-  - `mint_energy` — Verifier: Ed25519-проверка подписи устройства и оракула
+  - `mint_energy` — the Verifier: device and oracle Ed25519 signature checks
     (`security::verify_ed25519_signature`), freshness/nonce (`security::validation`),
-    связка device_id; решения — через PolicyEngine (whitelist оракулов, гейтинг
-    состояния ADR-0005, tier-лимиты, energy-caps, supply-cap, пауза минта).
-  - Off-chain оракул: все решения вынесены в `policy.js` (Policy Engine).
-- **Известное отклонение (аудит 2026-08-18):** PolicyRegistry опционален в
-  `MintEnergy` (при отсутствии PDA применяются дефолтные политики — обратная
-  совместимость). Для mainnet рекомендуется инициализировать реестр и
-  перевести `set_policy_authority` под governance (ADR-0009).
+    the device_id binding; decisions — via the PolicyEngine (oracle whitelist, ADR-0005
+    state gating, tier limits, energy caps, the supply cap, a mint pause).
+  - The off-chain oracle: all decisions are moved into `policy.js` (the Policy Engine).
+- **Known deviation (audit 2026-08-18):** PolicyRegistry is optional in
+  `MintEnergy` (without the PDA the default policies apply — backward
+  compatibility). For mainnet we recommend initializing the registry and
+  moving `set_policy_authority` under governance (ADR-0009).
 
-### 7.2. Core и Domain Profile в одном контракте
+### 7.2. Core and Domain Profile in one contract
 
-- **Спека:** ENRG‑Core (идентичность, proofs, экономика) и ENRG‑Energy Profile
-  (доменная метрика Wh/kWh/MWh) — отдельные слои.
-- **MVP:** `enrg_mvp` содержит и ядро, и экономику энергетического профиля;
-  `enrg-profile` (EnergyProfile PDA: rated_power, device_type, 30‑дневное окно)
-  уже вынесен в отдельную программу с CPI `record_production`.
-- **Причина:** разделение слоёв на Solana требует CPI и отдельных деплоев —
-  для MVP ядро + энергетическая экономика в одной программе дешевле.
-- **План:** полный вынос доменной логики в `enrg-profile` (и будущие профили
-  IoT/др.) через CPI; Core остаётся доменно‑нейтральным.
+- **Spec:** ENRG-Core (identity, proofs, economics) and the ENRG-Energy Profile
+  (the domain metric Wh/kWh/MWh) — separate layers.
+- **MVP:** `enrg_mvp` contains both the core and the energy-profile economics;
+  `enrg-profile` (EnergyProfile PDA: rated_power, device_type, a 30-day window)
+  is already extracted into a separate program with the CPI `record_production`.
+- **Reason:** separating layers on Solana requires CPIs and separate deploys —
+  for the MVP, core + energy economics in one program is cheaper.
+- **Plan:** a full extraction of the domain logic into `enrg-profile` (and future
+  IoT/other profiles) via CPI; the Core stays domain-neutral.
 
-### 7.3. Device Registry — источник истины (ADR‑0002)
+### 7.3. Device Registry — the source of truth (ADR-0002)
 
-- `EnergyProducer` PDA (`[b"producer", device_id]`) — on‑chain источник истины
-  по состоянию устройства: lifecycle (ADR‑0005), tier (v7.0 §15), nonce/anti‑
-  replay. Метаданные (мощность, тип, локация) и скользящее окно — в
-  `enrg-profile` (EnergyProfile PDA), связанном по authority. Изменение
-  состояния устройства происходит только через registry‑инструкции
-  (`provision/activate/quarantine/revoke`), что соответствует ADR‑0002.
+- The `EnergyProducer` PDA (`[b"producer", device_id]`) — the on-chain source of truth
+  for the device state: lifecycle (ADR-0005), tier (v7.0 §15), nonce/anti-
+  replay. The metadata (power, type, location) and the rolling window live in
+  `enrg-profile` (EnergyProfile PDA), bound by authority. A device state change
+  happens only via the registry instructions
+  (`provision/activate/quarantine/revoke`), which matches ADR-0002.
 
-### 7.4. Quarantine решает Policy Engine, а не Verifier
+### 7.4. Quarantine is decided by the Policy Engine, not the Verifier
 
-- В MVP решение о quarantine/maintenance/revoke принимается явными
-  owner‑gated инструкциями (`device_lifecycle.rs`), а не Verifier'ом.
-  Аномалии профиля (v7.0 §27) фиксируются доверенным оракулом
-  (`report_anomaly`) и снижают ERS (v7.0 §16) — но не переводят устройство
-  в quarantine автоматически; прямое решение о state остаётся за Policy Engine
-  (будущая выделенная программа, см. 7.1).
+- In the MVP the quarantine/maintenance/revoke decision is made by explicit
+  owner-gated instructions (`device_lifecycle.rs`), not by the Verifier.
+  Profile anomalies (v7.0 §27) are recorded by a trusted oracle
+  (`report_anomaly`) and lower the ERS (v7.0 §16) — but do not move the device
+  into quarantine automatically; the direct state decision stays with the Policy Engine
+  (a future dedicated program, see 7.1).
 
-### 7.5. RFC 2119 — краткая сводка обязательности
+### 7.5. RFC 2119 — a brief mandatory summary
 
-- MUST: доказательство владения ключом устройства при register/claim;
-  Ed25519‑подпись отчёта оракулом; nonce/timestamp anti‑replay;
-  supply‑cap ≤ MAX_SUPPLY_ATOMIC; одноразовый founder‑премайн;
-  эмиссия только через mint_energy/governance_mint.
-- SHOULD: ERS‑взвешивание пула; tier‑лимиты месяца.
-- MAY: premium‑доступ ENRG Market (`ers_premium_access` — интерфейс‑заглушка).
+- MUST: proof of device key possession at register/claim;
+  an oracle Ed25519 report signature; nonce/timestamp anti-replay;
+  a supply cap ≤ MAX_SUPPLY_ATOMIC; a one-time founder premine;
+  emission only via mint_energy/governance_mint.
+- SHOULD: ERS-weighted pool; monthly tier limits.
+- MAY: ENRG Market premium access (`ers_premium_access` — an interface stub).
 
 ---
 
