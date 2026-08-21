@@ -58,6 +58,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit dependencies
+        # Reports known vulnerabilities without failing the build.
+        continue-on-error: true
+        run: npm audit --audit-level=high
+
       # test:manifest, test:firmware and test:keyrotation are intentionally NOT
       # run here: they spawn the oracle server (server.js), which requires the
       # better-sqlite3 native binding. That binding fails to load on the
