@@ -1,218 +1,218 @@
-# Аудит соответствия ENRG требованиям AXIS Protocol и AXIS Core
+# ENRG conformance audit against AXIS Protocol and AXIS Core requirements
 
-**Дата:** 2026-08-16
-**Режим:** только чтение/анализ (код не изменялся)
-**Объект:** `/home/enrg/Axis-workspace/ENRG`
+**Date:** 2026-08-16
+**Mode:** read-only/analysis (no code changes)
+**Scope:** `/home/enrg/Axis-workspace/ENRG`
 - `programs/enrg-mvp/` — on-chain Core Protocol (Solana/Anchor)
 - `programs/enrg-profile/` — Domain Profile (EnergyProfile)
-- `server.js`, `storage.js`, `oracle/` — оракул и manifest registry
-- `firmware/esp32_proof_sender/` — прошивка ESP32
-- `app/`, `schemas/`, `docs/`, `adr/` — FastAPI-слой, схемы, документация
+- `server.js`, `storage.js`, `oracle/` — the oracle and manifest registry
+- `firmware/esp32_proof_sender/` — the ESP32 firmware
+- `app/`, `schemas/`, `docs/`, `adr/` — the FastAPI layer, schemas, documentation
 
-**Эталоны:**
+**Reference standards:**
 - `/home/enrg/Axis-workspace/Axis-protocol` — `spec/protocol/{model,wire-format,lifecycle,validation}.md`, `adr/ADR-0001…0009`
 - `/home/enrg/Axis-workspace/Axis-core` — `axis_core/*` (FastAPI), `oracle/*` (Node.js registry), `schemas/*`, `docs/merkle-proof-verification.md`, `axis_core/onchain_bridge.py`
 
 ---
 ## 1. Executive Summary
 
-### 1.1. Общий уровень соответствия
+### 1.1. Overall conformance level
 
-| Компонент | Уровень соответствия | Оценка |
+| Component | Conformance level | Score |
 |---|---|---|
-| **Core Protocol** (on-chain `enrg-mvp`) | **Частичное** | ≈ 60 % |
-| **Domain Profile** (`enrg-profile`) | **Частичное** | ≈ 55 % |
-| **Oracle** (`server.js`, `storage.js`, `oracle/registry`, `app/`) | **Частичное** | ≈ 55 % |
-| **Firmware** (ESP32 v3, legacy v1) | **Частичное / Не соответствует** | ≈ 35 % |
-| **Итого** | **Частичное соответствие** | **≈ 52 %** |
+| **Core Protocol** (on-chain `enrg-mvp`) | **Partial** | ≈ 60 % |
+| **Domain Profile** (`enrg-profile`) | **Partial** | ≈ 55 % |
+| **Oracle** (`server.js`, `storage.js`, `oracle/registry`, `app/`) | **Partial** | ≈ 55 % |
+| **Firmware** (ESP32 v3, legacy v1) | **Partial / Non-conformant** | ≈ 35 % |
+| **Total** | **Partial conformance** | **≈ 52 %** |
 
-**Одной фразой:** on-chain ядро ENRG — самая сильная часть (жизненный цикл ADR-0005, двойные Ed25519-подписи, OracleRegistry, anti-replay nonce/freshness реализованы корректно и совпадают с ADR-0001/0002/0005), но архитектурные решения ADR-0003 (Policy Engine), ADR-0004 (Manifest на устройстве), ADR-0006 (разделение Core/Profile), ADR-0007 (secure key management, ротация, подпись манифестов), ADR-0008 (OTA) и ADR-0009 (governance в полном объёме) **не реализованы или реализованы частично и осознанно вынесены как «MVP-отклонения»** (`adr/ADR-00X-enrg-core-vs-energy-profile.md §7`). Проект сам декларирует статус: «ready for **devnet**, mainnet deferred» (`docs/protocol/deployment/mvp-release-readiness.md:3-4`).
+**In one sentence:** the ENRG on-chain core is the strongest part (ADR-0005 lifecycle, dual Ed25519 signatures, OracleRegistry, anti-replay nonce/freshness are implemented correctly and match ADR-0001/0002/0005), but the architectural decisions of ADR-0003 (Policy Engine), ADR-0004 (Manifest on the device), ADR-0006 (Core/Profile separation), ADR-0007 (secure key management, rotation, manifest signing), ADR-0008 (OTA) and ADR-0009 (full governance) are **not implemented or only partially implemented and deliberately deferred as "MVP deviations"** (`adr/ADR-00X-enrg-core-vs-energy-profile.md §7`). The project itself declares the status: "ready for **devnet**, mainnet deferred" (`docs/protocol/deployment/mvp-release-readiness.md:3-4`).
 
-### 1.2. Сильные стороны (соответствует AXIS)
+### 1.2. Strengths (AXIS-conformant)
 
-1. **ADR-0005 — жизненный цикл устройств**: 8 состояний и матрица переходов точно совпадают с ADR-0005 (`programs/enrg-mvp/src/state/producer.rs:3-37`).
-2. **ADR-0001 — ключ не покидает устройство**: регистрация и claim требуют Ed25519-подпись устройства через Solana-precompile (`device_lifecycle.rs:54-77`, `security/lifecycle.rs:27-62`, `security/mod.rs:34-73`); ключ устройства не хранится ни on-chain, ни у оракула.
-3. **ADR-0002 — registry как источник истины**: `EnergyProducer` PDA `[b"producer", device_id]` хранит состояние, владельца, nonce, tier; изменение только через registry-инструкции.
-4. **Trust-конвейер model.md**: Proof → Attestation (OracleReport с двумя подписями) → Digital Claim (mint) воспроизводится точно (`state/oracle.rs:12-65`, `mint.rs:28-90`).
-5. **Проверки nonce/timestamp**: строгий монотонный nonce (`security/validation.rs:13-16`), свежесть 15 мин и skew 5 мин синхронизированы между on-chain и оракулом (`constants.rs:19-20`, `server.js:654-657`, `security/validation.rs:9-10`).
-6. **JSON-схемы** (`schemas/*.schema.json`) побайтово идентичны эталону Axis-core (проверено `diff -q` по 5 файлам).
-7. `app/main.py` напрямую переиспользует reference-реализацию Axis-core (axis_core FastAPI).
+1. **ADR-0005 — device lifecycle**: the 8 states and the transition matrix exactly match ADR-0005 (`programs/enrg-mvp/src/state/producer.rs:3-37`).
+2. **ADR-0001 — the key never leaves the device**: registration and claim require an Ed25519 device signature via the Solana precompile (`device_lifecycle.rs:54-77`, `security/lifecycle.rs:27-62`, `security/mod.rs:34-73`); the device key is stored neither on-chain nor at the oracle.
+3. **ADR-0002 — registry as the source of truth**: the `EnergyProducer` PDA `[b"producer", device_id]` stores state, owner, nonce, tier; changes only via registry instructions.
+4. **The model.md trust pipeline**: Proof → Attestation (OracleReport with two signatures) → Digital Claim (mint) is reproduced exactly (`state/oracle.rs:12-65`, `mint.rs:28-90`).
+5. **nonce/timestamp checks**: a strict monotonic nonce (`security/validation.rs:13-16`), 15-minute freshness and 5-minute skew are synchronized between on-chain and the oracle (`constants.rs:19-20`, `server.js:654-657`, `security/validation.rs:9-10`).
+6. **JSON schemas** (`schemas/*.schema.json`) are byte-identical to the Axis-core reference (verified with `diff -q` across 5 files).
+7. `app/main.py` directly reuses the Axis-core reference implementation (axis_core FastAPI).
 
-### 1.3. Критические проблемы (кратко)
+### 1.3. Critical issues (brief)
 
-- **P0-1.** В git-репозитории лежит legacy-прошивка `esp32_proof_sender.ino` с **захардкоженным приватным ключом** и отправкой по **HTTP** (`firmware/esp32_proof_sender/esp32_proof_sender.ino:22-35,7`) — прямое нарушение ADR-0001/ADR-0007.
-- **P0-2.** On-chain `register_manifest_verification` **не проверяет Ed25519-подпись** издателя манифеста — любой может зарегистрировать произвольный `ManifestVerification` (`instructions/manifest_verification.rs:22-50`); `verify_merkle_proof` не связывает `leaf_hash` с `content_hash` манифеста (`instructions/merkle_proof_verification.rs:143-182`).
-- **P0-3.** `server.js` при минте подписывает OracleReport **ключом founder** и минтит в **ATA founder** (`server.js:35-37, 395-405, 418`), а on-chain `mint_energy` требует `producer.authority == authority` (`mint.rs:56-59`) — оракул физически не сможет минтить для устройств, заклеймленных на других владельцев. Мульти-владельческий мейннет сломан.
-- **P0-4.** Policy Engine (ADR-0003) отсутствует: решения (quarantine/allow/mint) принимаются в `mint_energy` и в самом оракуле — осознанное отклонение, но для мейннета это блокер по спецификации.
-- **P0-5.** Устройство не получает и не проверяет подписанный Device Manifest (ADR-0004): конфигурация захардкожена в прошивке; манифест на устройстве не верифицируется; OTA (ADR-0008) отсутствует полностью.
+- **P0-1.** The git repository contains the legacy firmware `esp32_proof_sender.ino` with a **hardcoded private key** and **HTTP** transport (`firmware/esp32_proof_sender/esp32_proof_sender.ino:22-35,7`) — a direct ADR-0001/ADR-0007 violation.
+- **P0-2.** The on-chain `register_manifest_verification` **does not verify the Ed25519 signature** of the manifest publisher — anyone can register an arbitrary `ManifestVerification` (`instructions/manifest_verification.rs:22-50`); `verify_merkle_proof` does not bind `leaf_hash` to the manifest `content_hash` (`instructions/merkle_proof_verification.rs:143-182`).
+- **P0-3.** `server.js` signs the OracleReport with the **founder key** at mint time and mints to the **founder ATA** (`server.js:35-37, 395-405, 418`), while the on-chain `mint_energy` requires `producer.authority == authority` (`mint.rs:56-59`) — the oracle physically cannot mint for devices claimed by other owners. A multi-owner mainnet is broken.
+- **P0-4.** The Policy Engine (ADR-0003) is missing: decisions (quarantine/allow/mint) are made in `mint_energy` and in the oracle itself — a deliberate deviation, but a spec blocker for mainnet.
+- **P0-5.** The device does not receive or verify a signed Device Manifest (ADR-0004): the configuration is hardcoded in the firmware; the manifest is not verified on the device; OTA (ADR-0008) is entirely absent.
 
 ---
 
-## 2. Методология и источники
+## 2. Methodology and sources
 
-Сравнение проводилось **только с нормативными документами AXIS** (не с «идеальным проектом»):
+The comparison was made **only against the normative AXIS documents** (not against an "ideal project"):
 
 - `Axis-protocol/spec/protocol/model.md`, `wire-format.md`, `lifecycle.md`, `validation.md`;
 - `Axis-protocol/adr/ADR-0001…0009`;
 - `Axis-core/axis_core/*` (FastAPI), `Axis-core/oracle/*` (Node.js registry), `Axis-core/schemas/*`, `Axis-core/docs/merkle-proof-verification.md`, `Axis-core/axis_core/onchain_bridge.py`.
 
-Проверены: PDA и seeds, структуры данных, жизненный цикл устройства, Ed25519-проверки, Merkle-логика, формат proof/attestation, схемы, API-поверхность, безопасность ключей, OTA, governance.
+Checked: PDAs and seeds, data structures, device lifecycle, Ed25519 verifications, Merkle logic, proof/attestation format, schemas, API surface, key security, OTA, governance.
 
 ---
 
-## 3. Соответствие требованиям (сводная таблица)
+## 3. Requirement conformance (summary table)
 
-| Требование AXIS | Статус в ENRG | Где реализовано / где нарушено |
+| AXIS requirement | Status in ENRG | Where implemented / where violated |
 |---|---|---|
-| ADR-0001: ключ не покидает устройство | ✅ Полное (on-chain), ⚠️ Частичное (firmware) | `device_lifecycle.rs:54-77`; firmware v3 NVS/ATECC; **legacy v1 — нарушение** |
-| ADR-0002: Registry — источник истины | ✅ Полное (on-chain) | `state/producer.rs`, `device_lifecycle.rs` |
-| ADR-0003: Policy Engine отделён от Verifier | ❌ Не соответствует (MVP-отклонение) | `mint.rs:18-27` (явный комментарий), `ADR-00X §7.1`; решения в `server.js` |
-| ADR-0004: подписанный Device Manifest на устройстве | ❌ Не реализовано | Firmware — хардкод конфигурации; манифест не читается/не проверяется |
-| ADR-0005: состояния и переходы | ✅ Полное | `state/producer.rs:3-37` — матрица совпадает с ADR-0005 |
-| ADR-0006: Core vs Domain Profile | ⚠️ Частичное | `enrg-profile` вынесен; экономика осталась в ядре (`ADR-00X §7.2`) |
-| ADR-0007: управление ключами, ротация, аттестация, подпись firmware | ⚠️ Частичное / ❌ | Ed25519 везде, но нет ротации, нет root-key registry, нет COSE/CBOR, нет подписи прошивки |
-| ADR-0008: OTA и безопасные обновления | ⚠️ **Частично (улучшено 2026-08-17)** | OTA реализован (подпись+hash+анти-откат); добавлены холодный firmware-ключ, dual-bank A/B и аппаратный monotonic eFuse (env `esp32dev-ota`) |
-| ADR-0009: governance | ⚠️ Частичное (MVP) | `governance.rs` — members-голосование + timelock 7 дней; нет голосования токенами, Guardians, emergency flow |
-| wire-format.md: детерминированный формат | ⚠️ Частичное | Оракул — JSON; on-chain — бинарный канонический OracleReport (свой формат, документирован в ENRG ADR-001); Trust Envelope/MessageHeader не реализованы |
-| Merkle-верификация манифестов | ⚠️ Частичное | SHA-256 on-chain совпадает с off-chain registry; но подпись издателя не проверяется on-chain, leaf не привязан к content |
+| ADR-0001: the key never leaves the device | ✅ Full (on-chain), ⚠️ Partial (firmware) | `device_lifecycle.rs:54-77`; firmware v3 NVS/ATECC; **legacy v1 — violation** |
+| ADR-0002: Registry — source of truth | ✅ Full (on-chain) | `state/producer.rs`, `device_lifecycle.rs` |
+| ADR-0003: Policy Engine separated from the Verifier | ❌ Non-conformant (MVP deviation) | `mint.rs:18-27` (an explicit comment), `ADR-00X §7.1`; decisions in `server.js` |
+| ADR-0004: signed Device Manifest on the device | ❌ Not implemented | Firmware — hardcoded configuration; the manifest is not read/verified |
+| ADR-0005: states and transitions | ✅ Full | `state/producer.rs:3-37` — the matrix matches ADR-0005 |
+| ADR-0006: Core vs Domain Profile | ⚠️ Partial | `enrg-profile` is extracted; the economics stayed in the core (`ADR-00X §7.2`) |
+| ADR-0007: key management, rotation, attestation, firmware signing | ⚠️ Partial / ❌ | Ed25519 everywhere, but no rotation, no root-key registry, no COSE/CBOR, no firmware signing |
+| ADR-0008: OTA and secure updates | ⚠️ **Partial (improved 2026-08-17)** | OTA implemented (signature+hash+anti-rollback); a cold firmware key, dual-bank A/B and a hardware monotonic eFuse added (env `esp32dev-ota`) |
+| ADR-0009: governance | ⚠️ Partial (MVP) | `governance.rs` — member voting + a 7-day timelock; no token voting, Guardians, emergency flow |
+| wire-format.md: deterministic format | ⚠️ Partial | The oracle — JSON; on-chain — a binary canonical OracleReport (own format, documented in ENRG ADR-001); Trust Envelope/MessageHeader not implemented |
+| Manifest Merkle verification | ⚠️ Partial | On-chain SHA-256 matches the off-chain registry; but the publisher signature is not verified on-chain and the leaf is not bound to the content |
 
 ---
 
-## 4. Таблица расхождений
+## 4. Divergence table
 
 ### 4.1. Core Protocol (programs/enrg-mvp)
 
-| № | Требование AXIS | Факт в ENRG | Почему не соответствует | Ссылки |
+| # | AXIS requirement | Fact in ENRG | Why non-conformant | References |
 |---|---|---|---|---|
-| C-1 | ADR-0003: Verifier ≠ Policy Engine | **✅ ИСПРАВЛЕНО (2026-08-17):** отдельная on-chain `PolicyRegistry` (PDA `[b"policy-registry"]`) + `PolicyEngine::evaluate_preamble/evaluate_reward` (`instructions/policy_engine.rs`); `mint_energy` — Verifier, исполняет политики (whitelist, state, freshness, tier, энергия, пауза, supply cap) | Было: verifier+policy co-located в `mint_energy` (документированное упрощение). Теперь: `mint.rs:90-103,154-161` → `policy_engine.rs`; аккаунт опционален (обратная совместимость) | `state/policy.rs`, `instructions/policy_engine.rs`, `mint.rs` |
-| C-2 | ADR-0003: решения quarantine/maintenance принимает Policy Engine | ⚠️ **Частично:** решения о допустимости минта — у Policy Engine (P0-блокер D-2 закрыт для mint-пути). Решения quarantine/maintenance по-прежнему owner-gated (`quarantine_device`, `maintenance_device`) — зафиксированное отклонение §7.4 | `device_lifecycle.rs:297-307`, `lib.rs:337-342` |
-| C-3 | ADR-0002/0007: верификация подписи издателя манифеста | `register_manifest_verification` **просто сохраняет** `publisher_key` и `signature`, поле `verified=false`, подпись не проверяется | Любой аккаунт может зарегистрировать произвольный манифест; on-chain не обеспечивает подлинность манифестов | `instructions/manifest_verification.rs:22-50`, `state/manifest_verification.rs:4-28` |
-| C-4 | Merkle-верификация: leaf привязан к содержимому манифеста | `verify_merkle_proof` принимает `leaf_hash` от вызывающего и сверяет только с корнем; `content_hash` (Keccak) из `ManifestVerification` не используется | On-chain доказывает лишь «некий leaf в дереве», а не «leaf = содержимое манифеста N». Привязка — только off-chain (это же ограничение у reference, но оно перенесено без усиления) | `merkle_proof_verification.rs:143-182`, `state/manifest_verification.rs:11` |
-| C-5 | ADR-0007: ротация/отзыв ключей устройства | `device_id` = публичный ключ устройства, неизменяем; ротации и отзыва ключа нет; `set_oracle_authority` — мгновенная смена без timelock | ADR-0007 §4: «Keys MUST support rotation», «Old keys MUST be revocable» | `state/producer.rs:106-107`, `lib.rs:82-87`, `manifest_registry.rs` (SetOracleAuthority) |
-| C-6 | ADR-0009: governance (голосование токенов, deposit, Guardians, emergency) | MVP: 3–5 members, голосование 1 голос/member, кворум `yes>no && yes+no>members/2`, timelock 7 дней, исполнение только `governance_mint` | Нет голосования по весу токенов, нет депозита, нет роли Guardians и emergency-флоу, нет quorum/threshold как параметров, нет обновления любых параметров | `instructions/governance.rs:1-220`, `constants.rs:109-115` |
-| C-7 | ADR-0009/0007: multisig для критических операций | `set_vault_authority` — одношаговая смена без timelock/multisig | Высококритичная операция без защиты; помечено TODO(audit) | `instructions/initialize.rs` (set_vault_authority), `docs/STATE.md:25,158-159` |
-| C-8 | ADR-0007: якорение Merkle-корней (ежедневно/по расписанию) | Корень обновляется вручную инструкцией `update_merkle_root` по усмотрению оракула; нет расписания якорения | ADR-0007 §7: рекомендовано периодическое якорение (ежедневный root); emergency-якорение не реализовано | `instructions/manifest_registry.rs:97-120` |
+| C-1 | ADR-0003: Verifier ≠ Policy Engine | **✅ FIXED (2026-08-17):** a separate on-chain `PolicyRegistry` (PDA `[b"policy-registry"]`) + `PolicyEngine::evaluate_preamble/evaluate_reward` (`instructions/policy_engine.rs`); `mint_energy` is the Verifier and enforces policies (whitelist, state, freshness, tier, energy, pause, supply cap) | Was: verifier+policy co-located in `mint_energy` (a documented simplification). Now: `mint.rs:90-103,154-161` → `policy_engine.rs`; the account is optional (backward compatibility) | `state/policy.rs`, `instructions/policy_engine.rs`, `mint.rs` |
+| C-2 | ADR-0003: quarantine/maintenance decisions are made by the Policy Engine | ⚠️ **Partial:** mint-eligibility decisions are with the Policy Engine (P0 blocker D-2 closed for the mint path). quarantine/maintenance decisions remain owner-gated (`quarantine_device`, `maintenance_device`) — a recorded deviation §7.4 | `device_lifecycle.rs:297-307`, `lib.rs:337-342` |
+| C-3 | ADR-0002/0007: verification of the manifest publisher signature | `register_manifest_verification` **just stores** `publisher_key` and `signature`, the `verified=false` field, and does not verify the signature | Any account can register an arbitrary manifest; on-chain does not ensure manifest authenticity | `instructions/manifest_verification.rs:22-50`, `state/manifest_verification.rs:4-28` |
+| C-4 | Merkle verification: the leaf is bound to the manifest content | `verify_merkle_proof` takes `leaf_hash` from the caller and only checks it against the root; the `content_hash` (Keccak) from `ManifestVerification` is unused | On-chain proves only "some leaf in the tree", not "leaf = the content of manifest N". The binding is off-chain only (the reference has the same limitation, but it was carried over without hardening) | `merkle_proof_verification.rs:143-182`, `state/manifest_verification.rs:11` |
+| C-5 | ADR-0007: device key rotation/revocation | `device_id` = the device public key, immutable; no key rotation or revocation; `set_oracle_authority` — an instant change without a timelock | ADR-0007 §4: "Keys MUST support rotation", "Old keys MUST be revocable" | `state/producer.rs:106-107`, `lib.rs:82-87`, `manifest_registry.rs` (SetOracleAuthority) |
+| C-6 | ADR-0009: governance (token voting, deposit, Guardians, emergency) | MVP: 3–5 members, one vote/member, quorum `yes>no && yes+no>members/2`, 7-day timelock, execution only via `governance_mint` | No weight-based token voting, no deposit, no Guardians role and emergency flow, no quorum/threshold as parameters, no updating of any parameters | `instructions/governance.rs:1-220`, `constants.rs:109-115` |
+| C-7 | ADR-0009/0007: multisig for critical operations | `set_vault_authority` — a single-step change without a timelock/multisig | A highly critical operation without protection; marked TODO(audit) | `instructions/initialize.rs` (set_vault_authority), `docs/STATE.md:25,158-159` |
+| C-8 | ADR-0007: Merkle-root anchoring (daily/scheduled) | The root is updated manually via the `update_merkle_root` instruction at the oracle discretion; no anchoring schedule | ADR-0007 §7: periodic anchoring recommended (a daily root); emergency anchoring not implemented | `instructions/manifest_registry.rs:97-120` |
 
 
 
-### 4.2. Domain Profile (programs/enrg-profile) и разделение слоёв
+### 4.2. Domain Profile (programs/enrg-profile) and layer separation
 
-| № | Требование AXIS | Факт в ENRG | Почему не соответствует | Ссылки |
+| # | AXIS requirement | Fact in ENRG | Why non-conformant | References |
 |---|---|---|---|---|
-| P-1 | ADR-0006: Core не знает о токенах/эмиссии | `enrg_mvp` содержит mint, tier, ERS, pool, buyback, vesting, supply-cap | Core смешан с экономикой энергопрофиля. `enrg-profile` вынесен частично (EnergyProfile, rated_power ≤ 1 МВт, 30-дневное окно) | `ADR-00X §7.2`, `lib.rs:20-393`, `programs/enrg-profile/src/lib.rs:13-80` |
-| P-2 | ADR-0006: профиль не знает о trust | `enrg-profile` знает только про владельца и мощность — ✅, но вызывается из `enrg_mvp::mint_energy` по CPI | Частично соответствует; полная изоляция не достигнута (одна программа владеет и ядром, и экономикой) | `mint.rs:456-489` |
+| P-1 | ADR-0006: the Core does not know about tokens/emission | `enrg_mvp` contains mint, tier, ERS, pool, buyback, vesting, supply-cap | The Core is mixed with the energy-profile economics. `enrg-profile` is partially extracted (EnergyProfile, rated_power ≤ 1 MW, 30-day window) | `ADR-00X §7.2`, `lib.rs:20-393`, `programs/enrg-profile/src/lib.rs:13-80` |
+| P-2 | ADR-0006: the profile does not know about trust | `enrg-profile` knows only about the owner and power — ✅, but is called from `enrg_mvp::mint_energy` via CPI | Partially conformant; full isolation is not achieved (one program owns both the core and the economics) | `mint.rs:456-489` |
 
 ### 4.3. Oracle (server.js, storage.js, oracle/registry, app/)
 
-| № | Требование AXIS | Факт в ENRG | Почему не соответствует | Ссылки |
+| # | AXIS requirement | Fact in ENRG | Why non-conformant | References |
 |---|---|---|---|---|
-| O-1 | ADR-0003: оракул = Verifier (только криптография), решения — у Policy Engine | `server.js` сам принимает решения (лимит энергии на отчёт, порог накопления, минт при пороге); в `app/api/oracle.py` — собственные policy-правила (limit 5 kW) | Verifier и Policy Engine совмещены в оракуле | `server.js:649-655, 780-808`, `app/api/oracle.py:157-171` |
-| O-2 | ADR-0002: единый источник истины — Registry | Оракул ведёт **параллельную** off-chain БД устройств и энергии (`devices`, `energy_store`, `pools`) без синхронизации с on-chain `EnergyProducer` | Состояние может рассинхронизироваться; ADR-0002 требует единый источник | `storage.js:32-52`, `server.js:48-50` |
-| O-3 | ADR-0003/0001: оракул — отдельная доверенная роль | Оракул = **founder-ключ** (`FOUNDER_WALLET`); on-chain OracleRegistry должен содержать этот ключ; минт — в ATA founder | Концентрация ролей (founder=деплойер=authority=оракул), один оракул на весь протокол | `server.js:35-42, 395-405`, `constants.rs:101`, `state/registry/oracle.rs:19-24` |
-| O-6 | Axis-core: off-chain API (registry/provisioning) | `app/main.py` импортирует `axis_core` напрямую — FastAPI-слой фактически копия Axis-core | Это переиспользование reference, не расхождение, но означает, что ENRG не имеет собственной off-chain реализации provisioning/registry | `app/main.py:3-5` |
-| O-7 | Axis-core: manifest registry (Node.js) | `oracle/registry/app.js` — усовершенствованная копия Axis-core: обязательный `REGISTRY_ADMIN_KEY` ≥ 32 симв., SHA-256 root, leaf = sha256(manifest_id ‖ payload) | Соответствует и усилено vs Axis-core. **НО** дублирующий файл `routes/manifestRoutes.js` — мёртвый код с `keccak256` и дефолтным ключом `'secure-key'` (не подключён в `app.js`, но опасен при подключении) | `oracle/registry/app.js:14-19,40-81`, `oracle/registry/routes/manifestRoutes.js:4,8` |
-| O-8 | Axis-core: persistence/восстановление | `storage.js` — Postgres/SQLite (усиление), но `oracle/registry` хранит манифесты в `Map` в памяти | Потеря данных при рестарте registry; ADR-0002 требует high availability | `oracle/registry/app.js:22-23`, `storage.js:19-51` |
-| O-9 | Legacy-артефакты EVM | `contracts/EnrgOracleAttestation.sol`, `onchain/` (Foundry), `onchain_bridge.py`, `docs/onchain-attestation.md` описывают EVM-мост keccak | Не относится к текущему Solana-степу; создаёт дрейф документации и риск ложного понимания | `contracts/EnrgOracleAttestation.sol`, `docs/onchain-attestation.md` |
-| O-10 | Единый формат device_id | On-chain: pubkey-как-id; off-chain схема `device_record.schema.json`: `^dev_[0-9a-f]{16}$`; `server.js` принимает base58/0x-hex | Форматы не согласованы между схемами и кодом | `schemas/device_record.schema.json:22-27`, `server.js:501-506` |
-| O-11 | Состояния в off-chain схеме | `lifecycle_state` enum в схеме: `provisioned/active/suspended/retired` (4 состояния) vs on-chain 8 состояний ADR-0005 | Off-chain DeviceRecord не отражает on-chain state machine | `schemas/device_record.schema.json:36-44`, `state/producer.rs:3-13` |
+| O-1 | ADR-0003: the oracle = Verifier (crypto only), decisions — with the Policy Engine | `server.js` makes decisions itself (per-report energy limit, accumulation threshold, mint at the threshold); `app/api/oracle.py` has its own policy rules (5 kW limit) | Verifier and Policy Engine are merged in the oracle | `server.js:649-655, 780-808`, `app/api/oracle.py:157-171` |
+| O-2 | ADR-0002: a single source of truth — the Registry | The oracle keeps a **parallel** off-chain device and energy DB (`devices`, `energy_store`, `pools`) without syncing with the on-chain `EnergyProducer` | The state can drift apart; ADR-0002 requires a single source | `storage.js:32-52`, `server.js:48-50` |
+| O-3 | ADR-0003/0001: the oracle is a separate trusted role | The oracle = the **founder key** (`FOUNDER_WALLET`); the on-chain OracleRegistry must contain this key; the mint goes to the founder ATA | Role concentration (founder=deployer=authority=oracle), one oracle for the whole protocol | `server.js:35-42, 395-405`, `constants.rs:101`, `state/registry/oracle.rs:19-24` |
+| O-6 | Axis-core: off-chain API (registry/provisioning) | `app/main.py` imports `axis_core` directly — the FastAPI layer is effectively a copy of Axis-core | This is reference reuse, not a divergence, but it means ENRG has no own off-chain provisioning/registry implementation | `app/main.py:3-5` |
+| O-7 | Axis-core: manifest registry (Node.js) | `oracle/registry/app.js` — an improved Axis-core copy: a mandatory `REGISTRY_ADMIN_KEY` ≥ 32 chars, a SHA-256 root, leaf = sha256(manifest_id ‖ payload) | Conformant and hardened vs Axis-core. **BUT** the duplicate `routes/manifestRoutes.js` is dead code with `keccak256` and the default `'secure-key'` key (not wired into `app.js`, but dangerous if wired) | `oracle/registry/app.js:14-19,40-81`, `oracle/registry/routes/manifestRoutes.js:4,8` |
+| O-8 | Axis-core: persistence/recovery | `storage.js` — Postgres/SQLite (a hardening), but `oracle/registry` stores manifests in an in-memory `Map` | Data loss on registry restart; ADR-0002 requires high availability | `oracle/registry/app.js:22-23`, `storage.js:19-51` |
+| O-9 | Legacy EVM artifacts | `contracts/EnrgOracleAttestation.sol`, `onchain/` (Foundry), `onchain_bridge.py`, `docs/onchain-attestation.md` describe a keccak EVM bridge | Not relevant to the current Solana stack; creates documentation drift and a risk of misunderstanding | `contracts/EnrgOracleAttestation.sol`, `docs/onchain-attestation.md` |
+| O-10 | A unified device_id format | On-chain: pubkey-as-id; the off-chain `device_record.schema.json`: `^dev_[0-9a-f]{16}$`; `server.js` accepts base58/0x-hex | The formats are not aligned between the schemas and the code | `schemas/device_record.schema.json:22-27`, `server.js:501-506` |
+| O-11 | States in the off-chain schema | The `lifecycle_state` enum in the schema: `provisioned/active/suspended/retired` (4 states) vs the 8 on-chain ADR-0005 states | The off-chain DeviceRecord does not reflect the on-chain state machine | `schemas/device_record.schema.json:36-44`, `state/producer.rs:3-13` |
 
 ### 4.4. Firmware (ESP32)
 
-| № | Требование AXIS | Факт в ENRG | Почему не соответствует | Ссылки |
+| # | AXIS requirement | Fact in ENRG | Why non-conformant | References |
 |---|---|---|---|---|
-| F-1 | ADR-0001: подпись только на устройстве | ✅ v3: ключ генерируется при первой загрузке, подпись в CPU, binary-формат `device_id(32)\|\|nonce(8)\|\|ts(8)\|\|energy_wh(8)` совпадает с `OracleReport::device_message_to_sign()` | Соответствует | `firmware/esp32_proof_sender/src/esp32_proof_sender_v3.ino:250-280`, `state/oracle.rs:42-51` |
-| F-2 | ADR-0001/0007: ключ в Secure Element, подпись аппаратно | ⚠️ **Частично (2026-08-17):** добавлен путь **NXP SE050** (`ENRG_USE_SE050=1`, env `esp32dev-se050`) — аппаратная Ed25519-подпись (ключ и подпись внутри чипа); серийный вариант без SE050 — документированный компромисс: ключ в NVS/Data-Zone ATECC608A, подпись в CPU | ADR-0007 §4: «Private keys MUST be stored in secure hardware module (SE/eFuse/TPM)». Без SE050 NVS не соответствует; SE050-путь требует чипа (reference implementation, bring-up). Остаточные риски задокументированы в `SE050-HARDWARE-SIGNING.md` | `esp32_proof_sender_v3.ino` (SE050-секция), `platformio.ini` (`esp32dev-se050`), `SE050-HARDWARE-SIGNING.md` |
-| F-3 | ADR-0001 (нарушение): legacy-прошивка с ключом в git | **✅ ИСПРАВЛЕНО (2026-08-17):** `esp32_proof_sender.ino` удалён из git; v1/v2 перенесены в `firmware/legacy/` (gitignored, вне поставки), ключ заредэктирован в архивной копии | Было: приватный ключ опубликован в репозитории | Было: `firmware/esp32_proof_sender/esp32_proof_sender.ino:22-35,7`; теперь: `firmware/legacy/` (архив вне git) |
-| F-4 | ADR-0004: устройство хранит подписанный Manifest и сверяет policy_version | Конфигурация захардкожена через `#define` (`ENRG_ORACLE_URL`, `ENRG_REPORT_INTERVAL_MS` и т.д.); манифест не загружается, не проверяется, `policy_version` отсутствует | ADR-0004 не реализован | `esp32_proof_sender_v3.ino:34-90` |
-| F-5 | ADR-0007 §6/ADR-0008: подпись firmware, верификация перед установкой, OTA | **✅ Реализовано (2026-08-17):** OTA (подпись `version\|hash\|size` **отдельным холодным firmware-ключом** `ENRG_FIRMWARE_PUBKEY_HEX`, SHA-256, анти-откат NVS); добавлены dual-bank A/B (`partitions_ota.csv`) и аппаратный monotonic-счётчик (eFuse secure_version, env `esp32dev-ota`) | ADR-0008: подпись+verify ✅; A/B+monotonic в env `esp32dev-ota` (bring-up) | `esp32_proof_sender_v3.ino` (OTA + `ota_mark_boot_ok`/`ota_mark_hardware_anti_rollback`), `partitions_ota.csv`, `sdkconfig.defaults.esp32dev-ota`, `server.js` (FIRMWARE_SIGNING_KEY_PATH) |
-| F-6 | ADR-0007: транспорт TLS | ✅ v3: HTTPS с проверкой корневого CA, mTLS опционально | Соответствует (v1 — нарушение, см. F-3) | `esp32_proof_sender_v3.ino:41-66, 300-344` |
-| F-7 | On-chain жизненный цикл: устройство само проходит register/claim | Прошивка реализует только отправку proof; on-chain register/claim выполняются скриптами/владельцем, а не устройством | Полный конвейер ADR-0005 (device-driven registration) на устройстве не реализован | `esp32_proof_sender_v3.ino` (нет register/claim), `scripts/create-producer-device.js` |
+| F-1 | ADR-0001: signing only on the device | ✅ v3: the key is generated at first boot, signing in the CPU, the binary format `device_id(32)\|\|nonce(8)\|\|ts(8)\|\|energy_wh(8)` matches `OracleReport::device_message_to_sign()` | Conformant | `firmware/esp32_proof_sender/src/esp32_proof_sender_v3.ino:250-280`, `state/oracle.rs:42-51` |
+| F-2 | ADR-0001/0007: key in a Secure Element, hardware signing | ⚠️ **Partial (2026-08-17):** an **NXP SE050** path added (`ENRG_USE_SE050=1`, env `esp32dev-se050`) — hardware Ed25519 signing (key and signature inside the chip); the no-SE050 serial variant is a documented compromise: the key in NVS/ATECC608A Data-Zone, signing in the CPU | ADR-0007 §4: "Private keys MUST be stored in secure hardware module (SE/eFuse/TPM)". Without SE050, NVS is non-conformant; the SE050 path requires the chip (reference implementation, bring-up). Residual risks are documented in `SE050-HARDWARE-SIGNING.md` | `esp32_proof_sender_v3.ino` (SE050 section), `platformio.ini` (`esp32dev-se050`), `SE050-HARDWARE-SIGNING.md` |
+| F-3 | ADR-0001 (violation): legacy firmware with the key in git | **✅ FIXED (2026-08-17):** `esp32_proof_sender.ino` removed from git; v1/v2 moved to `firmware/legacy/` (gitignored, outside the delivery), the key redacted in the archived copy | Was: a private key published in the repository | Was: `firmware/esp32_proof_sender/esp32_proof_sender.ino:22-35,7`; now: `firmware/legacy/` (an archive outside git) |
+| F-4 | ADR-0004: the device stores a signed Manifest and checks policy_version | The configuration is hardcoded via `#define` (`ENRG_ORACLE_URL`, `ENRG_REPORT_INTERVAL_MS`, etc.); the manifest is not loaded or verified, `policy_version` is absent | ADR-0004 not implemented | `esp32_proof_sender_v3.ino:34-90` |
+| F-5 | ADR-0007 §6/ADR-0008: firmware signing, pre-install verification, OTA | **✅ Implemented (2026-08-17):** OTA (a `version\|hash\|size` signature **with a separate cold firmware key** `ENRG_FIRMWARE_PUBKEY_HEX`, SHA-256, NVS anti-rollback); dual-bank A/B (`partitions_ota.csv`) and a hardware monotonic counter (eFuse secure_version, env `esp32dev-ota`) added | ADR-0008: signature+verify ✅; A/B+monotonic in env `esp32dev-ota` (bring-up) | `esp32_proof_sender_v3.ino` (OTA + `ota_mark_boot_ok`/`ota_mark_hardware_anti_rollback`), `partitions_ota.csv`, `sdkconfig.defaults.esp32dev-ota`, `server.js` (FIRMWARE_SIGNING_KEY_PATH) |
+| F-6 | ADR-0007: TLS transport | ✅ v3: HTTPS with root-CA verification, mTLS optional | Conformant (v1 — violation, see F-3) | `esp32_proof_sender_v3.ino:41-66, 300-344` |
+| F-7 | On-chain lifecycle: the device itself runs register/claim | The firmware only sends proofs; on-chain register/claim is done by scripts/the owner, not by the device | The full ADR-0005 pipeline (device-driven registration) is not implemented on the device | `esp32_proof_sender_v3.ino` (no register/claim), `scripts/create-producer-device.js` |
 
-### 4.5. Документация / конформность
+### 4.5. Documentation / conformance
 
-| № | Проблема | Ссылки |
+| # | Problem | References |
 |---|---|---|
-| D-1 | `docs/specifications/ENRG_Conformance.md` ссылается на **устаревший** program id `9rVoq…XF` (архивирован как legacy; актуальный — `HkuC3…`) | `ENRG_Conformance.md:79`, `docs/STATE.md:172-176` |
-| D-2 | `docs/merkle-proof-verification.md` (копия Axis-core) описывает `keccak256` как `sha256` (неоднозначность перенесена из reference), а фактически on-chain и `oracle/registry/app.js` используют SHA-256; `routes/manifestRoutes.js` — keccak256 | `docs/merkle-proof-verification.md:51-56`, `merkle_proof_verification.rs:5-99`, `oracle/registry/app.js:40-43`, `oracle/registry/routes/manifestRoutes.js:4` |
-| D-3 | README оракула описывает `/api/v1/proof/submit`, но файл `server.js` лежит в корне, а не в `oracle/`; внутри `oracle/registry/` — отдельный сервис | `oracle/README.md:1-17`, корневой `server.js` |
-| D-4 | `docs/SECURITY_AUDIT_2026-08-16.md` фиксирует критические уязвимости (CR-1..CR-3), которые **уже исправлены** в текущем коде — документ устарел и требует пересмотра статусов | `docs/SECURITY_AUDIT_2026-08-16.md`, текущий `server.js:527-589, 649-815` |
+| D-1 | `docs/specifications/ENRG_Conformance.md` references the **outdated** program id `9rVoq…XF` (archived as legacy; the current one — `HkuC3…`) | `ENRG_Conformance.md:79`, `docs/STATE.md:172-176` |
+| D-2 | `docs/merkle-proof-verification.md` (an Axis-core copy) describes `keccak256` as `sha256` (an ambiguity carried over from the reference), while in fact on-chain and `oracle/registry/app.js` use SHA-256; `routes/manifestRoutes.js` — keccak256 | `docs/merkle-proof-verification.md:51-56`, `merkle_proof_verification.rs:5-99`, `oracle/registry/app.js:40-43`, `oracle/registry/routes/manifestRoutes.js:4` |
+| D-3 | The oracle README describes `/api/v1/proof/submit`, but `server.js` sits in the root, not in `oracle/`; inside `oracle/registry/` there is a separate service | `oracle/README.md:1-17`, the root `server.js` |
+| D-4 | `docs/SECURITY_AUDIT_2026-08-16.md` records critical vulnerabilities (CR-1..CR-3) that are **already fixed** in the current code — the document is outdated and needs a status review | `docs/SECURITY_AUDIT_2026-08-16.md`, the current `server.js:527-589, 649-815` |
 
 
-| O-4 | ADR-0001/0005: устройства с другими владельцами | `mint_energy` требует `producer.authority == signer`; оракул подписывает founder-ключом → минт только для устройств, заклеймленных на founder | Мульти-владельческий сценарий (ядро ADR-0005 CLAIMED/owner) не работает с текущим оракулом | `mint.rs:56-59`, `server.js:418, 464-471` |
-| O-5 | ADR-0007: подпись оракула должна быть проверяемой on-chain | Реализовано корректно: `oracle_signature` проверяется через precompile (✅) | Соответствует | `mint.rs:72-83`, `state/oracle.rs:55-65` |
+| O-4 | ADR-0001/0005: devices with other owners | `mint_energy` requires `producer.authority == signer`; the oracle signs with the founder key → mint only for devices claimed by the founder | The multi-owner scenario (the heart of ADR-0005 CLAIMED/owner) does not work with the current oracle | `mint.rs:56-59`, `server.js:418, 464-471` |
+| O-5 | ADR-0007: the oracle signature must be verifiable on-chain | Implemented correctly: `oracle_signature` is verified via the precompile (✅) | Conformant | `mint.rs:72-83`, `state/oracle.rs:55-65` |
 
-## 5. Рекомендации по исправлению
+## 5. Fix recommendations
 
 ### Core Protocol
-1. **C-3 (манифесты):** добавить on-chain проверку Ed25519-подписи издателя в `register_manifest_verification` (использовать существующий паттерн `verify_ed25519_signature` через precompile), либо ограничить регистрацию только `oracle_authority` (Signer) до введения полноценного root-key registry.
-2. **C-4 (Merkle):** привязать `leaf_hash` к `manifest_verification.content_hash` on-chain (например, требовать `leaf_hash == sha256(manifest_id ‖ content_hash)`), чтобы proof доказывал подлинность именно содержимого манифеста.
-3. **C-1/C-2 (ADR-0003):** ~~ввести отдельный on-chain PolicyRegistry~~ → **✅ C-1 выполнено (2026-08-17):** on-chain `PolicyRegistry` + `PolicyEngine`; `mint_energy` исполняет политики. **Остаток C-2:** перевести решения quarantine/maintenance на Policy Engine (owner-gated инструкции сохраняются как управляющий контур; сама admissibility минта уже у политик).
-4. **C-5 (ротация ключей):** добавить `rotate_device_key` с подписью старого и нового ключей и историей ротации в `EnergyProducer`; разрешить отзыв ключа через owner/governance.
-5. **C-6 (governance):** расширить до ADR-0009: голосование по весу токенов, deposit, настраиваемые quorum/threshold, timelock как параметр, исполнение произвольных инструкций, emergency-флоу с высшим кворумом.
-6. **C-7:** сделать `set_vault_authority` двухшаговым (pending + timelock), а лучше — под multisig/Governance.
+1. **C-3 (manifests):** add an on-chain Ed25519 publisher-signature check in `register_manifest_verification` (reuse the existing `verify_ed25519_signature` precompile pattern), or restrict registration to `oracle_authority` (Signer) only until a full root-key registry is introduced.
+2. **C-4 (Merkle):** bind `leaf_hash` to `manifest_verification.content_hash` on-chain (e.g. require `leaf_hash == sha256(manifest_id ‖ content_hash)`), so the proof attests the authenticity of the manifest content itself.
+3. **C-1/C-2 (ADR-0003):** ~~introduce a separate on-chain PolicyRegistry~~ → **✅ C-1 done (2026-08-17):** an on-chain `PolicyRegistry` + `PolicyEngine`; `mint_energy` enforces the policies. **C-2 remaining:** move the quarantine/maintenance decisions to the Policy Engine (owner-gated instructions stay as the control loop; the mint admissibility itself is already with the policies).
+4. **C-5 (key rotation):** add `rotate_device_key` with signatures from both the old and the new keys and a rotation history in `EnergyProducer`; allow key revocation via the owner/governance.
+5. **C-6 (governance):** extend to ADR-0009: weight-based token voting, deposit, configurable quorum/threshold, timelock as a parameter, execution of arbitrary instructions, an emergency flow with a higher quorum.
+6. **C-7:** make `set_vault_authority` two-step (pending + timelock), ideally under multisig/Governance.
 
 ### Oracle
-7. **O-3/O-4 (минт):** разделить роли: оракул подписывает OracleReport ключом из `OracleRegistry` (не founder), а минт выполняется от имени владельца устройства (per-owner `authority`) либо через специализированную минт-роль; иначе мульти-владельческий мейннет невозможен.
-8. **O-2:** синхронизировать off-chain БД с on-chain `EnergyProducer` (например, статус устройства и nonce брать on-chain), либо свести off-chain состояние к кэшу.
-9. **O-7/O-8:** удалить мёртвый `routes/manifestRoutes.js` (keccak + дефолтный `'secure-key'`) или подключить его правильно; добавить персистентность манифестов и якорение корня по расписанию (ADR-0007 §7).
-10. **O-9:** заархивировать EVM-артефакты (`contracts/`, `onchain/`, `onchain_bridge.py`, `docs/onchain-attestation.md`) с пометкой legacy, чтобы не создавать дрейф.
+7. **O-3/O-4 (mint):** split the roles: the oracle signs the OracleReport with a key from `OracleRegistry` (not the founder), and the mint is executed on behalf of the device owner (per-owner `authority`) or via a dedicated mint role; otherwise a multi-owner mainnet is impossible.
+8. **O-2:** sync the off-chain DB with the on-chain `EnergyProducer` (e.g. take the device status and nonce on-chain), or reduce the off-chain state to a cache.
+9. **O-7/O-8:** remove the dead `routes/manifestRoutes.js` (keccak + the default `'secure-key'`) or wire it correctly; add manifest persistence and scheduled root anchoring (ADR-0007 §7).
+10. **O-9:** archive the EVM artifacts (`contracts/`, `onchain/`, `onchain_bridge.py`, `docs/onchain-attestation.md`) with a legacy label to avoid drift.
 
 ### Firmware
-11. **F-2:** ~~перейти на аппаратную Ed25519-подпись~~ → **⚠️ Частично выполнено (2026-08-17):** добавлен SE050-путь (аппаратная Ed25519-подпись) + документированный компромисс (`SE050-HARDWARE-SIGNING.md`). Остаток: bring-up на железе, eFuse (secure boot/flash-encryption/JTAG off) в производстве.
-12. **F-3 (критично):** ~~удалить legacy v1 (`esp32_proof_sender.ino`) из git~~ → **✅ Выполнено (2026-08-17):** v1/v2 перенесены в `firmware/legacy/` (gitignored) и удалены из git.
-13. **F-4:** реализовать получение и проверку подписанного Device Manifest (ADR-0004): `GET /manifests?model=…`, проверка ED25519-подписи сервера, сверка `policy_version`, хранение в NVS.
-14. **F-5 (ADR-0008):** ~~внедрить OTA~~ → **✅ Выполнено (2026-08-17):** OTA (подпись холодным firmware-ключом + SHA-256 + анти-откат), dual-bank A/B + аппаратный monotonic eFuse (env `esp32dev-ota`). Остаток: bring-up на железе.
-15. **F-7:** реализовать в прошивке подпись register/claim-сообщений (`b"enrg:device:register"`, `b"enrg:device:claim"`), чтобы устройство могло само проходить on-chain lifecycle.
+11. **F-2:** ~~move to hardware Ed25519 signing~~ → **⚠️ Partially done (2026-08-17):** an SE050 path added (hardware Ed25519 signing) + a documented compromise (`SE050-HARDWARE-SIGNING.md`). Remaining: bring-up on hardware, eFuse (secure boot/flash-encryption/JTAG off) in production.
+12. **F-3 (critical):** ~~remove legacy v1 (`esp32_proof_sender.ino`) from git~~ → **✅ Done (2026-08-17):** v1/v2 moved to `firmware/legacy/` (gitignored) and removed from git.
+13. **F-4:** implement fetching and verifying a signed Device Manifest (ADR-0004): `GET /manifests?model=…`, server ED25519-signature verification, `policy_version` cross-check, NVS storage.
+14. **F-5 (ADR-0008):** ~~implement OTA~~ → **✅ Done (2026-08-17):** OTA (a cold firmware-key signature + SHA-256 + anti-rollback), dual-bank A/B + a hardware monotonic eFuse (env `esp32dev-ota`). Remaining: bring-up on hardware.
+15. **F-7:** implement register/claim message signing in the firmware (`b"enrg:device:register"`, `b"enrg:device:claim"`), so the device can run the on-chain lifecycle itself.
 
-### Документация
-16. **D-1:** обновить `ENRG_Conformance.md` (актуальный program id `HkuC3…`), синхронизировать `STATE.md`, `SECURITY_AUDIT_2026-08-16.md` (пометить исправленные пункты), уточнить Merkle-документацию (SHA-256 vs keccak).
-17. **D-2/O-10/O-11:** согласовать формат `device_id` и enum состояний между on-chain, off-chain схемами и оракулом (либо схемы, либо код).
+### Documentation
+16. **D-1:** update `ENRG_Conformance.md` (the current program id `HkuC3…`), sync `STATE.md`, `SECURITY_AUDIT_2026-08-16.md` (mark the fixed items), clarify the Merkle documentation (SHA-256 vs keccak).
+17. **D-2/O-10/O-11:** align the `device_id` format and the states enum between on-chain, the off-chain schemas and the oracle (either the schemas or the code).
 
-
----
-
-## 6. Приоритетные фиксы (что делать в первую очередь)
-
-### 🔴 P0 — блокеры мейннета (до любого продакшн-деплоя)
-1. ~~**Удалить/изолировать legacy-прошивку с захардкоженным ключом** (`esp32_proof_sender.ino`)~~ → **✅ Закрыт (2026-08-17):** v1/v2 удалены из git → `firmware/legacy/` (gitignored), ключ заредэктирован.
-2. ~~**On-chain верификация подписи манифеста + привязка leaf к содержимому** (C-3/C-4)~~ → **перенесено в P1 (D-7):** подпись издателя манифеста on-chain не проверяется (см. рекомендацию 6).
-3. ~~**Исправить минт-путь для мульти-владельцев** (O-3/O-4)~~ → **✅ Закрыт в предыдущем этапе:** `mint_submitter_authorized` (C-2: владелец ИЛИ доверенный оракул; награда — владельцу).
-4. ~~**Решение по Policy Engine** (ADR-0003)~~ → **✅ Закрыт (2026-08-17):** on-chain `PolicyRegistry` + `PolicyEngine` (`instructions/policy_engine.rs`); `mint_energy` — Verifier, исполняет политики.
-5. ~~**Устройство должно получать и проверять Manifest** (ADR-0004) + **OTA** (ADR-0008)~~ → **✅ Закрыто:** манифест (ADR-0004) — в предыдущем этапе; OTA (ADR-0008) усилен холодным firmware-ключом, dual-bank A/B и monotonic eFuse (2026-08-17).
-
-> **P0-блокеры второй волны (2026-08-17) — все 4 закрыты:**
-> 1. **D-1**: legacy-прошивка с ключом удалена из git → `firmware/legacy/` (gitignored), ключ заредэктирован.
-> 2. **D-2 (ADR-0003)**: on-chain `PolicyRegistry` (PDA `[b"policy-registry"]`) + `PolicyEngine`; `mint_energy` — Verifier, политики управляются через `update_policy`.
-> 3. **D-13 (ADR-0001/0007)**: SE050-путь (аппаратная Ed25519, env `esp32dev-se050`) + документированный компромисс (`SE050-HARDWARE-SIGNING.md`); `ENRG_FOUNDER_PUBKEY_HEX` заполнен реальным ключом.
-> 4. **D-4/D-5 (ADR-0008)**: отдельный холодный firmware-ключ (`ENRG_FIRMWARE_PUBKEY_HEX`, `FIRMWARE_SIGNING_KEY_PATH`), dual-bank A/B (`partitions_ota.csv`) + аппаратный monotonic-счётчик (eFuse secure_version, env `esp32dev-ota`).
-
-### 🟠 P1 — до мейннета (важно)
-6. Governance: multisig/timelock для admin-операций (`set_vault_authority`), ротация ключей (C-5, C-6, C-7).
-7. Секьюрное хранение ключа устройства: bring-up SE050 на железе + eFuse в производстве (F-2).
-8. Персистентность manifest registry + регламент якорения Merkle-корней (O-8, C-8).
-9. Удалить мёртвые/legacy артефакты (routes/manifestRoutes.js, EVM-мост) (O-7, O-9).
-10. Синхронизация документации и форматов (D-1…D-4, O-10/O-11).
-
-### 🟡 P2 — пост-мейннет / roadmap
-11. COSE/CBOR-аттестация, X.509, root-key registry, Guardians-multisig, полный DAO (ADR-0007/0009), negative proofs (merkle), batch verification.
 
 ---
 
-## 7. Заключение: готов ли ENRG к мейннету
+## 6. Priority fixes (what to do first)
 
-**Нет, ENRG не готов к мейннету с точки зрения соответствия AXIS.**
+### 🔴 P0 — mainnet blockers (before any production deploy)
+1. ~~**Remove/isolate the legacy firmware with the hardcoded key** (`esp32_proof_sender.ino`)~~ → **✅ Closed (2026-08-17):** v1/v2 removed from git → `firmware/legacy/` (gitignored), the key redacted.
+2. ~~**On-chain manifest signature verification + leaf-to-content binding** (C-3/C-4)~~ → **moved to P1 (D-7):** the on-chain manifest publisher signature is not verified (see recommendation 6).
+3. ~~**Fix the mint path for multi-owner** (O-3/O-4)~~ → **✅ Closed in the previous stage:** `mint_submitter_authorized` (C-2: the owner OR a trusted oracle; the reward goes to the owner).
+4. ~~**Policy Engine decision** (ADR-0003)~~ → **✅ Closed (2026-08-17):** an on-chain `PolicyRegistry` + `PolicyEngine` (`instructions/policy_engine.rs`); `mint_energy` is the Verifier and enforces the policies.
+5. ~~**The device must receive and verify a Manifest** (ADR-0004) + **OTA** (ADR-0008)~~ → **✅ Closed:** the manifest (ADR-0004) — in the previous stage; OTA (ADR-0008) hardened with a cold firmware key, dual-bank A/B and a monotonic eFuse (2026-08-17).
 
-- Общий уровень — **частичное соответствие (≈ 50–55 %)**, что согласуется с собственным статусом проекта «ready for devnet, mainnet deferred» (`docs/protocol/deployment/mvp-release-readiness.md:4`).
-- **Сильное ядро:** on-chain trust-модель (ADR-0001/0002/0005) — состояния, переходы, Ed25519-проверки, nonce/freshness, OracleRegistry — реализована корректно и на уровне, пригодном для закрытого тестнета.
-- **Критические пробелы для мейннета:** отсутствие Policy Engine (ADR-0003), отсутствие Device Manifest на устройстве (ADR-0004), отсутствие OTA и подписи прошивки (ADR-0008), нереализованные ротация/отзыв ключей и root-of-trust registry (ADR-0007), сокращённый governance (ADR-0009), неработающий мульти-владельческий минт, а также legacy-прошивка с захардкоженным ключом в репозитории.
-- **Минимальный путь до мейннета:** закрыть пункты P0 (5 фиксов) и P1 (5 фиксов), после чего провести независимый аудит по чек-листу ADR-0001…0009 и повторную devnet-верификацию с реальными устройствами (двухсторонний e2e: ESP32 → Oracle → mint).
+> **Second-wave P0 blockers (2026-08-17) — all 4 closed:**
+> 1. **D-1**: the legacy firmware with the key removed from git → `firmware/legacy/` (gitignored), the key redacted.
+> 2. **D-2 (ADR-0003)**: on-chain `PolicyRegistry` (PDA `[b"policy-registry"]`) + `PolicyEngine`; `mint_energy` is the Verifier, policies are managed via `update_policy`.
+> 3. **D-13 (ADR-0001/0007)**: an SE050 path (hardware Ed25519, env `esp32dev-se050`) + a documented compromise (`SE050-HARDWARE-SIGNING.md`); `ENRG_FOUNDER_PUBKEY_HEX` filled with the real key.
+> 4. **D-4/D-5 (ADR-0008)**: a separate cold firmware key (`ENRG_FIRMWARE_PUBKEY_HEX`, `FIRMWARE_SIGNING_KEY_PATH`), dual-bank A/B (`partitions_ota.csv`) + a hardware monotonic counter (eFuse secure_version, env `esp32dev-ota`).
+
+### 🟠 P1 — before mainnet (important)
+6. Governance: multisig/timelock for admin operations (`set_vault_authority`), key rotation (C-5, C-6, C-7).
+7. Secure device-key storage: SE050 bring-up on hardware + eFuse in production (F-2).
+8. Manifest registry persistence + a Merkle-root anchoring schedule (O-8, C-8).
+9. Remove the dead/legacy artifacts (routes/manifestRoutes.js, the EVM bridge) (O-7, O-9).
+10. Sync the documentation and formats (D-1…D-4, O-10/O-11).
+
+### 🟡 P2 — post-mainnet / roadmap
+11. COSE/CBOR attestation, X.509, root-key registry, Guardians multisig, full DAO (ADR-0007/0009), negative proofs (merkle), batch verification.
 
 ---
 
-## 8. Ограничения аудита
+## 7. Conclusion: is ENRG mainnet-ready
 
-- Анализ проведён **статически** (без запуска on-chain транзакций на devnet и без сборки прошивки).
-- Тесты `tests/merkle-proof-verification.test.ts` и `devnet-merkle-proof-verification.test.ts` содержат TS-ошибки/`describe.skip` (`docs/STATE.md:142-143, 153-157`) — runtime-поведение Merkle-слоя полностью не подтверждено.
-- Полный `mint_energy` покрыт только devnet-скриптом `scripts/devnet_e2e_lifecycle.ts`, а не автоматическими тестами (`docs/STATE.md:144-149`).
-- JSON-схемы сравнивались с эталоном Axis-core побайтово (`diff -q` — все 5 файлов идентичны).
+**No, ENRG is not mainnet-ready from an AXIS-conformance standpoint.**
+
+- The overall level is **partial conformance (≈ 50–55 %)**, consistent with the project's own "ready for devnet, mainnet deferred" status (`docs/protocol/deployment/mvp-release-readiness.md:4`).
+- **A strong core:** the on-chain trust model (ADR-0001/0002/0005) — states, transitions, Ed25519 verifications, nonce/freshness, OracleRegistry — is implemented correctly and at a level suitable for a closed testnet.
+- **Critical mainnet gaps:** the missing Policy Engine (ADR-0003), the missing Device Manifest on the device (ADR-0004), the missing OTA and firmware signing (ADR-0008), the unimplemented key rotation/revocation and root-of-trust registry (ADR-0007), the reduced governance (ADR-0009), the broken multi-owner mint, and the legacy firmware with a hardcoded key in the repository.
+- **The minimal path to mainnet:** close the P0 items (5 fixes) and the P1 items (5 fixes), then run an independent audit against the ADR-0001…0009 checklist and a repeat devnet verification with real devices (two-sided e2e: ESP32 → Oracle → mint).
+
+---
+
+## 8. Audit limitations
+
+- The analysis was done **statically** (without running on-chain devnet transactions and without building the firmware).
+- The tests `tests/merkle-proof-verification.test.ts` and `devnet-merkle-proof-verification.test.ts` contain TS errors/`describe.skip` (`docs/STATE.md:142-143, 153-157`) — the runtime behavior of the Merkle layer is not fully confirmed.
+- The full `mint_energy` is covered only by the devnet script `scripts/devnet_e2e_lifecycle.ts`, not by automated tests (`docs/STATE.md:144-149`).
+- The JSON schemas were compared byte-by-byte against the Axis-core reference (`diff -q` — all 5 files are identical).
 
