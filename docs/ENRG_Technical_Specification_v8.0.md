@@ -22,11 +22,11 @@ The current reference implementation uses Solana.
 
 ---
 
-> **Актуальное состояние реализации** (адреса, константы, PDA-структура,
-> жизненный цикл, тест-статус, roadmap) см. в **`docs/STATE.md`** — единый
-> источник правды, сверенный с кодом. Настоящая спецификация — нормативное
-> описание протокола; при расхождении с фактическим кодом приоритет у
-> `docs/STATE.md` (код) до следующего релиза спецификации.
+> **Current implementation state** (addresses, constants, PDA structure,
+> lifecycle, test status, roadmap) is in **`docs/STATE.md`** — the single
+> source of truth, verified against the code. This specification is the normative
+> protocol description; if it disagrees with the actual code, the priority is
+> `docs/STATE.md` (the code) until the next spec release.
 
 ---
 

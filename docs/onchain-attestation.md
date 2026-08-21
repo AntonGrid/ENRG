@@ -39,10 +39,10 @@ function submitAttestation(
     uint64 maxPowerW,
     uint64 issuedAt
 ) external;
-msg.sender — the trusted Oracle (проверяется через trustedOracles[msg.sender]).
+msg.sender — the trusted Oracle (checked via trustedOracles[msg.sender]).
 The attestation is stored in mapping(bytes32 => AttestationCore) public attestations.
 3. Off-chain → on-chain mapping
-Путь: JSON → app.onchain_bridge.build_attestation_params(...) → parameters for submitAttestation.
+Path: JSON → app.onchain_bridge.build_attestation_params(...) → parameters for submitAttestation.
 
 Mapping:
 
@@ -66,7 +66,7 @@ issuedAt = int(datetime.fromisoformat(ts).timestamp())
 Command:
 
 python scripts/demo_onchain_bridge.py
-Пример вывода:
+Example output:
 
 === On-chain parameters for submitAttestation ===
 attestationId (bytes32): 0x16c9c0ac191d642d6effa42f8d2a44612c003d2848ba10cf7b9df23206b236ea
@@ -74,7 +74,7 @@ deviceId      (bytes32): 0x54562bb25b54e0e36d75c1f38fef431a05f3de67bc51103fc1266
 allowed       (bool)   : True
 maxPowerW     (uint64) : 2500
 issuedAt      (uint64) : 1785006300
-Эти значения напрямую соответствуют вызову смарт-контракта:
+These values map directly to the smart-contract call:
 
 enrgOracleAttestation.submitAttestation(
     0x16c9c0ac191d642d6effa42f8d2a44612c003d2848ba10cf7b9df23206b236ea,
@@ -83,6 +83,6 @@ enrgOracleAttestation.submitAttestation(
     2500,
     1785006300
 );
-Где msg.sender должен быть доверенным Oracle, добавленным через:
+Where msg.sender must be a trusted Oracle added via:
 
 setTrustedOracle(address oracle, bool trusted);
