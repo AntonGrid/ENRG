@@ -1,191 +1,185 @@
-# Глава 4. Архитектура рождается раньше кода
+# Chapter 4. Architecture Is Born Before the Code
 
-> *«Код отвечает на вопрос "как?". Архитектура отвечает на вопрос "почему?".»*
+> *"Code answers the question 'how?'. Architecture answers the question 'why?'."*
 
-Любая программная система существует сразу в двух мирах.
+Every software system exists in two worlds at once.
 
-Первый мир видит большинство разработчиков.
+The first world is seen by most developers.
 
-Это мир исходного кода.
+This is the world of source code.
 
-Функций.
+Functions.
 
-Алгоритмов.
+Algorithms.
 
-Баз данных.
+Databases.
 
-API.
+APIs.
 
-Команд.
+Commands.
 
-Запросов.
+Requests.
 
-Именно здесь происходит основная ежедневная работа.
+This is where the main daily work happens.
 
-Исправляются ошибки.
+Bugs are fixed.
 
-Добавляются новые возможности.
+New features are added.
 
-Оптимизируется производительность.
+Performance is optimized.
 
-Кажется, что именно здесь и создаётся система.
+It seems that this is where the system is created.
 
-Но существует второй мир.
+But there is a second world.
 
-Он значительно менее заметен.
+It is much less visible.
 
-Именно в нём рождается архитектура.
+It is in this world that architecture is born.
 
-Архитектура не начинается с программирования.
+Architecture does not begin with programming.
 
-Она начинается с вопросов.
+It begins with questions.
 
-Почему устройство должно хранить собственную криптографическую личность?
+Why should a device store its own cryptographic identity?
 
-Почему Oracle не должен принимать решения вместо протокола?
+Why should an Oracle not make decisions instead of the protocol?
 
-Почему состояние устройства должно существовать только в одном месте?
+Why should device state exist in only one place?
 
-Почему правила важнее конкретной реализации?
+Why are rules more important than a specific implementation?
 
-Каждый подобный вопрос постепенно превращается в принцип.
+Each such question gradually turns into a principle.
 
-А каждый принцип — в основу будущей архитектуры.
+And each principle becomes the foundation of future architecture.
 
-Именно поэтому в ENRG начали появляться Architecture Decision Records.
+That is why Architecture Decision Records began to appear in Axis.
 
-Сначала они выглядели как обычные заметки.
+At first they looked like ordinary notes.
 
-Позже стало понятно, что это значительно больше.
+Later it became clear that they were something much more.
 
-Каждый ADR фиксировал не техническое решение.
+Each ADR recorded not a technical decision.
 
-Он фиксировал инженерный принцип.
+It recorded an engineering principle.
 
-Не описание реализации.
+Not a description of implementation.
 
-А объяснение причины.
+But an explanation of the reason.
 
-Именно это отличает архитектуру от программирования.
+This is what distinguishes architecture from programming.
 
-Программирование отвечает на вопрос:
+Programming answers the question:
 
-> «Как реализовать решение?»
+> "How do we implement the solution?"
 
-Архитектура отвечает:
+Architecture answers:
 
-> **«Почему именно такое решение должно существовать?»**
+> **"Why should such a solution exist?"**
 
-На первый взгляд эта разница кажется незначительной.
+At first glance, this difference seems insignificant.
 
-На практике именно она определяет способность системы развиваться.
+In practice, it is precisely this that determines the system's ability to evolve.
 
-Можно бесконечно переписывать код.
+You can rewrite code endlessly.
 
-Менять язык программирования.
+Change programming languages.
 
-Заменять базы данных.
+Replace databases.
 
-Переносить систему между различными платформами.
+Migrate the system between different platforms.
 
-Но если архитектурные принципы остаются неизменными, система продолжает оставаться самой собой.
+But if the architectural principles remain unchanged, the system continues to be itself.
 
-Именно поэтому многие решения в ENRG принимались значительно дольше, чем их последующая реализация.
+That is why many decisions in Axis took significantly longer than their subsequent implementation.
 
-Например, вопрос хранения приватного ключа.
+For example, the question of private key storage.
 
-С технической точки зрения существовало множество вариантов.
+From a technical point of view, there were many options.
 
-Сервер мог самостоятельно выдавать ключи.
+The server could issue keys itself.
 
-Или хранить их централизованно.
+Or store them centrally.
 
-Или подписывать сообщения от имени устройств.
+Or sign messages on behalf of devices.
 
-Подобные решения значительно упрощали разработку.
+Such solutions would greatly simplify development.
 
-Но одновременно разрушали фундаментальное правило доверия.
+But at the same time they would destroy the fundamental rule of trust.
 
-Поэтому появился принцип:
+That is why a principle appeared:
 
-**Приватный ключ никогда не покидает устройство.**
+**The private key never leaves the device.**
 
-Это уже было не программное решение.
+This was no longer a software decision.
 
-Это стало законом архитектуры.
+It became a law of architecture.
 
-Позже аналогичным образом появились другие принципы.
+Later, other principles appeared in a similar way.
 
-Device Registry стал единственным источником истины.
+The Device Registry became the single source of truth.
 
-Policy Engine отделился от Oracle.
+The Policy Engine separated from the Oracle.
 
-Device Manifest превратился в контракт между устройством и протоколом.
+The Device Manifest became a contract between the device and the protocol.
 
-Lifecycle перестал быть простой диаграммой состояний.
+The Lifecycle ceased to be a simple state diagram.
 
-Он стал описанием полной жизни устройства внутри экосистемы.
+It became a description of the full life of a device within the ecosystem.
 
-Каждое новое решение уменьшало связность системы.
+Each new decision reduced the coupling of the system.
 
-Каждый компонент получал собственную область ответственности.
+Each component received its own area of responsibility.
 
-Именно так постепенно начала формироваться настоящая архитектура.
+This is how true architecture gradually began to take shape.
 
-Не как набор модулей.
+Not as a set of modules.
 
-А как система независимых правил.
+But as a system of independent rules.
 
-В какой-то момент стало очевидно ещё одно наблюдение.
+At some point, another observation became clear.
 
-Хорошая архитектура редко производит сильное впечатление.
+Good architecture rarely makes a strong impression.
 
-Она выглядит естественной.
+It looks natural.
 
-Настолько естественной, что спустя несколько лет возникает ощущение:
+So natural that after a few years the feeling arises:
 
-> «Разве можно было сделать иначе?»
+> "Could it have been done any other way?"
 
-Но именно это и является признаком зрелой инженерной мысли.
+But that is precisely the sign of mature engineering thought.
 
-Лучшие архитектурные решения перестают казаться решениями.
+The best architectural decisions cease to seem like decisions.
 
-Они начинают восприниматься как очевидные правила.
+They begin to be perceived as obvious rules.
 
-Именно поэтому архитектура всегда развивается медленнее программного кода.
+That is why architecture always evolves more slowly than code.
 
-Она требует значительно большей осторожности.
+It requires much more caution.
 
-Изменить функцию можно за несколько минут.
+A function can be changed in a few minutes.
 
-Изменить архитектурный принцип иногда невозможно без изменения всей системы.
+An architectural principle sometimes cannot be changed without changing the entire system.
 
-По этой причине каждое подобное решение должно приниматься значительно внимательнее.
+For this reason, every such decision must be made much more carefully.
 
-Именно архитектурные принципы определяют способность протокола пережить собственные реализации.
+It is architectural principles that determine the protocol's ability to outlive its own implementations.
 
-Языки программирования неизбежно изменятся.
+Programming languages will inevitably change.
 
-Современные библиотеки исчезнут.
+Modern libraries will disappear.
 
-Появятся новые вычислительные платформы.
+New computing platforms will emerge.
 
-Изменится оборудование.
+Equipment will change.
 
-Но если фундаментальные принципы останутся правильными, новые поколения инженеров смогут снова и снова создавать ENRG практически с нуля.
+But if the fundamental principles remain correct, new generations of engineers will be able to recreate Axis from scratch over and over again.
 
-И каждый раз получится новая реализация.
+And each time there will be a new implementation.
 
-Но всё тот же протокол.
+But always the same protocol.
 
-Именно тогда становится понятна настоящая роль архитектора.
+That is when the true role of the architect becomes clear.
 
-Архитектор проектирует не код.
+The architect does not design code.
 
-Он проектирует пространство, внутри которого будущие поколения смогут создавать собственные решения.
-
----
-
-## Мысль главы
-
-> **«Код является временной реализацией. Архитектура является долгосрочным соглашением между всеми будущими разработчиками протокола.»**
+They design the space within which future generations will be able to create their own solutions.

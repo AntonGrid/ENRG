@@ -1,106 +1,106 @@
-# Глава 2. День, когда токена стало недостаточно
+# Chapter 2. When a Token Was No Longer Enough
 
-> *«Иногда самое важное открытие заключается не в новой идее. Оно заключается в понимании того, что первоначальная идея была слишком маленькой.»*
+> *"Sometimes the most important discovery is not a new idea. It is realizing that the original idea was too small."*
 
-Любая инженерная система начинается с определённой цели.
+Every engineering system begins with a specific goal.
 
-Именно цель определяет первые решения.
+It is the goal that determines the first decisions.
 
-Первые эксперименты.
+The first experiments.
 
-Первую архитектуру.
+The first architecture.
 
-Первые ошибки.
+The first mistakes.
 
-В самом начале казалось, что задача ENRG достаточно проста.
+At the very beginning, the task of Axis seemed simple enough.
 
-Необходимо создать механизм, позволяющий превращать реально произведённую энергию в цифровой актив.
+It was necessary to create a mechanism to turn actually produced energy into a digital asset.
 
-Если устройство способно измерить объём произведённой энергии, остаётся лишь передать эту информацию в блокчейн и выпустить соответствующее количество токенов.
+If a device can measure the amount of energy produced, it only remains to transmit this information to the blockchain and issue the corresponding number of tokens.
 
-На первый взгляд задача выглядела почти очевидной.
+At first glance, the task seemed almost obvious.
 
-Но очень быстро появился вопрос, который изменил всё.
+But very quickly a question appeared that changed everything.
 
-**Почему цифровая система должна поверить устройству?**
+**Why should a digital system trust the device?**
 
-Сам по себе блокчейн не умеет измерять физический мир.
+Blockchain itself does not know how to measure the physical world.
 
-Он не знает, светило ли солнце.
+It does not know if the sun was shining.
 
-Не знает, вращалась ли турбина.
+It does not know if the turbine was spinning.
 
-Не знает, действительно ли был произведён мегаватт-час энергии.
+It does not know if a megawatt-hour of energy was actually produced.
 
-Он способен хранить информацию.
+It can store information.
 
-Но не способен самостоятельно подтвердить её происхождение.
+But it cannot independently confirm its origin.
 
-Именно здесь стало понятно, что токенизация является лишь последним этапом процесса.
+It was here that it became clear: tokenization is only the last stage of the process.
 
-Самая сложная задача находится значительно раньше.
+The most difficult task is much earlier.
 
-Необходимо построить доверие.
+It is necessary to build trust.
 
-Причём не доверие между людьми.
+Not trust between people.
 
-И даже не доверие между организациями.
+Not even trust between organizations.
 
-Необходимо построить доверие между физическим устройством и цифровой системой.
+It is necessary to build trust between a physical device and a digital system.
 
-Именно этот вопрос постепенно начал менять архитектуру будущего протокола.
+This question gradually began to change the architecture of the future protocol.
 
-Если устройство может быть подделано — доверия нет.
+If a device can be faked — there is no trust.
 
-Если сервер может изменить информацию — доверия нет.
+If a server can change information — there is no trust.
 
-Если производитель оборудования обладает абсолютной властью над системой — доверия нет.
+If the equipment manufacturer has absolute power over the system — there is no trust.
 
-Каждое найденное решение неожиданно порождало новую проблему.
+Each solution found unexpectedly gave rise to a new problem.
 
-Каждое упрощение уменьшало уровень доверия.
+Each simplification reduced the level of trust.
 
-И наоборот.
+And vice versa.
 
-Каждое дополнительное архитектурное правило делало систему немного сложнее, но значительно надёжнее.
+Each additional architectural rule made the system a little more complex, but significantly more reliable.
 
-Постепенно стало очевидно, что проблема лежит значительно глубже самой энергетики.
+Gradually, it became clear that the problem lay much deeper than energy itself.
 
-Энергия оказалась лишь первым примером.
+Energy turned out to be only the first example.
 
-Настоящая задача заключалась в создании универсального способа подтверждения событий, происходящих в физическом мире.
+The real task was to create a universal way to confirm events occurring in the physical world.
 
-Если сегодня можно доказать производство энергии, значит завтра можно подтвердить работу промышленного оборудования.
+If today we can prove energy production, then tomorrow we can confirm the operation of industrial equipment.
 
-Послезавтра — производство водорода.
+The day after tomorrow — hydrogen production.
 
-Через несколько лет — работу совершенно других устройств, которые ещё даже не существуют.
+In a few years — the operation of completely different devices that do not even exist yet.
 
-Именно тогда первоначальная идея перестала помещаться в собственные границы.
+It was at that moment that the original idea ceased to fit within its own boundaries.
 
-Она начала расти.
+It began to grow.
 
-Токен перестал быть центром системы.
+The token ceased to be the center of the system.
 
-Он оказался всего лишь следствием успешно построенного доверия.
+It turned out to be only a consequence of successfully built trust.
 
-Если доверие существует, выпуск цифрового актива становится технической задачей.
+If trust exists, issuing a digital asset becomes a technical task.
 
-Если доверия нет, никакой токен уже не способен решить проблему.
+If there is no trust, no token can solve the problem.
 
-Именно поэтому развитие ENRG постепенно сместилось от обсуждения токеномики к обсуждению архитектуры.
+That is why the development of Axis gradually shifted from discussing tokenomics to discussing architecture.
 
-Стало очевидно, что стоимость любого цифрового актива определяется не только экономической моделью.
+It became clear that the value of any digital asset is determined not only by its economic model.
 
-Она определяется тем, насколько надёжно можно доверять происхождению информации, на которой этот актив основан.
+It is determined by how reliably one can trust the origin of the information on which that asset is based.
 
-Именно в этот момент произошло первое большое изменение философии проекта.
+It was at this moment that the first major shift in the project's philosophy occurred.
 
-Целью перестала быть токенизация энергии.
+The goal was no longer tokenization of energy.
 
-Целью стало построение открытой архитектуры доверия.
+The goal became building an open architecture of trust.
 
-Позже именно из этой идеи появятся Device Identity.
+Later, from this idea would emerge Device Identity.
 
 Proof-of-Production.
 
@@ -112,28 +112,22 @@ Oracle.
 
 Manifest.
 
-Каждый из этих компонентов станет ответом на один и тот же вопрос.
+Each of these components would become an answer to the same question.
 
-**Как сделать так, чтобы цифровой мир мог честно доверять физическому?**
+**How can the digital world honestly trust the physical?**
 
-Ответ на этот вопрос оказался намного ценнее любого токена.
+The answer to this question turned out to be much more valuable than any token.
 
-Потому что токены появляются и исчезают.
+Because tokens appear and disappear.
 
-Технологии меняются.
+Technologies change.
 
-Блокчейны сменяют друг друга.
+Blockchains replace one another.
 
-Но проблема доверия остаётся неизменной.
+But the problem of trust remains unchanged.
 
-Именно поэтому постепенно стало очевидно, что настоящей ценностью ENRG является не цифровой актив.
+That is why it gradually became clear that the real value of Axis is not a digital asset.
 
-Настоящей ценностью становится сама модель доверия.
+The real value is the trust model itself.
 
-Именно она однажды сможет пережить любые технологии.
-
----
-
-## Мысль главы
-
-> **«Токен стал не целью протокола, а следствием правильно построенного доверия.»**
+It is this model that will one day outlive any technology.

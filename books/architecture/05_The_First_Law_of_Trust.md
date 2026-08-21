@@ -1,161 +1,155 @@
-# Глава 5. Первый закон доверия
+# Chapter 5. The First Law of Trust
 
-> *«Любая система безопасности рано или поздно упирается в один вопрос: кому она доверяет?»*
+> *"Every security system eventually comes down to one question: whom does it trust?"*
 
-Когда начинают проектировать распределённую систему, почти всегда первым обсуждают криптографию.
+When designing a distributed system, almost everyone first discusses cryptography.
 
-Какие алгоритмы использовать.
+Which algorithms to use.
 
-Какой размер ключей выбрать.
+What key size to choose.
 
-Как защитить канал связи.
+How to protect the communication channel.
 
-Как шифровать данные.
+How to encrypt data.
 
-Но очень быстро становится понятно, что ни один алгоритм не способен самостоятельно создать доверие.
+But very quickly it becomes clear that no algorithm can independently create trust.
 
-Криптография лишь предоставляет инструменты.
+Cryptography only provides tools.
 
-Архитектура определяет, как эти инструменты будут использоваться.
+Architecture determines how these tools will be used.
 
-Именно здесь возникает один из самых важных вопросов.
+This is where one of the most important questions arises.
 
-**Где должен находиться источник доверия?**
+**Where should the source of trust be located?**
 
-На первый взгляд ответ кажется очевидным.
+At first glance, the answer seems obvious.
 
-На сервере.
+On the server.
 
-Ведь сервер всегда доступен.
+After all, the server is always available.
 
-Именно он хранит базу данных.
+It is the one that stores the database.
 
-Именно он принимает решения.
+It is the one that makes decisions.
 
-Именно он взаимодействует с блокчейном.
+It is the one that interacts with the blockchain.
 
-Так строится большинство современных систем.
+This is how most modern systems are built.
 
-Но подобный подход содержит фундаментальную проблему.
+But this approach contains a fundamental problem.
 
-Если сервер становится источником доверия, то вся система начинает зависеть от сервера.
+If the server becomes the source of trust, then the entire system depends on the server.
 
-Любая компрометация сервера автоматически компрометирует всю сеть.
+Any compromise of the server automatically compromises the entire network.
 
-Получается странная ситуация.
+A strange situation arises.
 
-Внешне система может выглядеть распределённой.
+Externally, the system may look distributed.
 
-Она может использовать блокчейн.
+It may use blockchain.
 
-Может иметь тысячи устройств.
+It may have thousands of devices.
 
-Может обладать десятками узлов.
+It may have dozens of nodes.
 
-Но фактически доверие всё равно сосредоточено в одном месте.
+But in fact, trust is still concentrated in one place.
 
-А значит, настоящей децентрализации не существует.
+Which means that true decentralization does not exist.
 
-Именно это наблюдение привело к первому архитектурному закону ENRG.
+This observation led to the first architectural law of Axis.
 
-> **Приватный ключ никогда не покидает устройство.**
+> **The private key never leaves the device.**
 
-На первый взгляд это выглядит как обычное правило безопасности.
+At first glance, this looks like an ordinary security rule.
 
-На самом деле его значение значительно глубже.
+In fact, its meaning is much deeper.
 
-Приватный ключ является криптографической личностью устройства.
+The private key is the cryptographic identity of the device.
 
-Если эта личность может быть скопирована, перенесена или восстановлена на сервере, устройство перестаёт быть самостоятельным участником сети.
+If this identity can be copied, transferred, or restored on the server, the device ceases to be an independent participant in the network.
 
-Оно становится лишь удалённым датчиком.
+It becomes just a remote sensor.
 
-Настоящий участник сети должен обладать собственной идентичностью.
+A true network participant must have its own identity.
 
-Он самостоятельно принимает участие в создании доверия.
+It independently participates in creating trust.
 
-Он самостоятельно подписывает результаты своей работы.
+It independently signs the results of its work.
 
-Он самостоятельно отвечает за происхождение собственных данных.
+It independently takes responsibility for the origin of its own data.
 
-Сервер больше не становится владельцем доверия.
+The server no longer becomes the owner of trust.
 
-Он превращается лишь в проверяющего.
+It becomes only a verifier.
 
-Это изменение кажется небольшим.
+This change seems small.
 
-Но именно оно полностью меняет архитектуру.
+But it is precisely this that completely changes the architecture.
 
-Oracle больше не создаёт доказательства.
+The Oracle no longer creates proofs.
 
-Он проверяет уже существующие.
+It verifies existing ones.
 
-Registry больше не хранит секреты.
+The Registry no longer stores secrets.
 
-Он хранит только публичную информацию.
+It stores only public information.
 
-Policy Engine больше не доверяет серверу.
+The Policy Engine no longer trusts the server.
 
-Он доверяет криптографически подтверждённой личности устройства.
+It trusts the cryptographically confirmed identity of the device.
 
-Постепенно становится очевидно, что подобный подход напоминает отношения между людьми.
+Gradually, it becomes clear that this approach resembles relationships between people.
 
-Никто не может прожить чужую жизнь.
+No one can live another person's life.
 
-Никто не может принять чужую ответственность.
+No one can take another person's responsibility.
 
-Никто не может поставить подпись за другого человека, не нарушив сам смысл подписи.
+No one can sign for another person without violating the very meaning of the signature.
 
-Криптографическая подпись устройства имеет ту же природу.
+The cryptographic signature of a device has the same nature.
 
-Она подтверждает не только корректность данных.
+It confirms not only the correctness of the data.
 
-Она подтверждает происхождение этих данных.
+It confirms the origin of that data.
 
-Именно поэтому приватный ключ никогда не должен покидать устройство.
+That is why the private key must never leave the device.
 
-Даже если это кажется неудобным.
+Even if it seems inconvenient.
 
-Даже если разработка становится сложнее.
+Even if development becomes more difficult.
 
-Даже если сервер мог бы выполнять те же действия быстрее.
+Even if the server could perform the same actions faster.
 
-Удобство никогда не должно разрушать доверие.
+Convenience must never destroy trust.
 
-Это правило постепенно начинает распространяться далеко за пределы криптографии.
+This rule gradually begins to extend far beyond cryptography.
 
-Каждый компонент системы начинает отвечать только за собственную область ответственности.
+Each component of the system begins to take responsibility only for its own area of responsibility.
 
-Каждый участник выполняет только ту работу, которую способен подтвердить самостоятельно.
+Each participant performs only the work that they can independently confirm.
 
-Так постепенно рождается ещё один фундаментальный принцип.
+Thus, another fundamental principle is gradually born.
 
-**Доверие нельзя передать.**
+**Trust cannot be transferred.**
 
-Его можно только доказать.
+It can only be proven.
 
-Именно этот принцип позже станет основой Proof-of-Production.
+It is this principle that will later become the foundation of Proof-of-Production.
 
-Основой Device Identity.
+The foundation of Device Identity.
 
-Основой всей модели взаимодействия между физическим и цифровым мирами.
+The foundation of the entire model of interaction between the physical and digital worlds.
 
-Со временем языки программирования изменятся.
+Over time, programming languages will change.
 
-Изменятся устройства.
+Devices will change.
 
-Появятся новые криптографические алгоритмы.
+New cryptographic algorithms will appear.
 
-Но пока устройство самостоятельно хранит свою идентичность и самостоятельно подтверждает происхождение своих действий, архитектура продолжает соответствовать первому закону доверия.
+But as long as the device independently stores its identity and independently confirms the origin of its actions, the architecture will continue to comply with the first law of trust.
 
-Именно поэтому этот закон оказался значительно важнее конкретной технологии.
+That is why this law turned out to be much more important than any specific technology.
 
-Он определяет не реализацию.
+It does not define implementation.
 
-Он определяет философию всей системы.
-
----
-
-## Мысль главы
-
-> **«Доверие возникает не там, где хранятся секреты. Доверие возникает там, где каждый участник способен самостоятельно доказать свою подлинность.»**
+It defines the philosophy of the entire system.

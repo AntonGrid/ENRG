@@ -1,143 +1,137 @@
-# Глава 1. Рождение идеи
+# Chapter 1. The Birth of an Idea
 
-> *«Любая великая инженерная система начинается не с кода. Она начинается с вопроса, который никто раньше не задавал.»*
+> *"Every great engineering system begins not with code. It begins with a question no one has asked before."*
 
-Каждая инженерная идея рождается из попытки решить существующую проблему.
+Every engineering idea is born from an attempt to solve an existing problem.
 
-Иногда проблема оказывается локальной.
+Sometimes the problem is local.
 
-Иногда — настолько фундаментальной, что постепенно меняет само направление работы.
+Sometimes it is so fundamental that it gradually changes the direction of the work itself.
 
-История ENRG началась не с желания создать очередной блокчейн-проект.
+The story of Axis did not begin with a desire to create another blockchain project.
 
-Она началась с вопроса.
+It began with a question.
 
-**Почему произведённая человеком энергия практически не имеет собственного цифрового представления?**
+**Why does the energy produced by people have almost no digital representation of its own?**
 
-Во всём мире миллионы людей ежедневно производят электроэнергию.
+Millions of people around the world produce electricity every day.
 
-Солнечные панели.
+Solar panels.
 
-Ветровые установки.
+Wind turbines.
 
-Небольшие гидроэлектростанции.
+Small hydroelectric plants.
 
-Домашние накопители энергии.
+Home energy storage.
 
-Промышленные энергетические системы.
+Industrial energy systems.
 
-Физическая энергия существует.
+Physical energy exists.
 
-Она создаёт реальную ценность.
+It creates real value.
 
-Но цифровой мир практически ничего об этом не знает.
+But the digital world knows almost nothing about it.
 
-Блокчейн способен хранить практически любые цифровые активы.
+Blockchain can store almost any digital asset.
 
-Он прекрасно фиксирует транзакции.
+It records transactions perfectly.
 
-Он умеет защищать историю изменений.
+It protects the history of changes.
 
-Он позволяет людям доверять друг другу без центрального посредника.
+It allows people to trust each other without a central intermediary.
 
-Но существует проблема, которую блокчейн самостоятельно решить не может.
+But there is a problem that blockchain alone cannot solve.
 
-**Откуда появилась информация?**
+**Where did the information come from?**
 
-Если устройство сообщает:
+If a device reports:
 
-> «Я произвело один мегаватт-час энергии.»
+> "I produced one megawatt-hour of energy."
 
-Почему система должна этому поверить?
+Why should the system believe it?
 
-Кто проверил устройство?
+Who verified the device?
 
-Кто подтвердил измерения?
+Who confirmed the measurements?
 
-Можно ли доверять серверу?
+Can the server be trusted?
 
-Можно ли доверять производителю оборудования?
+Can the equipment manufacturer be trusted?
 
-Можно ли доверять владельцу устройства?
+Can the device owner be trusted?
 
-Именно здесь стало понятно, что проблема значительно глубже, чем казалось в самом начале.
+It was here that it became clear: the problem was much deeper than it had seemed at the beginning.
 
-Речь больше не шла о токенизации энергии.
+It was no longer about tokenizing energy.
 
-Речь шла о происхождении доверия.
+It was about the origin of trust.
 
-Как цифровая система может убедиться, что событие действительно произошло в физическом мире?
+How can a digital system be sure that an event actually happened in the physical world?
 
-Этот вопрос постепенно начал менять всю архитектуру будущего проекта.
+This question gradually began to change the entire architecture of the future project.
 
-Оказалось, что энергия является лишь одним из возможных примеров.
+It turned out that energy is just one possible example.
 
-Настоящая задача заключается совсем в другом.
+The real challenge was something else entirely.
 
-Необходимо создать способ, позволяющий физическим устройствам самостоятельно подтверждать достоверность своих действий.
+It was necessary to create a way for physical devices to independently confirm the authenticity of their actions.
 
-Без необходимости доверять центральному серверу.
+Without having to trust a central server.
 
-Без необходимости доверять производителю оборудования.
+Without having to trust the equipment manufacturer.
 
-Без необходимости доверять конкретной компании.
+Without having to trust a specific company.
 
-Постепенно стало очевидно, что подобная система должна опираться не на конкретную реализацию.
+Gradually, it became clear that such a system should be based not on a specific implementation.
 
-Она должна опираться на правила.
+It should be based on rules.
 
-Правила могут пережить любую технологию.
+Rules can outlive any technology.
 
-Языки программирования меняются.
+Programming languages change.
 
-Процессоры становятся быстрее.
+Processors become faster.
 
-Базы данных исчезают.
+Databases disappear.
 
-Появляются новые способы связи.
+New ways of communication emerge.
 
-Но если фундаментальные принципы остаются неизменными, система способна эволюционировать практически бесконечно.
+But if the fundamental principles remain unchanged, the system can evolve almost indefinitely.
 
-Именно в этот момент стало ясно, что рождается не ещё один программный продукт.
+It was at this moment that it became clear: this was not another software product being born.
 
-Начинал формироваться открытый протокол.
+An open protocol was beginning to take shape.
 
-Разница между этими двумя понятиями огромна.
+The difference between these two concepts is enormous.
 
-Программный продукт создаётся для использования.
+A software product is created for use.
 
-Протокол создаётся для развития.
+A protocol is created for evolution.
 
-Продукт принадлежит владельцу.
+A product belongs to its owner.
 
-Протокол принадлежит каждому, кто готов следовать его правилам.
+A protocol belongs to everyone who is willing to follow its rules.
 
-Эта разница определила дальнейшую судьбу ENRG.
+This difference determined the future of Axis.
 
-Все последующие архитектурные решения принимались исходя из одного вопроса.
+All subsequent architectural decisions were made based on one question.
 
-**Поможет ли это сделать протокол более независимым, более открытым и более устойчивым?**
+**Will this help make the protocol more independent, more open, and more resilient?**
 
-Если ответ был отрицательным, решение пересматривалось.
+If the answer was no, the decision was reconsidered.
 
-Постепенно становилось понятно, что настоящей ценностью является вовсе не программный код.
+Gradually, it became clear that the real value was not the code at all.
 
-И даже не смарт-контракт.
+Nor even the smart contract.
 
-Настоящей ценностью становятся принципы.
+The real value was the principles.
 
-Именно принципы способны пережить собственные реализации.
+It is principles that can outlive their own implementations.
 
-Именно они позволяют совершенно разным инженерам создавать совместимые решения.
+It is they that allow completely different engineers to create compatible solutions.
 
-Именно благодаря им однажды могут появиться тысячи устройств, сотни Oracle и множество программных реализаций, разработанных людьми, которые никогда не встречались друг с другом.
+It is thanks to them that thousands of devices, hundreds of Oracles, and many software implementations may one day appear, developed by people who have never met each other.
 
-Так идея токенизации энергии постепенно перестала быть конечной целью.
+Thus, the idea of tokenizing energy gradually ceased to be the ultimate goal.
 
-Она стала лишь первым шагом на пути к созданию открытого языка доверия между физическим и цифровым мирами.
-
----
-
-## Мысль главы
-
-> **«Любой продукт однажды устаревает. Настоящий протокол способен пережить собственную первую реализацию.»**
+It became only the first step toward creating an open language of trust between the physical and digital worlds.

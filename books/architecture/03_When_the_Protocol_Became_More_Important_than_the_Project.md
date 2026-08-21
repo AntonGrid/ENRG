@@ -1,151 +1,145 @@
-# Глава 3. Момент, когда протокол стал важнее проекта
+# Chapter 3. When the Protocol Became More Important Than the Project
 
-> *«Настоящий протокол рождается в тот момент, когда его будущее перестаёт зависеть от своего создателя.»*
+> *"A true protocol is born the moment its future ceases to depend on its creator."*
 
-Любой программный проект начинается с реализации.
+Every software project begins with implementation.
 
-Появляются первые файлы.
+The first files appear.
 
-Первые функции.
+The first functions.
 
-Первые успешные тесты.
+The first successful tests.
 
-Постепенно возникает ощущение, что проект начинает жить.
+Gradually, there is a feeling that the project is beginning to live.
 
-Но существует момент, который невозможно увидеть в системе контроля версий.
+But there is a moment that cannot be seen in the version control system.
 
-Не существует коммита, после которого можно написать:
+There is no commit after which one can write:
 
-> «Сегодня проект превратился в протокол.»
+> "Today the project became a protocol."
 
-Подобные изменения происходят значительно глубже.
+Such changes happen much deeper.
 
-Они происходят в самом понимании архитектуры.
+They happen in the very understanding of architecture.
 
-Постепенно стало очевидно, что большинство принимаемых решений перестали касаться только текущей реализации.
+Gradually, it became clear that most decisions were no longer about just the current implementation.
 
-Каждый новый вопрос неожиданно начал звучать иначе.
+Every new question unexpectedly began to sound different.
 
-Не:
+Not:
 
-> «Как реализовать эту функцию?»
+> "How do we implement this function?"
 
-А:
+But:
 
-> **«Будет ли это правило правильным через двадцать лет?»**
+> **"Will this rule still be correct in twenty years?"**
 
-Этот вопрос постепенно начал менять всё.
+This question gradually changed everything.
 
-Если архитектурное решение зависело от конкретного языка программирования, оно становилось временным.
+If an architectural decision depended on a specific programming language, it became temporary.
 
-Если решение зависело от конкретной базы данных, оно становилось временным.
+If a decision depended on a specific database, it became temporary.
 
-Если решение зависело от существования одного Oracle, одного сервера или одной компании, оно тоже оставалось временным.
+If a decision depended on the existence of one Oracle, one server, or one company, it also remained temporary.
 
-Настоящий протокол не может строиться вокруг временных вещей.
+A true protocol cannot be built around temporary things.
 
-Он строится вокруг принципов.
+It is built around principles.
 
-Именно тогда стало очевидно, что реализация должна быть отделена от архитектуры.
+It was then that it became clear: implementation must be separated from architecture.
 
-Код способен меняться.
+Code can change.
 
-Архитектура должна сохраняться.
+Architecture must endure.
 
-По этой причине в проекте начали появляться архитектурные решения, зафиксированные отдельно от исходного кода.
+For this reason, architectural decisions began to appear in the project, recorded separately from the source code.
 
-Не как комментарии.
+Not as comments.
 
-Не как документация.
+Not as documentation.
 
-А как самостоятельные инженерные принципы.
+But as independent engineering principles.
 
-Каждый новый Architecture Decision Record переставал быть описанием уже принятого решения.
+Each new Architecture Decision Record ceased to be a description of an already made decision.
 
-Он становился частью самого протокола.
+It became part of the protocol itself.
 
-Постепенно начала складываться ещё одна важная мысль.
+Gradually, another important thought began to take shape.
 
-Если через десять лет совершенно другой инженер сможет реализовать ENRG, не читая исходный код первой версии, значит архитектура действительно удалась.
+If in ten years a completely different engineer can implement Axis without reading the first version's source code, then the architecture has truly succeeded.
 
-Если же единственным источником истины остаётся программный код, значит протокол ещё не сформировался.
+If the only source of truth remains the code, then the protocol has not yet formed.
 
-Настоящий открытый стандарт начинается тогда, когда спецификация становится важнее первой реализации.
+A true open standard begins when the specification becomes more important than the first implementation.
 
-Именно в этот момент произошло ещё одно изменение.
+It was at this moment that another change occurred.
 
-ENRG перестал восприниматься как программный продукт.
+Axis ceased to be perceived as a software product.
 
-Он начал восприниматься как язык.
+It began to be perceived as a language.
 
-Так же как HTTP описывает правила взаимодействия браузеров и серверов.
+Just as HTTP describes the rules of interaction between browsers and servers.
 
-Так же как TCP/IP описывает передачу данных между компьютерами.
+Just as TCP/IP describes the transmission of data between computers.
 
-Так же как USB описывает взаимодействие устройств.
+Just as USB describes the interaction of devices.
 
-ENRG начал формироваться как язык доверия между физическим и цифровым мирами.
+Axis began to take shape as a language of trust between the physical and digital worlds.
 
-Язык, который не зависит от конкретного производителя оборудования.
+A language that does not depend on a specific equipment manufacturer.
 
-Не зависит от конкретного Oracle.
+Does not depend on a specific Oracle.
 
-Не зависит от конкретной компании.
+Does not depend on a specific company.
 
-Любой разработчик способен реализовать этот язык.
+Any developer can implement this language.
 
-Любой производитель способен создать совместимое устройство.
+Any manufacturer can create a compatible device.
 
-Любой исследователь способен проверить корректность реализации.
+Any researcher can verify the correctness of the implementation.
 
-Именно благодаря этому протокол становится сильнее.
+It is because of this that the protocol becomes stronger.
 
-Не потому, что существует одна идеальная реализация.
+Not because there is one ideal implementation.
 
-А потому, что появляются десятки независимых реализаций.
+But because dozens of independent implementations appear.
 
-Именно здесь становится особенно важным различие между продуктом и протоколом.
+This is where the distinction between product and protocol becomes especially important.
 
-Продукт развивается владельцем.
+A product is developed by its owner.
 
-Протокол развивается сообществом.
+A protocol is developed by the community.
 
-Продукт конкурирует с другими продуктами.
+A product competes with other products.
 
-Протокол становится общей основой для множества продуктов.
+A protocol becomes the common foundation for many products.
 
-Продукт можно купить.
+A product can be bought.
 
-Протокол можно только принять.
+A protocol can only be adopted.
 
-Именно поэтому постепенно исчезла сама мысль о владении ENRG.
+That is why the very idea of owning Axis gradually disappeared.
 
-Настоящий открытый протокол не может принадлежать одному человеку.
+A true open protocol cannot belong to one person.
 
-Не потому, что автор теряет интерес.
+Not because the author loses interest.
 
-А потому, что сама идея оказывается значительно больше любого автора.
+But because the idea itself turns out to be much larger than any author.
 
-Если однажды ENRG станет полезным всему миру, он перестанет быть проектом отдельных разработчиков.
+If one day Axis becomes useful to the whole world, it will cease to be a project of individual developers.
 
-Он станет частью общей инженерной культуры.
+It will become part of the common engineering culture.
 
-Именно тогда первоначальная цель окончательно изменилась.
+It was then that the original goal finally changed.
 
-Создать хороший продукт оказалось недостаточно.
+Creating a good product was no longer enough.
 
-Появилась новая цель.
+A new goal appeared.
 
-Создать фундамент, на котором тысячи людей смогут построить собственные решения.
+To create a foundation upon which thousands of people can build their own solutions.
 
-Именно такие системы способны жить десятилетиями.
+Such systems can live for decades.
 
-Не благодаря своим создателям.
+Not because of their creators.
 
-А благодаря тем, кто однажды решит продолжить их развитие.
-
----
-
-## Мысль главы
-
-> **«Продукт развивается своим автором. Протокол развивается всеми.»**
+But because of those who will one day decide to continue their development.

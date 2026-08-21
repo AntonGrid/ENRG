@@ -1,151 +1,147 @@
-# ENRG Architecture Book
+# Axis Architecture Book
 
-# Том I
+## Prologue
 
-# От энергии к протоколу
+> *"Any civilization is built not only on technology. It is built on rules that people are willing to trust."*
 
-## Пролог
+Every person at least once in their life has wondered why the world around us is so complex and yet so stable.
 
-> *«Любая цивилизация строится не только на технологиях. Она строится на правилах, которым люди готовы доверять.»*
+Forests have existed for thousands of years.
 
-Каждый человек хотя бы раз в жизни задумывался о том, почему окружающий нас мир настолько сложен и одновременно настолько устойчив.
+Oceans continuously sustain life.
 
-Леса существуют тысячи лет.
+The human body performs billions of processes daily without a single central controller.
 
-Океаны непрерывно поддерживают жизнь.
+Even the brain, one of the most complex known systems, has no cell that makes decisions for the rest.
 
-Человеческий организм ежедневно выполняет миллиарды процессов, не имея единого центрального управляющего.
+Nature rarely builds systems around a single center.
 
-Даже мозг, являясь одной из самых сложных известных систем, не имеет клетки, которая принимала бы решения за остальные.
+It prefers networks.
 
-Природа редко строит системы вокруг одного центра.
+Billions of independent elements interact with each other through relatively simple rules.
 
-Она предпочитает сети.
+It is these rules that allow incredibly complex systems to emerge.
 
-Миллиарды независимых элементов взаимодействуют между собой по относительно простым правилам.
+Over time, humanity began to create its own networks.
 
-Именно эти правила позволяют возникать невероятно сложным системам.
+Roads.
 
-Со временем человечество стало создавать собственные сети.
+Postal services.
 
-Дороги.
+Electricity grids.
 
-Почтовую связь.
+The Internet.
 
-Электроэнергетику.
+Each new network emerged not because of a single device or a single company.
 
-Интернет.
+It emerged because of a common language of interaction.
 
-Каждая новая сеть появлялась не благодаря одному устройству или одной компании.
+The Internet exists not because there is some single server.
 
-Она появлялась благодаря общему языку взаимодействия.
+It exists because millions of devices use common protocols.
 
-Интернет существует не потому, что существует какой-то один сервер.
+No one owns HTTP.
 
-Он существует потому, что миллионы устройств используют общие протоколы.
+No one owns TCP/IP.
 
-Никто не владеет HTTP.
+No one asks permission to create a new browser or a new web server.
 
-Никто не владеет TCP/IP.
+People simply follow the same rules.
 
-Никто не спрашивает разрешения, чтобы создать новый браузер или новый веб-сервер.
+That is why the Internet became global.
 
-Люди просто следуют одним и тем же правилам.
+Energy is still developing differently.
 
-Именно поэтому Интернет смог стать глобальным.
+There are millions of devices around the world.
 
-Энергетика пока развивается иначе.
+Millions of solar panels.
 
-Во всём мире существуют миллионы устройств.
+Millions of meters.
 
-Миллионы солнечных панелей.
+Thousands of equipment manufacturers.
 
-Миллионы счётчиков.
+But there is almost no common open language of trust between them.
 
-Тысячи производителей оборудования.
+Each system is built around its own infrastructure.
 
-Но общего открытого языка доверия между ними практически не существует.
+Its own servers.
 
-Каждая система строится вокруг собственной инфраструктуры.
+Its own data formats.
 
-Собственных серверов.
+Its own rules.
 
-Собственных форматов данных.
+This is why interaction between such systems is complex, expensive, and often impossible.
 
-Собственных правил.
+Working on Axis, I asked myself one question more and more often.
 
-Именно поэтому взаимодействие между такими системами оказывается сложным, дорогим и зачастую невозможным.
+What if the problem is not the absence of yet another product?
 
-Работая над ENRG, я всё чаще задавал себе один вопрос.
+What if the world does not need a new service.
 
-А что, если проблема заключается вовсе не в отсутствии ещё одного продукта?
+Not a new Oracle.
 
-Что, если миру нужен не новый сервис.
+Not a new meter.
 
-Не новый Oracle.
+Not a new token.
 
-Не новый счётчик.
+But a new open protocol.
 
-Не новый токен.
+Not owned by a single company.
 
-А новый открытый протокол.
+Not owned by a single person.
 
-Не принадлежащий одной компании.
+Not dependent on a single technology.
 
-Не принадлежащий одному человеку.
+A protocol that could become the foundation for thousands of future solutions.
 
-Не зависящий от одной технологии.
+Gradually, it became clear that this thought defined the entire future development of Axis.
 
-Протокол, который сможет стать фундаментом для тысяч будущих решений.
+This book is not technical documentation.
 
-Постепенно стало очевидно, что именно эта мысль определяет всё дальнейшее развитие ENRG.
+It does not replace the protocol specification.
 
-Эта книга не является технической документацией.
+It is not a developer's guide.
 
-Она не заменяет спецификацию протокола.
+This book is about something else entirely.
 
-Она не является руководством разработчика.
+About how engineering ideas are born.
 
-Эта книга рассказывает совсем о другом.
+How simple questions gradually turn into architectural principles.
 
-О том, как рождаются инженерные идеи.
+How a single software project can one day cease to be a project and become an open standard.
 
-Как простые вопросы постепенно превращаются в архитектурные принципы.
+Perhaps one day Axis will change beyond recognition.
 
-Как отдельный программный проект может однажды перестать быть проектом и стать открытым стандартом.
+New devices will appear.
 
-Возможно, однажды ENRG изменится до неузнаваемости.
+New programming languages.
 
-Появятся новые устройства.
+New Oracles.
 
-Новые языки программирования.
+New implementations.
 
-Новые Oracle.
+Technologies will change.
 
-Новые реализации.
+But if the principles outlined in this book prove correct, everything else can be rebuilt.
 
-Изменятся технологии.
+That is the power of true protocols.
 
-Но если принципы, изложенные в этой книге, окажутся правильными, то всё остальное можно будет построить заново.
+They outlive their own implementations.
 
-Именно в этом заключается сила настоящих протоколов.
+They outlive companies.
 
-Они переживают собственные реализации.
+Sometimes they outlive their creators.
 
-Они переживают компании.
+I do not see Axis as property.
 
-Иногда они переживают даже своих создателей.
+I see it as a foundation.
 
-Я не рассматриваю ENRG как собственность.
+A foundation upon which any engineer, any company, any university, and any community can build their own solutions.
 
-Я рассматриваю его как фундамент.
+If that day comes, the purpose of this book will be fulfilled.
 
-Фундамент, на котором любой инженер, любая компания, любой университет и любое сообщество смогут строить собственные решения.
+Because it was not written to tell the story of one project.
 
-Если однажды это произойдёт, значит цель этой книги будет достигнута.
+It was written to preserve the story of an idea being born.
 
-Потому что она написана не для того, чтобы рассказать историю одного проекта.
-
-Она написана для того, чтобы сохранить историю рождения идеи.
-
-И, возможно, вдохновить тех, кто однажды построит на этом фундаменте нечто большее, чем смог представить её автор.
+And perhaps to inspire those who will one day build something greater on this foundation than its author could have imagined.
