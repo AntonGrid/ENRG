@@ -1,35 +1,56 @@
-# ADR-0003: Oracle не принимает политических решений — этим занимается Policy Engine
+# ADR-0003: Verifier Does Not Make Policy Decisions — Policy Engine Does
 
-## Статус
-Принято
+**Status:** Accepted
+**Date:** 2025-06-28 (revised 2026-07-27)
+**Authors:** Axis Protocol Team
 
-## Контекст
-В текущей реализации Oracle выполняет несколько функций: проверяет подписи, накапливает энергию, вызывает mint, а также принимает решения о том, переводить ли устройство в карантин, разрешать ли Proof, требовать ли OTA. Это смешивает ответственность и усложняет развитие системы.
+---
 
-## Решение
-Oracle отвечает только за:
-- Приём Proof от устройств.
-- Проверку Ed25519-подписей.
-- Передачу верифицированных данных в Policy Engine.
-- Вызов mint_energy по команде от Policy Engine.
+## Context
 
-Все решения о состоянии устройства, допустимости Proof, необходимости OTA, переводе в карантин принимает отдельный компонент — Policy Engine. Oracle является исполнителем, а не источником политик.
+In the current implementation, the Verifier performs multiple functions: verifies signatures, accumulates data, issues Digital Claims, and also makes decisions about whether to quarantine a device, allow a Proof, or require a secure firmware update. This mixes responsibilities and complicates system evolution.
 
-## Обоснование
-- Разделение ответственности: Oracle занимается криптографией и передачей данных, Policy Engine — логикой и политиками.
-- Гибкость: политики можно менять без переписывания Oracle.
-- Масштабируемость: Policy Engine может быть вынесен в отдельный микросервис.
-- Тестируемость: каждый компонент тестируется изолированно.
+## Decision
 
-## Последствия
-- Oracle не хранит состояние устройства (это делает Registry).
-- Oracle не принимает решений о карантине или OTA.
-- Oracle вызывает mint только после подтверждения от Policy Engine.
-- Policy Engine работает с Device Registry и Oracle через API.
+The Verifier is responsible **only for**:
 
-## Альтернативы
-- Oracle сам принимает все решения — отклонено из-за смешения ответственности.
-- Policy Engine встроен в Oracle — отклонено, так как нарушает принцип единой ответственности.
+- Receiving Proofs from devices.
+- Verifying cryptographic signatures.
+- Passing verified data to the Policy Engine.
+- Executing actions (e.g., issuing Digital Claims) as instructed by the Policy Engine.
 
-## Дата
-2025-06-28
+All decisions about device state, Proof admissibility, secure firmware update requirements, and quarantine are made by a separate component — the **Policy Engine**. The Verifier is an **executor**, not a source of policies.
+
+## Rationale
+
+- **Separation of concerns:** Verifier handles cryptography and data transfer; Policy Engine handles logic and policies.
+- **Flexibility:** Policies can be changed without rewriting the Verifier.
+- **Scalability:** The Policy Engine can be extracted into a separate service.
+- **Testability:** Each component can be tested in isolation.
+
+## Consequences
+
+- The Verifier **does not store** device state (this is handled by the Registry).
+- The Verifier **does not make decisions** about quarantine or secure firmware updates.
+- The Verifier executes actions **only after confirmation** from the Policy Engine.
+- The Policy Engine interacts with the Device Registry and Verifier via well-defined interfaces.
+
+## Alternatives Considered
+
+- **Verifier makes all decisions itself** — rejected due to mixing responsibilities.
+- **Policy Engine embedded in the Verifier** — rejected as it violates the single responsibility principle.
+
+---
+
+## Related ADRs
+
+- ADR-0002: Device Registry as the Single Source of Truth
+- ADR-0004: Device Manifest
+- ADR-0005: Device Lifecycle States
+
+---
+
+## Implementation Notes
+
+- This decision is **protocol-level** and must be respected by all implementations.
+- Implementation details (Policy Engine API, integration patterns) are defined in the Axis-core repository.

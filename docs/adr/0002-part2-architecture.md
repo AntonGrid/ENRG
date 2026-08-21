@@ -6,130 +6,130 @@ Accepted
 
 ## Context
 
-ENRG должен обеспечить безопасную и верифицируемую работу физических устройств (энергетика и смежные сценарии) с on-chain логикой (смарт-контракты, DAO, токеномика).
+ENRG must provide secure, verifiable operation of physical devices (energy and adjacent scenarios) together with on-chain logic (smart contracts, DAO, tokenomics).
 
-Для этого нужно:
+To do this we need:
 
-- Чётко определить роль устройства и его идентичность.
-- Отделить off-chain инфраструктуру (Provisioning, Registry, Policy, Oracle) от on-chain части (смарт-контракты, DAO).
-- Минимизировать объём данных и логики, попадающих on-chain.
-- Иметь воспроизводимый и тестируемый “минимальный срез” системы (Part II), который можно расширять до mainnet-ready.
+- To clearly define the device role and its identity.
+- To separate off-chain infrastructure (Provisioning, Registry, Policy, Oracle) from the on-chain part (smart contracts, DAO).
+- To minimize the data and logic that reaches on-chain.
+- To have a reproducible, testable "minimal slice" of the system (Part II) that can be extended to mainnet-readiness.
 
 ## Decision
 
-В Part II принимается следующая архитектура и trust-модель.
+Part II adopts the following architecture and trust model.
 
-### Компоненты
+### Components
 
-1. **Device (Устройство)**  
-   - Генерирует и хранит приватный ключ (например, Ed25519).
-   - Подписывает payload’ы (DeviceProof) своим приватным ключом.
-   - Не раскрывает приватный ключ наружу.
+1. **Device**  
+   - Generates and stores a private key (e.g. Ed25519).
+   - Signs payloads (DeviceProof) with its private key.
+   - Never exposes the private key.
 
 2. **Provisioning Service (PS)**  
-   - Принимает `public_key` от устройства (или от заводского/интеграционного процесса).
-   - Назначает `device_id` и связывает его с `public_key` и `manifest_ref`.
-   - Создаёт `DeviceRecord` в Device Registry.
-   - Выдаёт базовый `bootstrap_policy` (минимальные права/лимиты для старта).
+   - Accepts the `public_key` from the device (or from a factory/integration process).
+   - Assigns the `device_id` and binds it to `public_key` and `manifest_ref`.
+   - Creates a `DeviceRecord` in the Device Registry.
+   - Issues a base `bootstrap_policy` (minimal rights/limits to start).
 
 3. **Device Registry (DR)**  
-   - Хранит `DeviceRecord` как **источник истины по идентичности устройства и жизненному циклу**.
-   - Поля `DeviceRecord` включают:
+   - Keeps `DeviceRecord` as the **source of truth for device identity and lifecycle**.
+   - `DeviceRecord` fields include:
      - `device_id`
      - `public_key`
-     - `owner` (опционально)
+     - `owner` (optional)
      - `lifecycle_state` (`provisioned`, `active`, `suspended`, `retired`)
-     - `firmware_version` (опционально)
+     - `firmware_version` (optional)
      - `manifest_ref`
      - `created_at`, `updated_at`
-     - `labels` (произвольные теги)
-   - Все записи валидируются JSON Schema `device_record.schema.json`.
+     - `labels` (arbitrary tags)
+   - All records are validated with the `device_record.schema.json` JSON Schema.
 
-4. **Policy Engine (PE)** *(пока мок/заглушка)*  
-   - Принимает `DeviceProof` и контекст (политики, состояние устройства).
-   - Выносит решение: разрешить/запретить действие, лимиты (например, `max_power_kw`).
-   - В текущем мок-сервисе это часть эндпоинта `/provisioning/attest`, возвращающая фиксированное решение (`mock-allowed`).
+4. **Policy Engine (PE)** *(currently a mock/stub)*  
+   - Accepts a `DeviceProof` and context (policies, device state).
+   - Decides: allow/deny an action, limits (e.g. `max_power_kw`).
+   - In the current mock service this is part of the `/provisioning/attest` endpoint, returning a fixed decision (`mock-allowed`).
 
-5. **Oracle Service (OR)** *(будет реализован в следующих частях)*  
-   - Принимает решения Policy Engine и/или DeviceProof.
-   - Формирует on-chain attestation (подписанный oracle-подписью артефакт).
-   - Отправляет транзакции в смарт-контракты (например, регистрирует события или изменяет лимиты).
+5. **Oracle Service (OR)** *(to be implemented in later parts)*  
+   - Accepts Policy Engine decisions and/or DeviceProofs.
+   - Builds the on-chain attestation (an artifact signed with the oracle key).
+   - Sends transactions to smart contracts (e.g. records events or changes limits).
 
-6. **Smart Contracts (SC)** *(будут реализованы в следующих частях)*  
-   - Принимают attestations от доверенных Oracle.
-   - Учитывают состояние устройств (active/suspended/retired) и их лимиты.
-   - Влияют на токеномику, расчёт вознаграждений/штрафов и другие on-chain эффекты.
+6. **Smart Contracts (SC)** *(to be implemented in later parts)*  
+   - Accept attestations from trusted Oracles.
+   - Account for device states (active/suspended/retired) and their limits.
+   - Affect tokenomics, reward/penalty calculations and other on-chain effects.
 
-7. **DAO / Governance** *(позже)*  
-   - Управляет списком доверенных Oracle.
-   - Принимает решения о параметрах протокола, лимитах, обновлениях.
+7. **DAO / Governance** *(later)*  
+   - Manages the list of trusted Oracles.
+   - Decides on protocol parameters, limits, updates.
 
-### Trust-модель
+### Trust model
 
-1. **Корень доверия — приватный ключ на устройстве**  
-   - Устройство генерирует ключевую пару.
-   - Приватный ключ не покидает устройство.
-   - Всё, что устройство “говорит” в рамках DeviceProof, подтверждается подписью.
+1. **Root of trust — the private key on the device**  
+   - The device generates a key pair.
+   - The private key never leaves the device.
+   - Everything the device "says" within a DeviceProof is confirmed by a signature.
 
-2. **Device Registry как источник истины по идентичности и lifecycle**  
-   - Связывает `device_id` с `public_key`, `manifest_ref` и состоянием (`lifecycle_state`).
-   - Любые решения Policy Engine и Oracle зависят от корректности и целостности DR.
-   - DR валидирует данные через JSON Schema, минимизируя риск структурного бардака.
+2. **Device Registry as the source of truth for identity and lifecycle**  
+   - Binds `device_id` to `public_key`, `manifest_ref` and the state (`lifecycle_state`).
+   - Any Policy Engine and Oracle decision depends on the correctness and integrity of the DR.
+   - The DR validates data via JSON Schema, minimizing structural drift.
 
-3. **Policy Engine / Oracle как интерпретаторы доверенной информации**  
-   - Policy Engine читает:
-     - DeviceProof (подписанные данные устройства),
-     - текущее состояние DR,
-     - политики.
-   - Oracle доверяет Policy Engine (или реализует его внутри себя) и формирует attestations для on-chain.
+3. **Policy Engine / Oracle as interpreters of trusted information**  
+   - The Policy Engine reads:
+     - the DeviceProof (signed device data),
+     - the current DR state,
+     - policies.
+   - The Oracle trusts the Policy Engine (or embeds it) and builds attestations for on-chain.
 
-4. **On-chain часть минимальна и работает с attestations**  
-   - Смарт-контракты не валидируют сырые DeviceProof.
-   - Смарт-контракты доверяют только attestations от доверенных Oracle (список которых управляется DAO).
-   - Это сокращает нагрузку и сложность on-chain-логики и даёт гибкость на off-chain уровне.
+4. **The on-chain part is minimal and works with attestations**  
+   - Smart contracts do not validate raw DeviceProofs.
+   - Smart contracts trust only attestations from trusted Oracles (whose list is managed by the DAO).
+   - This reduces on-chain load and complexity and keeps flexibility at the off-chain level.
 
 ## Consequences
 
-1. **Появился чёткий каркас off-chain части**  
-   - `Provisioning Service` + `Device Registry` + `Attestation endpoint` реализованы как FastAPI-сервис.
-   - Форматы артефактов зафиксированы JSON Schema:
+1. **A clear off-chain skeleton is in place**  
+   - `Provisioning Service` + `Device Registry` + `Attestation endpoint` are implemented as a FastAPI service.
+   - Artifact formats are fixed via JSON Schema:
      - `device_record.schema.json`
      - `device_manifest.schema.json`
      - `device_proof.schema.json`
-   - API описан в `openapi.yaml`.
-   - Поведение покрыто pytest-тестами.
+   - The API is described in `openapi.yaml`.
+   - Behavior is covered by pytest tests.
 
-2. **On-chain часть может развиваться независимо**  
-   - Контракты будут работать с attestations от Oracle и не зависят от деталей форматирования DeviceProof.
-   - Изменения во внутренних схемах (например, добавление полей в `DeviceRecord` или `DeviceManifest`) не требуют миграций контрактов, если формат attestations стабилен.
+2. **The on-chain part can evolve independently**  
+   - Contracts will work with Oracle attestations and do not depend on DeviceProof formatting details.
+   - Changes to internal schemas (e.g. adding fields to `DeviceRecord` or `DeviceManifest`) do not require contract migrations as long as the attestation format is stable.
 
-3. **Ясная эволюционная дорожка к mainnet**  
-   - Part II (текущая стадия): мок-сервис с Provisioning, Registry и простым Attest.
-   - Part III: вынос Policy Engine и Oracle в отдельные сервисы, определение формата attestations.
-   - Part IV: реализация смарт-контрактов и базовой токеномики, интеграция с Oracle.
-   - Part V: пилоты, аудит, переход к testnet/mainnet.
+3. **A clear evolution path to mainnet**  
+   - Part II (current stage): a mock service with Provisioning, Registry and a simple Attest.
+   - Part III: moving Policy Engine and Oracle into separate services, defining the attestation format.
+   - Part IV: implementing smart contracts and base tokenomics, integrating with the Oracle.
+   - Part V: pilots, audit, moving to testnet/mainnet.
 
-4. **Риски и ограничения**  
-   - Пока DR и Policy Engine/Oracle не реплицированы и не децентрализованы — это точка доверия (trustful service).
-   - Нужны дополнительные меры:
-     - аутентификация/авторизация для админских операций с DR,
-     - аудит изменений записей в DR,
-     - мониторинг и логирование решений Policy Engine.
-   - Эти аспекты будут закрываться в следующих частях (после Part II).
+4. **Risks and limitations**  
+   - Until the DR and Policy Engine/Oracle are replicated and decentralized, they are a point of trust (a trusted service).
+   - Additional measures are needed:
+     - authentication/authorization for admin DR operations,
+     - audit of DR record changes,
+     - monitoring and logging of Policy Engine decisions.
+   - These aspects will be addressed in later parts (after Part II).
 
-## Implementation Notes (на текущую дату)
+## Implementation Notes (as of today)
 
-- Реализация мок-сервиса:
+- The mock service implementation:
   - Python + FastAPI.
-  - Валидация JSON через `jsonschema` (`Draft7Validator`).
-  - In-memory Device Registry (словарь в памяти) для прототипа.
-- Основные эндпоинты:
+  - JSON validation via `jsonschema` (`Draft7Validator`).
+  - An in-memory Device Registry (a dict) for the prototype.
+- Main endpoints:
   - `GET /health`
   - `POST /provisioning/register`
   - `GET /registry/devices/{device_id}`
   - `POST /provisioning/attest`
-- Тесты:
+- Tests:
   - `tests/test_api.py`
   - `tests/test_smoke.py`
 
-Этот ADR фиксирует архитектурные решения Part II и служит базой для последующих этапов (Oracle, on-chain контракты, DAO).
+This ADR records the Part II architectural decisions and serves as the base for later stages (Oracle, on-chain contracts, DAO).

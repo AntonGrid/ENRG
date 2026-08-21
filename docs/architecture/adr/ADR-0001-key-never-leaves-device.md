@@ -1,28 +1,48 @@
-# ADR-0001: Приватный ключ никогда не покидает устройство
+# ADR-0001: Private Key Never Leaves the Device
 
-## Статус
-Принято
+**Status:** Accepted  
+**Date:** 2025-06-28 (revised 2026-07-27)  
+**Authors:** Axis Protocol Team  
 
-## Контекст
-В ENRG Protocol устройства (ESP32) генерируют криптографические ключи для подписи Proof-of-Production. Возник вопрос: должен ли приватный ключ храниться на устройстве или может быть передан на сервер для упрощения архитектуры.
+---
 
-## Решение
-Приватный ключ генерируется на устройстве и никогда не покидает его. На сервер (оракул, Device Registry) передаётся только публичный ключ. Подпись Proof выполняется исключительно на устройстве. Сервер только верифицирует подпись.
+## Context
 
-## Обоснование
-- Безопасность: приватный ключ не может быть перехвачен или скомпрометирован на серверной стороне.
-- Децентрализация: устройство остаётся автономным и не зависит от сервера для выполнения криптографических операций.
-- Доверие: модель доверия строится на том, что устройство самостоятельно подтверждает свою личность и данные.
+In the Axis Protocol, devices generate cryptographic keys for signing proofs of events (Proof-of-*). A fundamental question arose: should the private key be stored on the device or could it be transferred to a server to simplify the architecture?
 
-## Последствия
-- Устройство должно иметь Secure Element (или эквивалент) для безопасного хранения ключа.
-- Прошивка должна поддерживать генерацию ключей и подпись данных без участия сервера.
-- Регистрация устройства происходит по публичному ключу.
-- Отзыв устройства возможен только через механизм Revocation (серверная сторона).
+## Decision
 
-## Альтернативы
-- Генерация ключей на сервере и передача на устройство — отклонено из-за риска компрометации.
-- Использование одного ключа для всех устройств — отклонено из-за отсутствия идентификации.
+The private key is **generated on the device** and **never leaves it**. Only the public key is transmitted to the server (oracle, registry). Proof signing is performed **exclusively on the device**. The server only verifies the signature.
 
-## Дата
-2025-06-28
+## Rationale
+
+- **Security:** The private key cannot be intercepted or compromised on the server side.
+- **Decentralization:** The device remains autonomous and does not depend on the server for cryptographic operations.
+- **Trust:** The trust model is built on the device independently proving its identity and data.
+
+## Consequences
+
+- The device must have a Secure Element (or equivalent) for secure key storage.
+- The device firmware must support key generation and data signing without server involvement.
+- Device registration is performed using the public key.
+- Device revocation is only possible through a revocation mechanism (server side).
+
+## Alternatives Considered
+
+- **Key generation on the server and transmission to the device** — rejected due to the risk of compromise during transmission.
+- **Using a single key for all devices** — rejected due to lack of device identification.
+
+---
+
+## Related ADRs
+
+- ADR-0002: Device Registry as Source of Truth
+- ADR-0005: Device Lifecycle States
+- ADR-0007: Security Key Management
+
+---
+
+## Implementation Notes
+
+- This decision is **protocol-level** and must be respected by all implementations.
+- Implementation details (Secure Element integration, key generation algorithms) are defined in the Axis-core repository.

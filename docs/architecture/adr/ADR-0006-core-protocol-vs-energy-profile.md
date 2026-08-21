@@ -1,154 +1,85 @@
-# ADR-0006: Core Protocol vs Energy Profile
+# ADR-0006: Core Protocol vs Domain Profile
 
-## Статус
+## Status
 
-Принят
+Accepted
 
-## Контекст
+## Context
 
-ENRG Protocol исторически развивался как монолитная система: один смарт-контракт (enrg-mvp),
-один Oracle, одна схема токенизации. По мере роста архитектуры стало очевидно,
-что протокол решает две принципиально разные задачи:
+The protocol historically evolved as a monolithic system: one smart contract, one Oracle, one tokenization scheme. As the architecture grew, it became clear that the protocol solves two fundamentally different problems:
 
 ### 1. Core Protocol
 
-Установление доверия между физическим устройством и блокчейном.
-Верификация данных, криптографическая идентичность устройств, Proof-of-Production.
-Этот слой не привязан к энергетике — он может работать с любыми физическими активами.
+Establishing trust between a physical device and a digital system. Data verification, cryptographic device identity, proof of events (Proof-of-*). This layer is not tied to any specific domain — it can work with any physical assets.
 
-### 2. Energy Profile
+### 2. Domain Profile
 
-Токенизация энергии. Эмиссия SRC, расчёт награды через асимптотическую
-модель, комиссии, buyback & burn. Это *первый* сценарий использования Core Protocol.
+Domain-specific logic: tokenization, reward calculation, economic model, fees, buyback and burn mechanisms. This is the *first* use case for the Core Protocol, but not the only one.
 
-### Проблема текущей архитектуры
+### Problem with the Current Architecture
 
-Текущая кодовая база не разделяет эти две сущности явно. Всё находится в одном контракте,
-что создаёт риски:
+The current codebase does not explicitly separate these two entities. Everything resides in a single contract, creating risks:
 
-- **Жёсткая связность:** изменение логики токенизации затрагивает Core Protocol и наоборот.
-- **Сложность аудита:** аудитор проверяет единый контракт, где перемешаны функции разных уровней.
-- **Барьер для новых сценариев:** следующий профиль (например, вода, углерод, связь) потребует
-  форка всего контракта.
+- **Tight coupling:** changing domain logic affects the Core Protocol and vice versa.
+- **Audit complexity:** auditors review a single contract where functions from different layers are mixed.
+- **Barrier to new scenarios:** the next profile (e.g., water, carbon, connectivity, logistics) would require forking the entire contract.
 
-## Решение
+## Decision
 
-Принять архитектурное разделение на два слоя:
+Adopt an architectural split into two layers:
 
-### Core Protocol (ядро)
+### Core Protocol
 
-Отвечает за:
-- Криптографическую идентичность устройств (Ed25519 ключи на ESP32).
-- Device Lifecycle (ADR-0005): 8 состояний и переходы между ними.
-- Device Registry (ADR-0002): реестр устройств, их публичные ключи и метаданные.
-- Oracle Registry и Policy Engine (ADR-0003): реестр доверенных Oracle и правила верификации Proof.
-- Доверенную передачу данных от устройства через Oracle в блокчейн.
+Responsible for:
+- Cryptographic device identity
+- Device lifecycle (states and transitions)
+- Device Registry (public keys and metadata)
+- Oracle Registry (trusted oracles)
+- Policy Engine (rules for verifying proofs)
+- Trusted data transfer from device through Oracle to the digital system
 
-Core Protocol **не знает** о токенах, эмиссии, комиссиях.
-Он оперирует понятиями: устройство, Oracle, Proof, доверие.
+The Core Protocol **knows nothing** about tokens, emissions, or fees. It operates with concepts: device, oracle, proof, trust.
 
-### Energy Profile (профиль энергии)
+### Domain Profile
 
-Отвечает за:
-- SRC Mint и TokenMint (конфигурация минта).
-- Асимптотическую эмиссионную модель (ENRG_Technical_Specification_v7.0, §17).
-- Динамическую сложность для крупных производителей.
-- Комиссии (15%), распределение (buyback, staking, DAO, emergency).
-- Buyback & Burn.
-- Vault (экономика протокола).
+Responsible for:
+- Interpreting data from the Core Protocol in domain terms
+- Tokenization of domain assets
+- Economic model (emission, distribution, fees)
+- Buyback and burn mechanisms (if applicable)
+- User interfaces and business logic
 
-Energy Profile **зависит** от Core Protocol:
-- Устройство должно быть в состоянии Active, чтобы минтить.
-- Oracle должен быть в реестре, чтобы подтверждать Proof.
-- Но Core Protocol не зависит от Energy Profile.
+The Domain Profile **does not know** how trust is established at the Core Protocol level. It receives already verified data and works with it.
 
-### Критерий разделения
+## Consequences
 
-- Если функция относится к **доверию и идентичности** — это Core Protocol.
-- Если функция относится к **экономике и токенам** — это Energy Profile.
+### Positive
 
-## Сравнение с альтернативами
+1. **Clear separation of concerns:** Core Protocol handles trust; Domain Profile handles business logic.
+2. **Simplified auditing:** Core Protocol can be audited separately from domain logic.
+3. **New domains enabled:** any new profile can use the Core Protocol without changes.
+4. **Independent evolution:** Core Protocol and Domain Profile can evolve independently.
 
-### Вариант A (отвергнут): Полное разделение на два контракта
+### Negative
 
-Core Protocol как отдельный Anchor-контракт.
-Energy Profile как отдельный Anchor-контракт.
-Взаимодействие через CPI (Cross-Program Invocation).
+1. **Increased architectural complexity:** explicit separation is required at the code and documentation level.
+2. **Additional integration effort:** each new domain must implement its own Profile.
+3. **Risk of duplication:** domain profiles may reinvent the wheel if the Core Protocol is not flexible enough.
 
-**Минусы:**
-- CPI добавляет сложность и газовые затраты.
-- Два контракта = два аудита + две точки отказа.
-- На текущем этапе (pre-mainnet) избыточно.
+### Trade-offs
 
-### Вариант B (выбран): Логическое разделение внутри одного контракта
+- Core Protocol must be abstract enough to support different domains
+- Domain Profile must be flexible enough not to require Core Protocol changes
+- Documentation must clearly separate these two layers
 
-Core Protocol и Energy Profile находятся в одном Anchor-контракте (enrg-mvp).
-Разделены на уровне модулей (core/ и energy/).
-Чёткая граница в коде: Core Protocol не импортирует SPL Token.
-При необходимости разделение на два контракта тривиально.
+## Related ADRs
 
-**Плюсы:**
-- Единый аудит, единый деплой.
-- Нулевые накладные расходы на CPI.
-- Возможность выделить Core Protocol в отдельный крейт при масштабировании.
+- ADR-0001: Keys Never Leave the Device
+- ADR-0002: Device Registry as Source of Truth
+- ADR-0003: Oracle and Policy Engine
+- ADR-0004: Device Manifest
+- ADR-0005: Device Lifecycle States
 
-### Вариант C (отвергнут): Оставить как есть (монолит)
+## Implementation Status
 
-Без разделения.
-
-**Минусы:**
-- Жёсткая связность, описанная в контексте.
-- Невозможность reuse для других активов.
-
-## Последствия
-
-### Положительные
-
-- Чёткая архитектурная граница для будущих рефакторингов.
-- Core Protocol может быть переиспользован для не-энергетических сценариев.
-- Аудит может фокусироваться на каждом слое отдельно.
-- Упрощение onboard новых разработчиков: понятно, где какая логика.
-
-### Отрицательные
-
-- Требует рефакторинга структуры папок в коде (создание core/ и energy/).
-- Некоторые функции (например, mint_energy) находятся на границе: они используют
-  Core Protocol (проверка устройства) и Energy Profile (эмиссия). Требуется
-  явное документирование таких "мостов".
-
-## Реализация
-
-### Структура кода (целевая)
-
-programs/enrg-mvp/src/ core/ mod.rs device_lifecycle.rs # ADR-0005 device_registry.rs # ADR-0002 (future) oracle_registry.rs # ADR-0003 policy_engine.rs # ADR-0004 (future) identity.rs # Ed25519 верификация energy/ mod.rs mint.rs # mint_energy (bridge между Core и Energy) token_mint.rs # конфигурация SRC Mint vault.rs # глобальная экономика протокола math.rs # эмиссионная модель и динамическая сложность buyback.rs # buyback & burn commission.rs # распределение комиссий adapters/ spl.rs # SPL Token адаптер state/ (разделить по профилям)
-
-
-### Этапы рефакторинга
-
-1. **Сейчас (pre-mainnet):** Логическое разделение в документации и ADR.
-   Код остаётся в текущей структуре, но с явными комментариями границ.
-
-2. **После mainnet (Q4 2026):** Физическое разделение на core/ и energy/ модули
-   без изменения логики.
-
-3. **2027+:** Выделение Core Protocol в отдельный крейт при появлении второго профиля.
-
-## Визуальная архитектура
-
-┌─────────────────────────────────────────────────────────┐ │ ENRG Protocol │ ├──────────────────────────┬──────────────────────────────┤ │ Core Protocol │ Energy Profile │ │ │ │ │ • Device Identity │ • SRC Mint │ │ • Device Lifecycle │ • Emission Model (ADR-0001) │ │ • Device Registry │ • Dynamic Difficulty │ │ • Oracle Registry │ • Commissions (15%) │ │ • Policy Engine │ • Buyback & Burn │ │ • Proof-of-Production │ • Vault (economics) │ │ │ │ │ Независим от токенов │ Зависит от Core Protocol │ └──────────────────────────┴──────────────────────────────┘
-
-
-## Связь с другими ADR
-
-- ADR-0001: Ключ никогда не покидает устройство → часть Core Protocol (identity).
-- ADR-0002: Device Registry → часть Core Protocol.
-- ADR-0003: Oracle Registry / Policy Engine → часть Core Protocol.
-- ADR-0004: Device Manifest → часть Core Protocol.
-- ADR-0005: Device States → часть Core Protocol.
-
-## Заключение
-
-Принимаем архитектурное разделение на Core Protocol и Energy Profile
-с логической границей внутри одного контракта на этапе pre-mainnet.
-Физическое разделение на два контракта — после mainnet, при появлении
-второго профиля использования.
+The separation is accepted at the architectural level. The Core Protocol implementation resides in the Axis-core repository. The Domain Profile is implemented as a separate application.

@@ -1,20 +1,20 @@
 # ENRG Architecture Overview
 
-## Основные компоненты
+## Main components
 
 1. **Backend API (FastAPI)**
-   - Папка: `app/`
-   - Точка входа: `app/main.py`
-   - Основные роуты:
-     - `/provisioning/...` — первичная аттестация устройства (DeviceProof).
-     - `/registry/...` — реестр устройств и связанных сущностей.
-     - `/oracle/...` — работа с oracle-аттестациями.
+   - Folder: `app/`
+   - Entry point: `app/main.py`
+   - Main routes:
+     - `/provisioning/...` — initial device attestation (DeviceProof).
+     - `/registry/...` — the device registry and related entities.
+     - `/oracle/...` — oracle attestations.
 
 2. **Oracle attestation**
-   - Модуль: `app/api/oracle.py`
-   - Эндпоинт: `POST /oracle/attest`
-   - Работает в двух режимах:
-     1. **Legacy attestation**: принимает полную аттестацию, валидирует по `schemas/attestation.schema.json`, сохраняет in-memory и возвращает:
+   - Module: `app/api/oracle.py`
+   - Endpoint: `POST /oracle/attest`
+   - Works in two modes:
+     1. **Legacy attestation**: accepts a full attestation, validates it against `schemas/attestation.schema.json`, stores it in memory and returns:
         ```json
         {
           "status": "received",
@@ -23,36 +23,36 @@
           "oracle_id": "..."
         }
         ```
-     2. **New oracle_attest_request**: принимает запрос с полями
+     2. **New oracle_attest_request**: accepts a request with fields
         `device_id`, `nonce`, `timestamp`, `algo`, `payload.max_power_kw`, `signature`,
-        валидирует по `schemas/oracle_attest_request.schema.json` и возвращает:
+        validates it against `schemas/oracle_attest_request.schema.json` and returns:
         ```json
         {
           "device_id": "...",
           "attestation_id": "... (uuid4)",
           "decision": {
             "allowed": true,
-            "max_power_kw": <число>
+            "max_power_kw": <number>
           }
         }
         ```
-   - In-memory хранилище: словарь `_ATTESTATIONS` внутри `app/api/oracle.py`.
+   - In-memory storage: the `_ATTESTATIONS` dict inside `app/api/oracle.py`.
 
-3. **JSON-схемы и валидация**
-   - Папка: `schemas/`
+3. **JSON schemas and validation**
+   - Folder: `schemas/`
      - `attestation.schema.json`
      - `device_manifest.schema.json`
      - `device_proof.schema.json`
      - `device_record.schema.json`
      - `oracle_attest_request.schema.json`
-   - Утилиты:
-     - `app/schema_utils.py` — загрузка и кеширование валидаторов.
-     - `app/schemas_loader.py` — вспомогательные функции для работы со схемами.
+   - Utilities:
+     - `app/schema_utils.py` — loading and caching validators.
+     - `app/schemas_loader.py` — helper functions for working with schemas.
 
 4. **On-chain bridge (Python → Solidity)**
-   - Модуль: `app/onchain_bridge.py`
-   - Главное: `build_attestation_params(attestation: dict) -> OnchainAttestationParams`
-   - Структура `OnchainAttestationParams`:
+   - Module: `app/onchain_bridge.py`
+   - Main: `build_attestation_params(attestation: dict) -> OnchainAttestationParams`
+   - The `OnchainAttestationParams` structure:
      ```python
      @dataclass
      class OnchainAttestationParams:
@@ -62,69 +62,69 @@
          max_power_w: int        # max_power_kw * 1000
          issued_at: int          # unix timestamp
      ```
-   - Вспомогательные функции:
+   - Helper functions:
      - `_to_bytes32_hash(value: str) -> bytes` — `keccak(text=value)`.
      - `_parse_issued_at(issued_at: str) -> int` — ISO8601 (`...Z`) → unix timestamp.
 
-   - Логика `build_attestation_params`:
-     - Берёт поля из JSON-аттестации Oracle:
+   - `build_attestation_params` logic:
+     - Takes fields from the Oracle JSON attestation:
        - `attestation["attestation_id"]`
        - `attestation["device_id"]`
        - `attestation["decision"]["allowed"]`
        - `attestation["decision"]["max_power_kw"]`
        - `attestation["issued_at"]`
-     - Бросает `KeyError`, если нет обязательных полей.
-     - Возвращает `OnchainAttestationParams`, совместимый с сигнатурой функции контракта `submitAttestation(...)`.
+     - Raises `KeyError` if required fields are missing.
+     - Returns `OnchainAttestationParams` compatible with the contract function signature `submitAttestation(...)`.
 
-5. **Solidity контракты и Foundry**
-   - Папка: `onchain/`
-   - Контракты (примерно): `ENRGOracle.sol` и/или подобные.
-   - Тесты Foundry: запускаются из корня через `./run-tests.sh`, который внутри дергает `forge test` в `onchain/`.
+5. **Solidity contracts and Foundry**
+   - Folder: `onchain/`
+   - Contracts (roughly): `ENRGOracle.sol` and/or similar.
+   - Foundry tests: run from the root via `./run-tests.sh`, which invokes `forge test` in `onchain/`.
 
-6. **Тесты Python**
-   - Папка: `tests/`
-   - Ключевые:
-     - `test_api.py` — базовые API-эндпоинты (включая legacy `/oracle/attest`).
-     - `test_oracle_attest.py` — новый формат запроса `/oracle/attest`.
-     - `test_onchain_bridge.py` — проверяет:
-       - корректное построение `OnchainAttestationParams`;
-       - соответствие keccak‑хэшей;
-       - преобразование kW → W и issued_at → timestamp.
+6. **Python tests**
+   - Folder: `tests/`
+   - Key:
+     - `test_api.py` — basic API endpoints (incl. the legacy `/oracle/attest`).
+     - `test_oracle_attest.py` — the new `/oracle/attest` request format.
+     - `test_onchain_bridge.py` — verifies:
+       - correct `OnchainAttestationParams` building;
+       - keccak hash correctness;
+       - the kW → W and issued_at → timestamp conversions.
      - `test_oracle_storage.py` — InMemoryOracleStorage.
-   - Все тесты запускаются из корня:
+   - All tests run from the root:
      ```bash
      ./run-tests.sh
      ```
 
-7. **Инструменты и демо**
+7. **Tools and demos**
    - `tools/client.py`
-     - Мини-клиент на `httpx` для обращения к API.
-     - Умеет:
+     - A minimal `httpx` client for the API.
+     - Supports:
        - `health()` — GET `/health`.
-       - `oracle_attest_request(...)` — новый формат запроса к `/oracle/attest`.
-       - `build_simple_attestation(...)` + `oracle_attest_legacy(...)` — генерация и отправка legacy-аттестации.
+       - `oracle_attest_request(...)` — the new request format for `/oracle/attest`.
+       - `build_simple_attestation(...)` + `oracle_attest_legacy(...)` — building and sending a legacy attestation.
    - `scripts/demo_onchain_bridge.py`
-     - Читает `attestation-example.json`.
-     - Прогоняет через `build_attestation_params`.
-     - Печатает on-chain параметры, готовые для вызова Solidity-функции `submitAttestation(...)`.
+     - Reads `attestation-example.json`.
+     - Runs it through `build_attestation_params`.
+     - Prints on-chain parameters ready for the Solidity `submitAttestation(...)` call.
 
-## Поток данных (end-to-end)
+## Data flow (end-to-end)
 
-1. **Устройство / клиент** отправляет запрос на oracle:
-   - Новый формат:
-     - `POST /oracle/attest` с полями `device_id`, `nonce`, `timestamp`, `algo`, `payload.max_power_kw`, `signature`.
-   - Сервер:
-     - Валидирует по `oracle_attest_request.schema.json`.
-     - Проверяет корректность `timestamp` (ISO8601 с `Z`).
-     - Генерирует `attestation_id` (UUID).
-     - Формирует `decision` и сохраняет запись в `_ATTESTATIONS`.
-     - Возвращает `{"device_id", "attestation_id", "decision"}`.
+1. **The device / client** sends a request to the oracle:
+   - New format:
+     - `POST /oracle/attest` with `device_id`, `nonce`, `timestamp`, `algo`, `payload.max_power_kw`, `signature`.
+   - Server:
+     - Validates against `oracle_attest_request.schema.json`.
+     - Checks `timestamp` (ISO8601 with `Z`).
+     - Generates an `attestation_id` (UUID).
+     - Builds the `decision` and stores the record in `_ATTESTATIONS`.
+     - Returns `{"device_id", "attestation_id", "decision"}`.
 
-2. **Oracle-аттестация попадает в хранилище** (in-memory),
-   а также может быть сериализована в JSON (пример — `attestation-example.json`).
+2. **The oracle attestation is stored** (in-memory),
+   and can also be serialized to JSON (e.g. `attestation-example.json`).
 
-3. **On-chain bridge** берёт JSON-аттестацию Oracle и строит из неё параметры для контракта:
+3. **The on-chain bridge** takes the Oracle JSON attestation and builds contract parameters from it:
    - `build_attestation_params(attestation)` → `OnchainAttestationParams`.
 
-4. **On-chain контракт** (на Solidity) принимает эти параметры через функцию `submitAttestation(...)` и обновляет on-chain состояние (например, реестр разрешённых устройств и их лимитов мощности).
+4. **The on-chain contract** (Solidity) accepts these parameters via `submitAttestation(...)` and updates the on-chain state (e.g. the registry of allowed devices and their power limits).
 

@@ -1,73 +1,126 @@
-# ADR-0005: Состояния устройства (UNREGISTERED → ... → REVOKED)
+# ADR-0005: Device States and Lifecycle
 
-## Статус
-Принято
+**Status:** Accepted  
+**Date:** 2025-06-28 (revised 2026-07-27)  
+**Authors:** Axis Protocol Team  
 
-## Контекст
-Устройство в ENRG Protocol проходит через несколько этапов: от первого включения до отзыва или вывода из эксплуатации. Без чётко определённых состояний и правил перехода между ними система становится неоднозначной и трудно управляемой.
+---
 
-## Решение
-Вводим конечный набор состояний и правила переходов:
+## Context
 
+A device in the Axis Protocol goes through several stages: from first power-on to revocation or decommissioning. Without clearly defined states and transition rules, the system becomes ambiguous and difficult to manage.
+
+## Decision
+
+Introduce a finite set of states and transition rules.
+
+### State Diagram
 UNREGISTERED
-    │
-    ▼
+│
+▼
 REGISTERED
-    │
-    ▼
+│
+▼
 CLAIMED
-    │
-    ▼
+│
+▼
 PROVISIONED
-    │
-    ▼
+│
+▼
 ACTIVE
-    │
-    ├── (ошибка, подозрение)
-    ▼
+│
+├── (error, suspicion) → QUARANTINE
+│
 QUARANTINE
-    │
-    ├── (диагностика, устранение)
-    ▼
-ACTIVE
-    │
-    ├── (обслуживание)
-    ▼
+│
+├── (diagnostics, resolution) → ACTIVE
+│
+├── (maintenance needed) → MAINTENANCE
+│
+▼
 MAINTENANCE
-    │
-    ├── (завершение)
-    ▼
+│
+├── (completion) → ACTIVE
+│
 ACTIVE
-    │
-    ├── (передача, отзыв)
-    ▼
-REVOKED
+│
+├── (transfer, revocation) → REVOKED
+│
+▼
+REVOKED### State Definitions
 
-Каждое состояние имеет чёткое значение:
-- UNREGISTERED — устройство неизвестно системе.
-- REGISTERED — имеет криптографическую личность, но не привязано к владельцу.
-- CLAIMED — привязано к владельцу, но ещё не настроено.
-- PROVISIONED — Wi-Fi настроен, время синхронизировано, конфигурация получена.
-- ACTIVE — производит и отправляет Proof.
-- QUARANTINE — под подозрением, Proof не идут на минтинг.
-- MAINTENANCE — обслуживание, Proof не отправляются.
-- REVOKED — устройство отозвано.
+| State | Description |
+|-------|-------------|
+| **UNREGISTERED** | Device is unknown to the system. |
+| **REGISTERED** | Device has a cryptographic identity but is not yet linked to an owner. |
+| **CLAIMED** | Device is linked to an owner but not yet configured. |
+| **PROVISIONED** | Network configured, time synchronized, configuration received. |
+| **ACTIVE** | Device is fully operational, sending Proofs. |
+| **QUARANTINE** | Device is suspected of malfunction or compromise; requires investigation. |
+| **MAINTENANCE** | Device is undergoing maintenance (firmware update, hardware check, etc.). |
+| **REVOKED** | Device is permanently decommissioned. |
 
-## Обоснование
-- Ясность: состояние устройства однозначно определяет его поведение.
-- Управляемость: можно строить автоматические политики на основе состояния.
-- Диагностика: легче отслеживать проблемы.
-- Безопасность: устройства в QUARANTINE не могут навредить сети.
+---
 
-## Последствия
-- Device Registry хранит текущее состояние устройства.
-- Переходы между состояниями возможны только через определённые события (регистрация, Claim, heartbeat, OTA, ошибка).
-- Oracle и Policy Engine учитывают состояние при принятии решений.
-- Dashboard отображает состояние и позволяет управлять им (при наличии прав).
+## Transition Rules
 
-## Альтернативы
-- Меньше состояний — отклонено, так как не отражает реальный жизненный цикл.
-- Больше состояний — возможно в будущем, но сейчас мы начинаем с минимально необходимого набора.
+### FROM UNREGISTERED
+- **TO REGISTERED:** Device presents a valid cryptographic identity and registers with the system.
 
-## Дата
-2025-06-28
+### FROM REGISTERED
+- **TO CLAIMED:** Device is assigned to an owner (wallet) via the Registry.
+
+### FROM CLAIMED
+- **TO PROVISIONED:** Device successfully provisions: connects to network, syncs time, receives configuration.
+
+### FROM PROVISIONED
+- **TO ACTIVE:** Device completes initial checks and begins normal operation.
+
+### FROM ACTIVE
+- **TO QUARANTINE:** Suspicious activity, policy violation, or security alert.
+- **TO REVOKED:** Permanent decommissioning (by owner or system).
+- **TO MAINTENANCE:** Scheduled or unscheduled maintenance.
+
+### FROM QUARANTINE
+- **TO ACTIVE:** Diagnostics complete and issue resolved.
+- **TO REVOKED:** Issue cannot be resolved or device is compromised.
+- **TO MAINTENANCE:** Maintenance is required.
+
+### FROM MAINTENANCE
+- **TO ACTIVE:** Maintenance complete, device returns to normal operation.
+- **TO REVOKED:** Device cannot be restored.
+
+### FROM REVOKED
+- **No transitions out.** This is a terminal state.
+
+---
+
+## Rationale
+
+- **Clarity:** each state has a well-defined meaning and purpose.
+- **Traceability:** state transitions are auditable.
+- **Security:** suspicious devices can be quarantined and investigated.
+- **Operational flexibility:** maintenance can be performed without losing state context.
+
+---
+
+## Consequences
+
+- The Registry must store the current state of each device.
+- State transitions must be signed or authorized by a trusted entity.
+- Policies (Policy Engine) can use the state to determine behavior.
+
+---
+
+## Related ADRs
+
+- ADR-0002: Device Registry as the Single Source of Truth
+- ADR-0003: Oracle and Policy Engine
+- ADR-0007: Security Key Management
+
+---
+
+## Implementation Notes
+
+- This decision is **protocol-level** and must be respected by all implementations.
+- Implementation details (state transition authentication, storage) are defined in the Axis-core repository.
