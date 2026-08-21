@@ -1,54 +1,54 @@
 # Provisioning Service Specification
 
-## Статус
-Черновик (Draft) v0.1
+## Status
+Draft v0.1
 
-## Введение
-Provisioning Service отвечает за регистрацию, идентификацию и первоначальную настройку устройств в экосистеме ENRG. Он является входной точкой для всех новых устройств.
+## Introduction
+The Provisioning Service handles registration, identification and initial configuration of devices in the ENRG ecosystem. It is the entry point for all new devices.
 
 ---
 
-## Процесс регистрации устройства
+## Device registration process
 
-### Шаг 1. Генерация ключей
-Устройство (ESP32) при первом включении генерирует пару ключей Ed25519:
-- Приватный ключ — остаётся на устройстве (никогда не покидает его).
-- Публичный ключ — отправляется на сервер для регистрации.
+### Step 1. Key generation
+On first boot, the device (ESP32) generates an Ed25519 key pair:
+- The private key stays on the device (never leaves it).
+- The public key is sent to the server for registration.
 
-### Шаг 2. Отправка запроса на регистрацию
-Устройство отправляет на Provisioning Service запрос, содержащий:
-- `device_id` — уникальный идентификатор (генерируется на устройстве).
-- `public_key` — публичный ключ в формате Base64.
-- `signature` — подпись запроса (для подтверждения владения ключом).
-- `device_type` — тип устройства (Basic, Verified, Industrial).
-- `firmware_version` — версия прошивки.
+### Step 2. Send the registration request
+The device sends a request to the Provisioning Service containing:
+- `device_id` — a unique identifier (generated on the device).
+- `public_key` — the public key in Base64.
+- `signature` — the request signature (proof of key ownership).
+- `device_type` — the device type (Basic, Verified, Industrial).
+- `firmware_version` — the firmware version.
 
-### Шаг 3. Верификация
-Provisioning Service проверяет:
-- Подпись запроса.
-- Уникальность device_id.
-- Отсутствие дубликатов публичного ключа.
+### Step 3. Verification
+The Provisioning Service checks:
+- The request signature.
+- device_id uniqueness.
+- No duplicate public keys.
 
-### Шаг 4. Генерация Claim Code
-После успешной верификации сервер генерирует **одноразовый Claim Code** (8 символов, например, `A7F4-K92Q`).
+### Step 4. Claim Code generation
+After a successful verification, the server generates a **one-time Claim Code** (8 characters, e.g. `A7F4-K92Q`).
 
-### Шаг 5. Возврат ответа устройству
-Устройство получает:
-- `claim_code` — для отображения пользователю.
+### Step 5. Return the response to the device
+The device receives:
+- `claim_code` — for display to the user.
 - `status` — `registered`.
-- `oracle_endpoint` — URL оракула для отправки Proof.
+- `oracle_endpoint` — the oracle URL for sending Proofs.
 
-### Шаг 6. Привязка к владельцу (Claim)
-Пользователь вводит Claim Code в Dashboard. После этого устройство привязывается к его кошельку и переходит в состояние `CLAIMED`.
+### Step 6. Owner binding (Claim)
+The user enters the Claim Code in the Dashboard. The device is then bound to their wallet and moves to the `CLAIMED` state.
 
 ---
 
-## API эндпоинты
+## API endpoints
 
 ### POST /identity/register
-Регистрация нового устройства.
+Register a new device.
 
-**Запрос:**
+**Request:**
 ```json
 {
   "device_id": "esp32-001",
