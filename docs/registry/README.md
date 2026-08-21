@@ -1,19 +1,19 @@
 # Manifest Registry — ENRG
 
-Назначение
+Purpose
 ---------
-Manifest Registry — canonical service для публикации и распространения:
+Manifest Registry — the canonical service for publishing and distributing:
 - Device Enrollment Manifests (device identity + pubkey + provenance)
 - Firmware Manifests (firmware metadata + hashes + signatures)
 - Revocation entries (key compromises, device blacklist)
 
-Принципы
+Principles
 --------
-- Подпись обязательна: каждый манифест подписывается приватным ключом.
-- Верификация: сервер проверяет подпись перед сохранением.
-- Якорение: ежедневный Merkle root публикуется в блокчейн.
-- Отзыв: поддержка revocation списков.
+- Signature required: every manifest is signed with a private key.
+- Verification: the server verifies the signature before storing.
+- Anchoring: the daily Merkle root is published on-chain.
+- Revocation: revocation list support.
 
-Быстрый старт
+Quick start
 -------------
-См. oracle/registry/README.md
+See oracle/registry/README.md

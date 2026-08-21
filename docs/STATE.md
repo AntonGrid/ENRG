@@ -1,192 +1,200 @@
-# ENRG — Актуальное состояние (STATE)
+# ENRG — Current State (STATE)
 
-> **Единый источник правды** о текущем состоянии реализации протокола ENRG
-> (Anchor 0.32, Solana) перед Devnet/mainnet.
+> **Single source of truth** about the current state of the ENRG protocol
+> implementation (Anchor 0.32, Solana) before Devnet/mainnet.
 >
-> Все числовые значения ниже **сверены с исходным кодом** (`programs/enrg-mvp/src`)
-> на момент фиксации. При любом расхождении между этим документом и кодом —
-> источником истины является код, а документ должен быть обновлён.
+> All numeric values below are **verified against the source code**
+> (`programs/enrg-mvp/src`) at the moment of writing. If this document and the
+> code ever disagree — the code is the source of truth and this document must
+> be updated.
 >
-> Кросс-ссылки: `docs/ENRG_Technical_Specification_v8.0.md`,
-> `docs/protocol/blockchain/protocol-economics.md` и этот файл.
+> Cross-references: `docs/ENRG_Technical_Specification_v8.0.md`,
+> `docs/protocol/blockchain/protocol-economics.md`, and this file.
 
-## 1. Обзор
+## 1. Overview
 
-**Реализовано (в коде `programs/enrg-mvp`):**
+**Implemented (in `programs/enrg-mvp`):**
 
-| Модуль | Статус | Основание |
+| Module | Status | Basis |
 |---|---|---|
-| Токеномика SRC (mint, supply-лимиты, атомарные единицы) | ✅ Реализовано | `constants.rs`, `state/token_mint.rs`, `state/vault.rs` |
-| Founder-премайн + vesting (cliff 1y / release 3y) | ✅ Реализовано | `instructions/init_founder.rs`, `instructions/vesting.rs`, `state/vesting.rs` |
-| Governance MVP (ADR-0009) | ✅ Реализовано | `instructions/governance.rs`, `state/governance.rs` |
-| Device-registry / device lifecycle (ADR-0002/0005) | ✅ Реализовано | `instructions/device_lifecycle.rs`, `state/owner_devices.rs` |
-| Manifest registry / merkle verification | ✅ Реализовано | `instructions/manifest_registry.rs`, `manifest_verification.rs`, `merkle_proof_verification.rs` |
-| Policy Engine (ADR-0003) | ✅ **Реализовано** | `instructions/policy_engine.rs`, `state/policy.rs` (PolicyRegistry, PDA `[b"policy-registry"]`); `mint_energy` — Verifier, исполняет политики |
-| OTA + безопасные обновления (ADR-0008) | ✅ Реализовано | Firmware v3: подпись образов **отдельным холодным firmware-ключом** (`ENRG_FIRMWARE_PUBKEY_HEX`), SHA-256, анти-откат (NVS + опц. eFuse); dual-bank A/B (`partitions_ota.csv`) + monotonic eFuse (`esp32dev-ota`); сервер: `FIRMWARE_SIGNING_KEY_PATH` |
-| Аппаратная подпись устройства (ADR-0001/0007) | ⚠️ Частично | SE050-путь (аппаратная Ed25519, `esp32dev-se050`) + документированный компромисс (ATECC608A seed-vault, подпись в CPU) — `SE050-HARDWARE-SIGNING.md` |
-| Multisig для `set_vault_authority` / timelock-смен | ⏸️ Отложено (TODO(audit)) | `instructions/initialize.rs` |
+| SRC tokenomics (mint, supply limits, atomic units) | ✅ Implemented | `constants.rs`, `state/token_mint.rs`, `state/vault.rs` |
+| Founder premine + vesting (cliff 1y / release 3y) | ✅ Implemented | `instructions/init_founder.rs`, `instructions/vesting.rs`, `state/vesting.rs` |
+| Governance MVP (ADR-0009) | ✅ Implemented | `instructions/governance.rs`, `state/governance.rs` |
+| Device registry / device lifecycle (ADR-0002/0005) | ✅ Implemented | `instructions/device_lifecycle.rs`, `state/owner_devices.rs` |
+| Manifest registry / merkle verification | ✅ Implemented | `instructions/manifest_registry.rs`, `manifest_verification.rs`, `merkle_proof_verification.rs` |
+| Policy Engine (ADR-0003) | ✅ **Implemented** | `instructions/policy_engine.rs`, `state/policy.rs` (PolicyRegistry, PDA `[b"policy-registry"]`); `mint_energy` — the Verifier, executes policies |
+| OTA + secure updates (ADR-0008) | ✅ Implemented | Firmware v3: image signing with a **separate cold firmware key** (`ENRG_FIRMWARE_PUBKEY_HEX`), SHA-256, anti-rollback (NVS + optional eFuse); dual-bank A/B (`partitions_ota.csv`) + monotonic eFuse (`esp32dev-ota`); server: `FIRMWARE_SIGNING_KEY_PATH` |
+| Hardware device signing (ADR-0001/0007) | ⚠️ Partial | SE050 path (hardware Ed25519, `esp32dev-se050`) + a documented compromise (ATECC608A seed-vault, CPU signing) — `SE050-HARDWARE-SIGNING.md` |
+| Multisig for `set_vault_authority` / timelock changes | ⏸️ Deferred (TODO(audit)) | `instructions/initialize.rs` |
 
-Принцип эмиссии: post-premine эмиссия **только** через governance;
-`mint-authority` = PDA `[b"mint-authority"]` и **не меняется**.
+Emission principle: post-premine emission **only** through governance;
+`mint-authority` = PDA `[b"mint-authority"]` and is **never changed**.
 
-## 2. Адреса и роли
+## 2. Addresses and roles
 
-| Роль | Адрес | Где хранится ключ |
+| Role | Address | Where the key lives |
 |---|---|---|
-| Program ID (enrg_mvp) | `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb` | `declare_id!` в `lib.rs`; `Anchor.toml [programs.*]` |
-| **Authority (Devnet/mainnet, оператор)** | `GkdhQQgUBi2Q422nTBP27LADkejijRwJEAnfhPYsUJSV` | **Локально**: `~/.config/solana/id.json` — НЕ в репозитории |
-| **Founder wallet** (премайн, vesting) | `6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8` | **Локально**: `~/.config/solana/founder-wallet.json` — НЕ в репозитории |
-| **Governance member (генезис)** | `6YW9kjHu8B79F1utcK6N4Bi1wBaTsTvBei49znDQjKH2` | **Локально**: `~/.config/solana/governance-member.json` — НЕ в репозитории |
-| enrg-profile (CPI-цель) | `78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt` | `constants.rs::ENRG_PROFILE_PROGRAM_ID` |
+| Program ID (enrg_mvp) | `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb` | `declare_id!` in `lib.rs`; `Anchor.toml [programs.*]` |
+| **Authority (Devnet/mainnet, operator)** | `GkdhQQgUBi2Q422nTBP27LADkejijRwJEAnfhPYsUJSV` | **Locally**: `~/.config/solana/id.json` — NOT in the repository |
+| **Founder wallet** (premine, vesting) | `6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8` | **Locally**: `~/.config/solana/founder-wallet.json` — NOT in the repository |
+| **Governance member (genesis)** | `6YW9kjHu8B79F1utcK6N4Bi1wBaTsTvBei49znDQjKH2` | **Locally**: `~/.config/solana/governance-member.json` — NOT in the repository |
+| enrg-profile (CPI target) | `78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt` | `constants.rs::ENRG_PROFILE_PROGRAM_ID` |
 
-PDA-адреса детерминированы (раздел 4) и в тестах/скриптах выводятся через
-`PublicKey.findProgramAddressSync`, а не захардкожены.
+PDA addresses are deterministic (section 4) and are derived in tests/scripts via
+`PublicKey.findProgramAddressSync`, never hardcoded.
 
-> **Секреты.** Приватные ключи authority и founder НЕ в репозитории
-> (`git ls-files` не содержит keypair; `deploy/`, `*.key` — в `.gitignore`).
-> Deploy-ключи программ (`deploy/keys/*.json`) — локальные, не отслеживаются.
+> **Secrets.** The authority and founder private keys are NOT in the repository
+> (`git ls-files` contains no keypair; `deploy/`, `*.key` — in `.gitignore`).
+> Program deploy keys (`deploy/keys/*.json`) are local and untracked.
 
-## 3. Константы (сверено с `constants.rs`)
 
-Все суммы — **атомарные единицы** (1 SRC = `10^9` атомар = `SRC_DECIMALS=9`).
+## 3. Constants (verified against `constants.rs`)
 
-| Константа | Значение | Комментарий |
+All amounts are in **atomic units** (1 SRC = `10^9` atomic = `SRC_DECIMALS=9`).
+
+| Constant | Value | Comment |
 |---|---|---|
-| `MAX_SUPPLY_ATOMIC` | `1_000_000_000_000_000_000` (1e18) | = 1 млрд SRC. `MAX_SUPPLY` — deprecated alias |
+| `MAX_SUPPLY_ATOMIC` | `1_000_000_000_000_000_000` (1e18) | = 1 billion SRC. `MAX_SUPPLY` — deprecated alias |
 | `SRC_DECIMALS` | `9` | |
-| `FOUNDER_ALLOCATION_ATOMIC` | `200_000_000_000_000_000` (2e17) | = 20% от MAX = 200M SRC |
-| `FOUNDER_VESTING_CLIFF` | `365*24*60*60` = 1 год | Полностью заблокировано |
-| `FOUNDER_VESTING_RELEASE` | `3*365*24*60*60` = 3 года | Линейный release (≈1/36 в месяц) |
-| `FOUNDER_VESTING_DURATION` | CLIFF + RELEASE = **4 года** | Backward-compatible сумма |
-| `TIMELOCK_DELAY` | `604_800` (7 дней) | Между `approved_at` и исполнением |
+| `FOUNDER_ALLOCATION_ATOMIC` | `200_000_000_000_000_000` (2e17) | = 20% of MAX = 200M SRC |
+| `FOUNDER_VESTING_CLIFF` | `365*24*60*60` = 1 year | Fully locked |
+| `FOUNDER_VESTING_RELEASE` | `3*365*24*60*60` = 3 years | Linear release (≈1/36 per month) |
+| `FOUNDER_VESTING_DURATION` | CLIFF + RELEASE = **4 years** | Backward-compatible total |
+| `TIMELOCK_DELAY` | `604_800` (7 days) | Between `approved_at` and execution |
 | `GOVERNANCE_MEMBER_MAX` | `5` | |
 | `GOVERNANCE_MIN_MEMBERS` | `3` | |
-| `PROPOSAL_AMOUNT_MAX_ATOMIC` | `1_000_000_000_000_000` (1e15) | = 1M SRC = 0.1% от MAX |
-| `PROPOSAL_TITLE_MAX_LEN` | `64` | байт |
-| `MAX_DEVICES_PER_OWNER` | `100` | аудит BLOCK 4 |
-| `EMISSION_DIFFICULTY_K` | `10` | асимптотическая сложность |
+| `PROPOSAL_AMOUNT_MAX_ATOMIC` | `1_000_000_000_000_000` (1e15) | = 1M SRC = 0.1% of MAX |
+| `PROPOSAL_TITLE_MAX_LEN` | `64` | bytes |
+| `MAX_DEVICES_PER_OWNER` | `100` | audit BLOCK 4 |
+| `EMISSION_DIFFICULTY_K` | `10` | asymptotic difficulty |
 
-Гарантии supply: `vault.max_supply = MAX_SUPPLY_ATOMIC` (`initialize_vault`);
-каждая эмиссия (`allocate_founder`, `governance_mint`, `mint_energy`) проверяет
+Supply guarantees: `vault.max_supply = MAX_SUPPLY_ATOMIC` (`initialize_vault`);
+every emission (`allocate_founder`, `governance_mint`, `mint_energy`) checks
 `total_supply + amount <= max_supply` (`SupplyLimitExceeded`).
 
-## 4. PDA-структура
+## 4. PDA structure
 
-Все PDA — владелец **enrg_mvp** (`HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb`),
-если не указано иное.
+All PDAs are owned by **enrg_mvp** (`HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb`)
+unless noted otherwise.
 
-| Аккаунт | Seed | Инициализация | Где в коде |
+| Account | Seed | Initialization | Where in code |
 |---|---|---|---|
 | `Vault` | `[b"vault"]` | `init_if_needed` / `initialize_vault` | `state/vault.rs` |
 | `TokenMint` | `[b"token-mint"]` | `init` / `initialize_token` | `state/token_mint.rs` |
 | SRC Mint (SPL) | `[b"src-mint"]` | `init` / `initialize_token` | `instructions/initialize_token.rs` |
-| Mint Authority (signer mint_to) | `[b"mint-authority"]` | `init` / `initialize_token` | там же |
-| Fund Authority: buyback | `[b"fund-buyback"]` | `init` / `initialize_token` | там же |
-| Fund Authority: staking | `[b"fund-staking"]` | fund-ATA привязываются в `initialize_funds` | `instructions/initialize.rs` |
-| Fund Authority: dao | `[b"fund-dao"]` | там же | |
-| Fund Authority: emergency | `[b"fund-emergency"]` | там же | |
+| Mint Authority (signer mint_to) | `[b"mint-authority"]` | `init` / `initialize_token` | same |
+| Fund Authority: buyback | `[b"fund-buyback"]` | `init` / `initialize_token` | same |
+| Fund Authority: staking | `[b"fund-staking"]` | fund ATAs are bound in `initialize_funds` | `instructions/initialize.rs` |
+| Fund Authority: dao | `[b"fund-dao"]` | same | |
+| Fund Authority: emergency | `[b"fund-emergency"]` | same | |
 | `GovernanceState` | `[b"governance"]` | `init` / `initialize_governance` | `instructions/governance.rs` |
-| `Proposal` | `[b"proposal", id.to_le_bytes()]` | `init` / `create_proposal` | там же |
+| `Proposal` | `[b"proposal", id.to_le_bytes()]` | `init` / `create_proposal` | same |
 | `OracleRegistry` | `[b"oracle-registry"]` | `initialize_oracle_registry` | `state/registry/oracle.rs` |
 | `Config` | `[b"config"]` | `init_config` | `state/config.rs` |
 | `ManifestRegistry` | `[b"manifest-registry"]` | `initialize_manifest_registry` | |
 | `ManifestVerification` | `[b"manifest-verification", manifest_id]` | `register_manifest_verification` | |
-| `Producer` (устройство) | `[b"producer", device_id]` | `register_device` | `state/producer.rs` |
+| `Producer` (device) | `[b"producer", device_id]` | `register_device` | `state/producer.rs` |
 | `OwnerDevices` | `[b"owner-devices", owner]` | claim/register | `state/owner_devices.rs` |
-| `EnergyProfile` | `[b"profile", authority]` — **владелец enrg-profile** | CPI `init_energy_profile` | `ENRG_PROFILE_PROGRAM_ID` |
+| `EnergyProfile` | `[b"profile", authority]` — **owned by enrg-profile** | CPI `init_energy_profile` | `ENRG_PROFILE_PROGRAM_ID` |
 
-**Особый случай — `FounderVesting`** (`state/vesting.rs`): с `e455cb7` аккаунт
-создаётся **bootstrap-инструкцией** `initialize_founder_vesting`
-(`init_if_needed` + seed `[b"founder-vesting"]`, payer = founder) — это
-единственный путь на Devnet/mainnet (генезис-инъекция существует только у
-`solana-test-validator`). Для localnet сохранён и прежний путь: аккаунт
-подкладывается валидатору через `Anchor.toml [test.validator] account`
-(`tests/genesis/founder-vesting.json`, адрес
+**Special case — `FounderVesting`** (`state/vesting.rs`): since `e455cb7` the
+account is created by the **bootstrap instruction** `initialize_founder_vesting`
+(`init_if_needed` + seed `[b"founder-vesting"]`, payer = founder) — this is the
+only path on Devnet/mainnet (genesis injection exists only in
+`solana-test-validator`). For localnet the old path is kept: the account is
+injected into the validator via `Anchor.toml [test.validator] account`
+(`tests/genesis/founder-vesting.json`, address
 `B5uSLeaX2keRGbkxZA1Tyb7dFwNpY7DUbVu8TgvdiMAh` =
-`findProgramAddress([b"founder-vesting"])` программы). `init_if_needed` пропускает
-инициализацию существующего аккаунта — оба пути обратно совместимы.
+`findProgramAddress([b"founder-vesting"])` of the program). `init_if_needed`
+skips initialization of an existing account — both paths are backward
+compatible.
 
 
-## 5. Жизненный цикл
 
-Последовательность релиза (одна и та же на localnet/Devnet; smoke-покрытие —
+## 5. Lifecycle
+
+Release sequence (the same on localnet/Devnet; smoke coverage —
 `tests/zz-e2e-smoke.ts`):
 
 ```
 initialize_token            → SRC mint (PDA [b"src-mint"]), mint-authority = PDA [b"mint-authority"]
 initialize_vault            → Vault (PDA [b"vault"]), max_supply = 1e18
-allocate_founder            → премайн 2e17 на founder ATA (одноразово), total_supply = 2e17
+allocate_founder            → premine 2e17 to the founder ATA (one-time), total_supply = 2e17
 initialize_founder_vesting  → FounderVesting (bootstrap/init_if_needed; cliff 1y / release 3y)
 initialize_governance       → GovernanceState (PDA [b"governance"]; authority + 3..=5 members)
-create_proposal             → Proposal (PDA [b"proposal", id]); одно активное, amount ≤ 1e15
-vote                        → кворум: yes > no И yes+no > members/2 → Approved (+approved_at)
-governance_mint             → после TIMELOCK_DELAY (7 дней): mint_to через mint-authority PDA
+create_proposal             → Proposal (PDA [b"proposal", id]); one active, amount ≤ 1e15
+vote                        → quorum: yes > no AND yes+no > members/2 → Approved (+approved_at)
+governance_mint             → after TIMELOCK_DELAY (7 days): mint_to via the mint-authority PDA
 ```
 
-Исполнение `governance_mint` возможно только после `Approved` + истёкшего
-timelock (иначе `TimelockNotElapsed`); `vault.total_supply` увеличивается,
+`governance_mint` can only be executed after `Approved` + the expired timelock
+(otherwise `TimelockNotElapsed`); `vault.total_supply` grows,
 `Proposal.status → Executed`.
 
-## 6. Тест-статус
+## 6. Test status
 
-- **Anchor TS (localnet):** `anchor test --skip-build` — зелёный прогон
-  (включая `tests/zz-e2e-smoke.ts`, `tests/trust-ers-pool.ts` — Trust
-  Levels/ERS/Pool, `tests/founder-vesting.ts` — теперь с рантайм-тестом
+- **Anchor TS (localnet):** `anchor test --skip-build` — green run
+  (incl. `tests/zz-e2e-smoke.ts`, `tests/trust-ers-pool.ts` — Trust
+  Levels/ERS/Pool, `tests/founder-vesting.ts` — now with the runtime test of
   `initialize_founder_vesting`).
 - **Rust unit:** `cargo test --manifest-path programs/enrg-mvp/Cargo.toml --lib`
-  — зелёные (61; включая юнит-инварианты vesting, governance,
-  tier-лимиты/`allows_increment`, ERS-математику, доли пула, формулу
-  эмиссии `E(S)=1 МВт·ч×10^S`, decimals/комиссию 15%).
-- **Документированные skips:**
-  - `it.skip` в `tests/governance.ts` — полный проход `governance_mint` после
-    7 дней (Clock-warp невозможен; покрыт юнит-инвариантом
+  — green (61; incl. vesting/governance unit invariants, tier
+  limits/`allows_increment`, ERS math, pool shares, the emission formula
+  `E(S)=1 MWh×10^S`, decimals/15% commission).
+- **Documented skips:**
+  - `it.skip` in `tests/governance.ts` — a full `governance_mint` pass after
+    7 days (Clock-warp impossible; covered by the unit invariant
     `approved_after_majority_and_timelock`).
-  - `describe.skip` в `tests/devnet-merkle-proof-verification.test.ts`
-    (devnet-зависимый).
-- **Mint-интеграция (tier-лимит в mint_energy, ERS-обновление, pool-вклад):**
-  рантайм-минт требует 2× Ed25519 + v0/LUT-транзакцию, которая на localnet
-  `anchor test` нестабильна (web3.js 1.98 + solana 3.1.8, ложный
-  «invalid index»); mint-логика покрыта Rust unit-тестами чистых функций
+  - `describe.skip` in `tests/devnet-merkle-proof-verification.test.ts`
+    (devnet-dependent).
+- **Mint integration (tier limit in mint_energy, ERS update, pool deposit):**
+  a runtime mint needs 2× Ed25519 + a v0/LUT transaction, which is unstable on
+  localnet `anchor test` (web3.js 1.98 + solana 3.1.8, a false
+  "invalid index"); the mint logic is covered by pure-function Rust unit tests
   (`can_mint`, `allows_increment`, `compute_ers_score`, `pool_share_fp`,
-  `ers_pool_bonus_fp`), а полный on-chain минт — `scripts/devnet_e2e_lifecycle.ts`.
-- **Известный тех-долг (НЕ блокирует релиз):**
-  - `8 × TS2339` в `tests/device-lifecycle.ts` (account namespace
-    `energyProducer` не типизирован в IDL).
-  - Доп. предсуществующие TS-ошибки: `tests/merkle-proof-verification.test.ts`
-    (4), `tests/devnet-merkle-proof-verification.test.ts` (3),
+  `ers_pool_bonus_fp`), and the full on-chain mint — by
+  `scripts/devnet_e2e_lifecycle.ts`.
+- **Known technical debt (does NOT block the release):**
+  - `8 × TS2339` in `tests/device-lifecycle.ts` (the `energyProducer` account
+    namespace is not typed in the IDL).
+  - Extra pre-existing TS errors: `tests/merkle-proof-verification.test.ts` (4),
+    `tests/devnet-merkle-proof-verification.test.ts` (3),
     `tests/helpers/program.ts` (2), `tests/helpers/debug-program.ts` (2),
-    `tests/probe10.test.ts` (1). Итоговая база `npx tsc --noEmit` = **20 ошибок**,
-    новые тесты новых не добавляют.
-  - `set_vault_authority` — одношаговая смена (TODO(audit): двухшаговая +
+    `tests/probe10.test.ts` (1). The final `npx tsc --noEmit` base = **20 errors**;
+    new tests add none.
+  - `set_vault_authority` — a single-step change (TODO(audit): two-step +
     timelock/multisig).
-- **Devnet — фактическое состояние (verify-only прогон, `scripts/devnet_verify_governance.ts`):**
-  Проверка от 2026-08-13 (после деплоя стратегии A): **Devnet полностью соответствует
-  текущему коду**, verify → **exit 0, все инварианты ✔**:
-  - Новый program id `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb`, ProgramData
+- **Devnet — actual state (verify-only run, `scripts/devnet_verify_governance.ts`):**
+  Checked on 2026-08-13 (after the strategy-A deploy): **Devnet fully matches
+  the current code**, verify → **exit 0, all invariants ✔**:
+  - New program id `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb`, ProgramData
     `ARg2GmnWHMPXaMwv5RYNVhTw4F2NZSoEFUkyT1pBLX8M`, slot `483455693`, authority `GkdhQQ…`;
   - `deployed binary == local build` (SHA-256 `6db33ae…`);
   - `vault.max_supply == MAX_SUPPLY_ATOMIC (1e18)`, `vault.total_supply = 2e17`;
-  - `token-mint` декодируется текущим IDL (238 байт), `decimals == 9`;
+  - `token-mint` decodes with the current IDL (238 bytes), `decimals == 9`;
   - `src-mint.supply == vault.total_supply == 2e17`;
-  - founder-премайн/ATA на месте (баланс 2e17), vesting-аккаунт создан
-    bootstrap-инструкцией `initialize_founder_vesting` (init_if_needed),
-    governance PDA инициализирован (authority `GkdhQQ…`, members=3).
-  **История:** старый program id `9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF`
-  (старая ревизия: `vault.max_supply=1e9`, `token-mint` 205 байт, без governance/vesting)
-  архивирован как legacy и не используется. Причина смены id: старые PDA-аккаунты
-  (детерминированные) невозможно переинициализировать при том же id (нет close/migrate),
-  а vesting-генезис невозможно создать на devnet (решение — код-фикс `e455cb7`).
+  - founder premine/ATA in place (balance 2e17), the vesting account was
+    created by the bootstrap instruction `initialize_founder_vesting`
+    (init_if_needed), the governance PDA is initialized (authority `GkdhQQ…`,
+    members=3).
+  **History:** the old program id `9rVoqWPSRQpMN8qbqD9DfMTUcs1qXDELZPF1eVGowsXF`
+  (old revision: `vault.max_supply=1e9`, `token-mint` 205 bytes, no
+  governance/vesting) is archived as legacy and unused. The id change reason:
+  old PDA accounts (deterministic) cannot be reinitialized under the same id
+  (no close/migrate), and vesting genesis cannot be created on devnet
+  (solution — the code fix `e455cb7`).
 
-## 7. Roadmap (добавляется upgrade-ом, не блокирует релиз)
+## 7. Roadmap (added by upgrades, does not block the release)
 
-- ~~**Policy Engine (ADR-0003)**~~ → **✅ Выполнено (2026-08-17):** отдельная
+- ~~**Policy Engine (ADR-0003)**~~ → **✅ Done (2026-08-17):** a separate
   on-chain `PolicyRegistry` (`state/policy.rs`) + `PolicyEngine`
-  (`instructions/policy_engine.rs`); `mint_energy` — Verifier и исполняет
-  решения Policy Engine. Аккаунт `policy_registry` опционален в `MintEnergy`
-  (обратная совместимость: дефолты = прежнее поведение).
-- **Multisig + двухшаговая смена authority** для `set_vault_authority`
-  (изменение layout Vault требует миграции задеплоенного аккаунта).
-- **DAO** — расширение governance MVP: делегирование, голосование по весу,
-  исполнение произвольных инструкций (сейчас — только `governance_mint`).
+  (`instructions/policy_engine.rs`); `mint_energy` — the Verifier executes
+  Policy Engine decisions. The `policy_registry` account is optional in
+  `MintEnergy` (backward compatibility: defaults = previous behavior).
+- **Multisig + two-step authority change** for `set_vault_authority`
+  (changing the Vault layout requires migrating the deployed account).
+- **DAO** — extending governance MVP: delegation, weight-based voting, arbitrary
+  instruction execution (currently only `governance_mint`).
+
 
 

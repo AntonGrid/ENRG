@@ -1,6 +1,6 @@
 ENRG On-chain Attestation Bridge
-1. Формат off-chain Attestation (JSON)
-Пример (attestation-example.json):
+1. Off-chain Attestation format (JSON)
+Example (attestation-example.json):
 
 {
   "attestation_id": "att_1a2b3c4d5e6f7890",
@@ -22,7 +22,7 @@ ENRG On-chain Attestation Bridge
   "issued_at": "2026-07-25T19:05:00Z",
   "oracle_signature": "cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe"
 }
-2. On-chain структура (контракт EnrgOracleAttestation)
+2. On-chain structure (the EnrgOracleAttestation contract)
 struct AttestationCore {
     bytes32 attestationId;
     bytes32 deviceId;
@@ -39,12 +39,12 @@ function submitAttestation(
     uint64 maxPowerW,
     uint64 issuedAt
 ) external;
-msg.sender — доверенный Oracle (проверяется через trustedOracles[msg.sender]).
-Аттестация сохраняется в mapping(bytes32 => AttestationCore) public attestations.
-3. Маппинг off-chain → on-chain
-Путь: JSON → app.onchain_bridge.build_attestation_params(...) → параметры для submitAttestation.
+msg.sender — the trusted Oracle (проверяется через trustedOracles[msg.sender]).
+The attestation is stored in mapping(bytes32 => AttestationCore) public attestations.
+3. Off-chain → on-chain mapping
+Путь: JSON → app.onchain_bridge.build_attestation_params(...) → parameters for submitAttestation.
 
-Маппинг:
+Mapping:
 
 attestation_id (string) → attestationId (bytes32):
 
@@ -57,13 +57,13 @@ decision.allowed (bool) → allowed (bool).
 decision.max_power_kw (float, kW) → maxPowerW (uint64, W):
 
 maxPowerW = int(decision["max_power_kw"] * 1000)
-issued_at (ISO 8601, с "Z") → issuedAt (uint64, unix timestamp):
+issued_at (ISO 8601, with "Z") → issuedAt (uint64, unix timestamp):
 
-# пример: "2026-07-25T19:05:00Z"
+# example: "2026-07-25T19:05:00Z"
 ts = issued_at.replace("Z", "+00:00")
 issuedAt = int(datetime.fromisoformat(ts).timestamp())
-4. Пример реальных параметров (из demo_onchain_bridge.py)
-Команда:
+4. Example of real parameters (from demo_onchain_bridge.py)
+Command:
 
 python scripts/demo_onchain_bridge.py
 Пример вывода:

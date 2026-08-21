@@ -1,9 +1,9 @@
 # ENRG API
 
-## Базовая информация
+## Basic information
 
-- Базовый URL (локально): `http://localhost:8000`
-- Проверка живости: `GET /health` → `{"status": "ok"}`
+- Base URL (local): `http://localhost:8000`
+- Liveness check: `GET /health` → `{"status": "ok"}`
 
 ---
 
@@ -11,13 +11,13 @@
 
 ### 1.1. POST `/oracle/attest`
 
-Эндпоинт работает в двух режимах.
+The endpoint works in two modes.
 
-#### Режим A: Полная Attestation (legacy)
+#### Mode A: Full Attestation (legacy)
 
-Используется старыми клиентами и в `tests/test_api.py`.
+Used by old clients and in `tests/test_api.py`.
 
-**Запрос (пример):**
+**Request (example):**
 
 ```json
 {
@@ -29,7 +29,7 @@
   "issued_at": "2026-07-25T19:05:00Z",
   "oracle_signature": "cafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe"
 }
-Успешный ответ (200):
+Successful response (200):
 
 {
   "status": "received",
@@ -37,19 +37,19 @@
   "device_id": "dev_9e9c644e1580a83b",
   "oracle_id": "oracle_main_1"
 }
-Ошибка валидации схемы (400):
+Schema validation error (400):
 
 {
   "detail": {
     "message": "Invalid Attestation",
-    "error": "<сообщение jsonschema>",
+    "error": "<jsonschema message>",
     "path": ["field", "subfield"]
   }
 }
-Режим B: Запрос на аттестацию (новый формат)
-Используется в tests/test_oracle_attest.py.
+Mode B: Attestation request (new format)
+Used in tests/test_oracle_attest.py.
 
-Запрос (пример):
+Request (example):
 
 {
   "device_id": "dev_9e9c644e1580a83b",
@@ -61,7 +61,7 @@
   },
   "signature": "deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
 }
-Успешный ответ (200):
+Successful response (200):
 
 {
   "device_id": "dev_9e9c644e1580a83b",
@@ -71,9 +71,9 @@
     "max_power_kw": 2.5
   }
 }
-attestation_id генерируется на сервере (UUID).
+attestation_id is generated server-side (UUID).
 
-Ошибка схемы (отсутствует поле и т.п.) (400):
+Schema error (missing field, etc.) (400):
 
 {
   "detail": {
@@ -81,7 +81,7 @@ attestation_id генерируется на сервере (UUID).
     "message": "...'signature' is a required property"
   }
 }
-Ошибка формата timestamp (400):
+Timestamp format error (400):
 
 {
   "detail": {
@@ -89,17 +89,17 @@ attestation_id генерируется на сервере (UUID).
     "message": "timestamp is not a valid ISO 8601 string with 'Z'"
   }
 }
-timestamp обязан быть в формате ISO 8601 UTC с суффиксом Z, например:
+timestamp must be ISO 8601 UTC with a Z suffix, e.g.:
 2026-07-25T19:05:00Z.
 
 2. Provisioning
-(кратко, основываясь на тестах; можно расширить позже)
+(brief, based on the tests; can be extended later)
 
 2.1. POST /provisioning/attest
-Принимает DeviceProof (схема device_proof.schema.json).
+Accepts a DeviceProof (schema device_proof.schema.json).
 
-При валидном payload → 200 и какая-то бизнес-логика.
-При ошибке схемы → 400:
+On a valid payload → 200 and some business logic.
+On a schema error → 400:
 {
   "detail": {
     "message": "Invalid DeviceProof",
@@ -107,13 +107,13 @@ timestamp обязан быть в формате ISO 8601 UTC с суффикс
   }
 }
 3. Registry
-Эндпоинты под работу с реестром устройств (см. app/api/registry.py).
-Тут можно позже описать CRUD по устройствам, манифестам и т.п. EOF
+Endpoints for the device registry (see app/api/registry.py).
+A CRUD description for devices, manifests, etc. can be added later. EOF
 
 
 ---
 
-### 2) Клиент для API `tools/client.py`
+### 2) API client `tools/client.py`
 
 ```bash
 cd ~/ENRG
@@ -144,7 +144,7 @@ class ENRGClient:
         resp.raise_for_status()
         return resp.json()
 
-    # ---------- Oracle: новый формат запроса ----------
+    # ---------- Oracle: new request format ----------
 
     def oracle_attest_request(
         self,
@@ -156,9 +156,9 @@ class ENRGClient:
         timestamp: Optional[str] = None,
     ) -> Dict[str, Any]:
         """
-        Отправить запрос аттестации в новом формате (device_id/nonce/timestamp/...).
+        Send an attestation request in the new format (device_id/nonce/timestamp/...).
 
-        Возвращает dict с полями:
+        Returns a dict with fields:
         - device_id
         - attestation_id
         - decision.allowed
@@ -169,7 +169,7 @@ class ENRGClient:
             timestamp = now.isoformat().replace("+00:00", "Z")
 
         if signature is None:
-            # В реальном коде здесь должна быть подпись.
+            # Real code would put a signature here.
             signature = "deadbeef" * 8
 
         payload: Dict[str, Any] = {
@@ -191,11 +191,11 @@ class ENRGClient:
         resp.raise_for_status()
         return resp.json()
 
-    # ---------- Oracle: старый формат Attestation ----------
+    # ---------- Oracle: legacy Attestation format ----------
 
     def oracle_attest_legacy(self, attestation: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Отправить полную Attestation в старом формате (использует схему attestation).
+        Send a full Attestation in the legacy format (uses the attestation schema).
         """
         resp = self._client.post("/oracle/attest", json=attestation)
         if resp.status_code == 400:
@@ -215,8 +215,8 @@ class ENRGClient:
         reason: str = "ok",
     ) -> Dict[str, Any]:
         """
-        Сконструировать простую валидную Attestation для отладки legacy-режима.
-        Подстраивается под tests/test_api.py.
+        Build a simple valid Attestation for debugging the legacy mode.
+        Matches tests/test_api.py.
         """
         now = datetime.now(timezone.utc).replace(microsecond=0)
         issued_at = now.isoformat().replace("+00:00", "Z")
@@ -238,7 +238,7 @@ def main() -> None:
     client = ENRGClient()
     print("Health:", client.health())
 
-    # Пример нового формата
+    # New-format example
     print("\n--- New oracle_attest_request() example ---")
     result_new = client.oracle_attest_request(
         device_id="dev_example_1",
@@ -247,7 +247,7 @@ def main() -> None:
     )
     print(json.dumps(result_new, indent=2))
 
-    # Пример legacy-формата
+    # Legacy-format example
     print("\n--- Legacy oracle_attest_legacy() example ---")
     att = client.build_simple_attestation(device_id="dev_example_1")
     result_legacy = client.oracle_attest_legacy(att)

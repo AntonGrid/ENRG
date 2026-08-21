@@ -1,10 +1,10 @@
 # 16. Protocol Economics
 
-> **Актуальное состояние реализации** (адреса, константы, PDA-структура,
-> жизненный цикл, тест-статус, roadmap) см. в **`docs/STATE.md`** — единый
-> источник правды, сверенный с кодом (`programs/enrg-mvp/src`). Этот раздел —
-> нормативное описание экономики протокола; конкретные on-chain значения
-> (аллокации, vesting, governance-параметры) — в `docs/STATE.md`.
+> **Current implementation state** (addresses, constants, PDA structure,
+> lifecycle, test status, roadmap) is in **`docs/STATE.md`** — единый
+> source of truth, verified against the code (`programs/enrg-mvp/src`). Этот раздел —
+> the normative description of the protocol economics; concrete on-chain values
+> (allocations, vesting, governance parameters) — в `docs/STATE.md`.
 
 ## 16.1 Overview
 

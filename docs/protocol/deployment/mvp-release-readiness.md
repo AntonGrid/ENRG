@@ -26,14 +26,14 @@ tests that require a configured localnet/devnet environment.
 | Security | Security Review Report | Done | `docs/SECURITY_REVIEW_REPORT.md` committed |
 | Tests | Rust `cargo test --workspace` | 61 + 1 passed | 0 failed (incl. tiers/ERS/pool/governance/vesting/decimals invariants) |
 | Tests | Python `test_tokenomics_extended.py` | All passed | incl. 3 Merkle tests |
-| Tests | TypeScript integration (`tests/*.ts`) | OK | `anchor test --skip-build`: 48 passing / 4 pending (см. STATE.md, раздел 6) |
-| Tests | `anchor test --skip-build` (localnet) | OK | 48 passing / 4 pending; новые: trust-ers-pool.ts, founder-vesting vesting-init |
-| Spec | v7.0 §15 Trust Levels | Implemented | tier + месячные лимиты, `set_device_tier`, `allows_increment` |
-| Spec | v7.0 §16/§27 ERS | Implemented | Reputation PDA, штрафы аномалий, премиум-заглушка |
-| Spec | v7.0 §14 Pool distribution | Implemented | 1 МВт·ч порог, пропорциональные доли, ERS-взвешивание |
-| Spec | v7.0 §22 Governance | Implemented (MVP) | пути эмиссии зафиксированы (ADR-0009 tighten) |
+| Tests | TypeScript integration (`tests/*.ts`) | OK | `anchor test --skip-build`: 48 passing / 4 pending (see STATE.md, section 6) |
+| Tests | `anchor test --skip-build` (localnet) | OK | 48 passing / 4 pending; new: trust-ers-pool.ts, founder-vesting vesting-init |
+| Spec | v7.0 §15 Trust Levels | Implemented | tier + monthly limits, `set_device_tier`, `allows_increment` |
+| Spec | v7.0 §16/§27 ERS | Implemented | Reputation PDA, anomaly penalties, premium stub |
+| Spec | v7.0 §14 Pool distribution | Implemented | 1 MWh threshold, proportional shares, ERS weighting |
+| Spec | v7.0 §22 Governance | Implemented (MVP) | emission paths fixed (ADR-0009 tighten) |
 | Conformance | Supported Protocol Version / Spec Revision | Declared | `docs/specifications/ENRG_Conformance.md` §6 |
-| Verify | Devnet verify-only (`scripts/devnet_verify_governance.ts`) | **Converged** | exit 0, все ✔; новый program id `HkuC3…`, slot `483455693`, sha `6db33ae…` — см. `docs/DEVNET_VERIFICATION.md` |
+| Verify | Devnet verify-only (`scripts/devnet_verify_governance.ts`) | **Converged** | exit 0, all ✔; new program id `HkuC3…`, slot `483455693`, sha `6db33ae…` — see `docs/DEVNET_VERIFICATION.md` |
 | Repo | Working tree clean / pushed | Clean | `HEAD` synced with `origin/main` |
 
 ---
