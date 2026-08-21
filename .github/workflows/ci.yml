@@ -45,7 +45,7 @@ jobs:
         run: cargo test -p enrg-mvp
 
   node:
-    name: Node oracle tests (mocha)
+    name: Node oracle tests (mocha, incl. spawn-based suites)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,22 +58,72 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Rebuild native binding (better-sqlite3)
+        # The spawn-based suites (manifest, firmware, keyrotation) start the
+        # oracle server (server.js), which loads the better-sqlite3 native
+        # binding. npm ci installs the prebuilt binary, which may target a
+        # different NODE_MODULE_VERSION; rebuilding from source fixes
+        # "NODE_MODULE_VERSION mismatch" / "server did not start in time".
+        # See tests/manifest.test.js.
+        run: npm rebuild better-sqlite3
+
       - name: Audit dependencies
         # Reports known vulnerabilities without failing the build.
         continue-on-error: true
         run: npm audit --audit-level=high
 
-      # test:manifest, test:firmware and test:keyrotation are intentionally NOT
-      # run here: they spawn the oracle server (server.js), which requires the
-      # better-sqlite3 native binding. That binding fails to load on the
-      # ubuntu-latest runner ("server did not start in time") on both Node 20
-      # and Node 24. Only the pure-JS suites (policy, mint) run in CI; the full
-      # set (76 tests) passes locally. Re-enable the spawn-based suites once the
-      # native dependency is resolved.
-      - name: Run oracle tests (pure JS)
+      - name: Run oracle tests (all suites)
+        # policy (43) and mint (4) are pure JS; manifest (11), firmware (12)
+        # and keyrotation (6) spawn the oracle server and exercise the signed
+        # manifest, OTA and key-rotation flows end-to-end.
         run: |
           npm run test:policy
           npm run test:mint
+          npm run test:manifest
+          npm run test:firmware
+          npm run test:keyrotation
+
+  anchor:
+    name: Anchor program tests (anchor test, local validator)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Set up Solana CLI
+        # Official Anza release channel (release.solana.com is EOL/redirecting).
+        run: |
+          curl -sSfL https://release.anza.xyz/v2.1.0/install | sh
+          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
+
+      - name: Set up Anchor CLI
+        # Prebuilt Anchor v0.32.1 binary for linux x86_64.
+        run: |
+          curl -sSfL -o /tmp/anchor https://github.com/otter-sec/anchor/releases/download/v0.32.1/anchor-0.32.1-x86_64-unknown-linux-gnu
+          chmod +x /tmp/anchor
+          sudo mv /tmp/anchor /usr/local/bin/anchor
+          anchor --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Yarn
+        run: npm install -g yarn
+
+      - name: Build program and run on-chain tests
+        # Builds the enrg-mvp program, spawns a local Solana validator with the
+        # genesis founder-vesting account (Anchor.toml [test.validator]), and
+        # runs the TypeScript integration suite (56 tests: lifecycle,
+        # governance, vesting, merkle proofs, trust/ERS pool, E2E smoke).
+        run: anchor test
+
 
   forge:
     name: Foundry tests (forge test)
