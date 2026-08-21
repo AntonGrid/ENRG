@@ -1,32 +1,32 @@
-ADR‑001: OracleReport и Ed25519‑подписи в ENRG Core
-Статус
+ADR-001: OracleReport and Ed25519 signatures in ENRG Core
+Status
 Accepted (draft implementation, MVP stack).
 
-Контекст
-ENRG Core должен безопасно принимать доказательства выработки энергии от физических устройств через оракулы. Ключевые требования:
+Context
+ENRG Core must securely accept energy-production proofs from physical devices through oracles. Key requirements:
 
-Подлинность данных устройства
-Подпись ставит сам девайс (Ed25519‑ключ), а не оракул или продюсер.
+Device-data authenticity
+The signature is made by the device itself (an Ed25519 key), not by the oracle or the producer.
 
-Отделение сбора данных от верификации
+Separating data collection from verification
 
-Девайс → шлёт сырое измерение и подпись.
-Оракул → проверяет подпись, дополняет отчёт служебными полями (oracle, verified_at, nonce) и отправляет в протокол.
-Невозможность повторного использования отчётов (replay)
+Device → sends a raw measurement and a signature.
+Oracle → verifies the signature, adds service fields (oracle, verified_at, nonce) and sends it to the protocol.
+Impossibility of report reuse (replay)
 
-Последовательный nonce на уровне продюсера.
-Временные ограничения по verified_at (временная проверка может быть ослаблена на MVP‑этапе, но путь к продакшн‑проверке должен быть прозрачен).
-Детерминированность формата сообщения
-Подписанное сообщение должно быть:
+A sequential nonce at the producer level.
+Time limits via verified_at (the time check can be relaxed at the MVP stage, but the path to a production check must be transparent).
+Message-format determinism
+The signed message must be:
 
-чётко описано;
-однозначно сериализуемо на Rust/TS/Python и т.д.;
-не зависеть от внутренних представлений структур (TLV/Borsh и т.п.).
-На MVP‑этапе реальная on‑chain проверка Ed25519 может быть временно заглушена (для стабилизации флоу и тестовой экономики), но архитектурный контракт и формат OracleReport должны быть уже финализированы — это «шарнир», вокруг которого строится вся остальная логика.
+clearly described;
+unambiguously serializable in Rust/TS/Python, etc.;
+independent of internal structure representations (TLV/Borsh, etc.).
+At the MVP stage the real on-chain Ed25519 check can be temporarily stubbed (to stabilize the flow and the test economy), but the architectural contract and the OracleReport format must already be finalized — this is the "pivot" around which all the remaining logic is built.
 
-Решение
-1. Структура OracleReport
-OracleReport — единственный доверенный объект, который Core принимает от off‑chain мира:
+Decision
+1. The OracleReport structure
+OracleReport is the only trusted object that Core accepts from the off-chain world:
 
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Debug)]
 pub struct OracleReport {
@@ -51,27 +51,27 @@ pub struct OracleReport {
     /// Original device signature (Ed25519, 64 bytes).
     pub device_signature: [u8; 64],
 }
-Смысл полей:
+Field meanings:
 
-oracle — Solana‑аккаунт доверенного оракула. Используется для:
-проверки, что отчёт подписан whitelisted‑оракулом (через OracleRegistry);
-логирования и аудит‑следа.
-device_id — публичный ключ устройства (Ed25519 → Solana Pubkey), по которому:
-верифицируется подпись;
-линкуется отчёт к EnergyProducer.
-nonce — монотонно возрастающий номер доказательства на уровне продюсера (а не девайса):
-для каждого EnergyProducer хранится producer.nonce;
-протокол требует report.nonce > producer.nonce.
-device_timestamp — исходный timestamp девайса (секунды, UTC, unix epoch):
-может использоваться оракулом для внутренних проверок;
-на ончейне не критичен, но входит в подписываемое сообщение.
-verified_at — время проверки оракулом (секунды, UTC, unix epoch):
-используется ончейном для проверки свежести (now - verified_at <= Δ);
-может временно логироваться без строгого require! (MVP).
-energy_wh — верифицированная энергия в ватт‑часах за интервал, к которому относится отчёт.
-device_signature — неизменённая Ed25519‑подпись девайса над детерминированным сообщением (см. ниже).
-2. Подписываемое сообщение message_to_sign()
-Устройство подписывает только часть полей отчёта:
+oracle — the Solana account of the trusted oracle. Used for:
+checking that the report is signed by a whitelisted oracle (via the OracleRegistry);
+logging and the audit trail.
+device_id — the device public key (Ed25519 → Solana Pubkey), by which:
+the signature is verified;
+the report is linked to an EnergyProducer.
+nonce — a monotonically increasing proof number at the producer level (not the device level):
+each EnergyProducer stores producer.nonce;
+the protocol requires report.nonce > producer.nonce.
+device_timestamp — the device's original timestamp (seconds, UTC, Unix epoch):
+can be used by the oracle for internal checks;
+not critical on-chain, but part of the signed message.
+verified_at — the oracle verification time (seconds, UTC, Unix epoch):
+used on-chain for freshness (now - verified_at <= Δ);
+can be temporarily logged without a strict require! (MVP).
+energy_wh — the verified energy in watt-hours for the interval covered by the report.
+device_signature — the device's unmodified Ed25519 signature over the deterministic message (see below).
+2. The signed message message_to_sign()
+The device signs only a part of the report fields:
 
 impl OracleReport {
     /// Serialize report fields excluding signature.
@@ -89,22 +89,22 @@ impl OracleReport {
         Ok(buf)
     }
 }
-Таким образом:
+Thus:
 
-Подписываемое сообщение — точно определённая последовательность байтов:
+The signed message is a precisely defined byte sequence:
 
-device_id — 32 байта, как Pubkey::to_bytes().
-nonce — 8 байт, u64::to_le_bytes().
-device_timestamp — 8 байт, i64::to_le_bytes().
-energy_wh — 8 байт, u64::to_le_bytes().
-Оракул не может подменить эти значения, не сломав подпись.
+device_id — 32 bytes, as Pubkey::to_bytes().
+nonce — 8 bytes, u64::to_le_bytes().
+device_timestamp — 8 bytes, i64::to_le_bytes().
+energy_wh — 8 bytes, u64::to_le_bytes().
+The oracle cannot substitute these values without breaking the signature.
 
-Служебные поля (oracle, verified_at) не подписываются девайсом:
+The service fields (oracle, verified_at) are not signed by the device:
 
-они добавляются и подписываются самим оракулом уже в отдельном off‑chain протоколе (если требуется),
-но ончейн Core доверяет только проверке Ed25519 на устройстве и собственной whitelist‑проверке оракула.
-3. Ончейн‑верификация Ed25519
-Ончейн‑проверка выполняется в mint_energy:
+they are added and signed by the oracle itself in a separate off-chain protocol (if required),
+but on-chain Core trusts only the device Ed25519 verification and its own oracle whitelist check.
+3. On-chain Ed25519 verification
+The on-chain check is performed in mint_energy:
 
 let message = report.message_to_sign()?;
 
@@ -114,31 +114,31 @@ verify_ed25519_signature(
     &message,
     &ctx.accounts.instructions.to_account_info(),
 )?;
-Целевое (prod‑ready) поведение verify_ed25519_signature:
+The target (prod-ready) verify_ed25519_signature behavior:
 
-Ожидается, что в транзакции перед mint_energy уже добавлена ed25519_program‑инструкция, созданная с тем же publicKey, message, signature.
-Внутри verify_ed25519_signature:
-читается SysvarInstructions (SYSVAR_INSTRUCTIONS_PUBKEY);
-в списке инструкций текущей транзакции ищется валидная Ed25519Program‑инструкция:
+It is expected that the transaction already contains an ed25519_program instruction before mint_energy, created with the same publicKey, message, signature.
+Inside verify_ed25519_signature:
+SysvarInstructions (SYSVAR_INSTRUCTIONS_PUBKEY) is read;
+a valid Ed25519Program instruction is searched for in the current transaction's instruction list:
 program_id == ed25519_program::id();
-поля инструкции (pubkey, msg, sig) совпадают с переданными в функцию;
-при успешном совпадении функция возвращает Ok(()), иначе — Err(ErrorCode::InvalidSignature).
-MVP‑состояние (на момент этой ADR):
+the instruction fields (pubkey, msg, sig) match the ones passed to the function;
+on a successful match the function returns Ok(()), otherwise — Err(ErrorCode::InvalidSignature).
+MVP state (at the time of this ADR):
 
-На ончейне реализован «legacy stub»:
-формат сообщения зафиксирован через message_to_sign;
-создаётся и логируется Ed25519‑инструкция;
-но фактическая верификация может быть ослаблена (например, пропускается, но логируются первые байты ключа, msg_len, sig_len).
-Это позволяет:
-стабилизировать интеграционные тесты;
-не блокировать работу над экономикой/флоу;
-при этом не ломать будущий интерфейс.
-4. Проверка nonce и времени
+A "legacy stub" is implemented on-chain:
+the message format is fixed via message_to_sign;
+an Ed25519 instruction is created and logged;
+but the actual verification can be relaxed (e.g. skipped, while the first key bytes, msg_len, sig_len are logged).
+This allows:
+stabilizing the integration tests;
+not blocking the economics/flow work;
+without breaking the future interface.
+4. Nonce and time checks
 Nonce:
 
-Для каждого EnergyProducer хранится producer.nonce.
+Each EnergyProducer stores producer.nonce.
 
-В mint_energy выполняется:
+In mint_energy:
 
 msg!(
     "DEBUG NONCE report={} producer={}",
@@ -146,31 +146,31 @@ msg!(
     producer.nonce
 );
 verify_nonce(producer, report.nonce)?;
-Целевое поведение verify_nonce:
+The target verify_nonce behavior:
 
-требовать строгий рост report.nonce > producer.nonce;
-обновлять producer.nonce = report.nonce при успешном отчёте.
-Время:
+require a strict increase, report.nonce > producer.nonce;
+update producer.nonce = report.nonce on a successful report.
+Time:
 
-В mint_energy доступны:
+In mint_energy the following are available:
 
 now = Clock::get()?.unix_timestamp;
-report.verified_at (секунды, unix epoch).
-Целевое поведение (включается ближе к mainnet):
+report.verified_at (seconds, Unix epoch).
+Target behavior (enabled closer to mainnet):
 
 verify_timestamp(now, report.verified_at)?;
-с инвариантами:
+with the invariants:
 
-verified_at <= now + ε_future (слабый допуск в будущее, если нужно);
+verified_at <= now + ε_future (a weak future tolerance, if needed);
 now - verified_at <= MAX_REPORT_AGE.
-В MVP временная проверка может быть временно отключена (пишем в лог, но не фейлим транзакцию), чтобы:
+At MVP the time check can be temporarily disabled (we log but do not fail the transaction) to:
 
-не «ловить» артефакты локального тестового времени;
-упростить дебаг Ed25519/nonce/экономики.
-5. Интеграционный сценарий (etalon‑flow)
-Типовой ончейн‑вызов MintEnergy в интеграционном тесте:
+avoid local test-time artifacts;
+simplify Ed25519/nonce/economics debugging.
+5. Integration scenario (reference flow)
+A typical on-chain MintEnergy call in an integration test:
 
-Собираем сообщение точно как message_to_sign():
+Assemble the message exactly as message_to_sign():
 
 function buildOracleMessage({
   deviceId,
@@ -187,13 +187,13 @@ function buildOracleMessage({
     le64(energyWh),                  // 8
   ]);
 }
-Устройство подписывает message Ed25519‑ключом:
+The device signs the message with its Ed25519 key:
 
 const message = buildOracleMessage({ deviceId, nonce, deviceTimestamp, energyWh });
 const signature = nacl.sign.detached(message, deviceKeypair.secretKey);
-Формируем Ed25519Program.createInstructionWithPublicKey({ publicKey, message, signature }) и кладём его первым в транзакцию.
+Build Ed25519Program.createInstructionWithPublicKey({ publicKey, message, signature }) and put it first in the transaction.
 
-Собираем report как один аргумент для Anchor (не report: { ... }, а именно struct):
+Assemble the report as a single Anchor argument (not report: { ... }, but exactly a struct):
 
 const report = {
   oracle: oracleKeypair.publicKey,
@@ -209,55 +209,55 @@ const mintIx = await program.methods
   .mintEnergy(report)
   .accounts({ /* ... */ })
   .instruction();
-В одну транзакцию добавляем:
+Add to a single transaction:
 
 const tx = new Transaction().add(ed25519Ix, mintIx);
-и отправляем её.
+and send it.
 
-6. Инварианты
-Формат сообщения:
+6. Invariants
+Message format:
 
-Длина всегда 56 байт.
-Порядок полей и endianness фиксированы и не должны меняться без миграции протокола.
-Защита от replay:
+The length is always 56 bytes.
+The field order and endianness are fixed and must not change without a protocol migration.
+Replay protection:
 
-Для каждого EnergyProducer:
-report.nonce > producer.nonce (жёсткий порядок).
-Повторное использование старого nonce должно приводить к отказу.
-Связь с экономикой:
+For each EnergyProducer:
+report.nonce > producer.nonce (a strict ordering).
+Reusing an old nonce must fail.
+The link with the economics:
 
-report.energy_wh > 0 для meaningful отчётов;
-calculate_reward(report.energy_wh, vault.total_supply) никогда не возвращает значение, приводящее к переполнению vault.total_supply или превышению max_supply.
-Безопасность ключей:
+report.energy_wh > 0 for meaningful reports;
+calculate_reward(report.energy_wh, vault.total_supply) never returns a value that overflows vault.total_supply or exceeds max_supply.
+Key security:
 
-Приватный ключ девайса нигде не фигурирует ончейн;
-device_id задаётся при create_producer и впоследствии неизменяем.
-Альтернативы
-Рассматривались и отклонены:
+The device private key never appears on-chain;
+device_id is set at create_producer and is immutable afterwards.
+Alternatives
+Considered and rejected:
 
-Подписывать всё содержимое OracleReport
-Минусы:
+Signing the entire OracleReport content
+Drawbacks:
 
-оракул не может дополнять отчёт служебными полями (например, менять verified_at в разумных пределах) без участия устройства;
-усложняется эволюция отчётного формата — каждое новое поле ломает протокол подписи девайса.
-Использовать сериализацию Borsh/TLV целой структуры как message
-Минусы:
+the oracle cannot add service fields (e.g. adjust verified_at within reasonable bounds) without the device;
+the report-format evolution is harder — every new field breaks the device signing protocol.
+Using Borsh/TLV serialization of the whole structure as the message
+Drawbacks:
 
-сильная привязка к внутреннему формату (порядку полей/атрибутов);
-повышенный риск рассинхронизации реализаций на разных языках.
-Проверять Ed25519 подпись полностью в Rust без использования ed25519_program
-Минусы:
+a strong coupling to the internal format (field/attribute order);
+a higher risk of implementation drift across languages.
+Verifying the Ed25519 signature fully in Rust without ed25519_program
+Drawbacks:
 
-больше compute units;
-дублирование функционала системного precompile.
-Последствия
-Положительные
-Чётко определённый протокольный формат подписи (message_to_sign) — можно:
-реализовывать устройства/шлюзы на любом языке;
-интегрироваться с внешними системами без знания Anchor.
-Прозрачный путь миграции:
-сейчас — заглушка с логами;
-позже — полноценная верификация, не меняя формат отчётов.
-Негативные/ограничения
-Любое изменение формата message_to_sign (добавление/удаление полей, смена порядка) — breaking‑change для всех девайсов.
-Правильное использование SysvarInstructions и Ed25519Program требует аккуратного построения транзакций и тестов.
+more compute units;
+duplicating the system precompile functionality.
+Consequences
+Positive
+A clearly defined protocol signing format (message_to_sign) — we can:
+implement devices/gateways in any language;
+integrate with external systems without knowing Anchor.
+A transparent migration path:
+now — a stub with logs;
+later — full verification without changing the report format.
+Negative/limitations
+Any change to the message_to_sign format (adding/removing fields, reordering) is a breaking change for all devices.
+Correct use of SysvarInstructions and Ed25519Program requires careful transaction and test construction.
