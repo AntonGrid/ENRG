@@ -1,0 +1,7512 @@
+{
+  "address": "HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb",
+  "metadata": {
+    "name": "enrg_mvp",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "ENRG Protocol MVP"
+  },
+  "instructions": [
+    {
+      "name": "activate_device",
+      "discriminator": [
+        252,
+        7,
+        51,
+        64,
+        77,
+        224,
+        215,
+        201
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "producer"
+          ]
+        },
+        {
+          "name": "producer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_devices",
+          "docs": [
+            "Per-owner registry — active-device limit (BLOCK 4)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  119,
+                  110,
+                  101,
+                  114,
+                  45,
+                  100,
+                  101,
+                  118,
+                  105,
+                  99,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "add_oracle",
+      "discriminator": [
+        185,
+        165,
+        165,
+        167,
+        208,
+        207,
+        55,
+        35
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "oracle",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "allocate_founder",
+      "docs": [
+        "One-shot founder premine at launch: mint 2e17 to the founder ATA,",
+        "counted in vault.total_supply with a MAX_SUPPLY_ATOMIC check."
+      ],
+      "discriminator": [
+        195,
+        179,
+        147,
+        226,
+        46,
+        87,
+        174,
+        69
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "docs": [
+            "Vault PDA — global protocol state (total_supply/max_supply)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint",
+          "docs": [
+            "TokenMint PDA — token configuration (founder ATA + one-shot flag)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "SRC Mint (writable — the CPI token::mint_to increases supply)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  114,
+                  99,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "founder_token_account",
+          "docs": [
+            "Founder ATA — premine recipient (owner = FOUNDER_WALLET)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "Signer — must be FOUNDER_WALLET."
+          ],
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "buyback_and_burn",
+      "discriminator": [
+        121,
+        156,
+        154,
+        165,
+        194,
+        86,
+        180,
+        130
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "Temporary governor — Vault.authority (BLOCK 3: removed \"Anyone can burn\")."
+          ],
+          "signer": true
+        },
+        {
+          "name": "mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  114,
+                  99,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyback_account",
+          "writable": true
+        },
+        {
+          "name": "buyback_authority",
+          "docs": [
+            "Seeds: [b\"fund-buyback\"]. Bump stored in TokenMint."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  117,
+                  110,
+                  100,
+                  45,
+                  98,
+                  117,
+                  121,
+                  98,
+                  97,
+                  99,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "claim_device",
+      "discriminator": [
+        245,
+        193,
+        117,
+        190,
+        69,
+        240,
+        23,
+        114
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "The wallet the device is bound to (new authority)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "producer",
+          "docs": [
+            "PDA device record. Seeds are derived from the stored device_id —",
+            "substituting the record or binding to a foreign device is impossible."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_devices",
+          "docs": [
+            "Per-owner registry — created on the first claim (BLOCK 4:",
+            "device-per-owner limit)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  119,
+                  110,
+                  101,
+                  114,
+                  45,
+                  100,
+                  101,
+                  118,
+                  105,
+                  99,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "instructions",
+          "docs": [
+            "device signature MUST be in the transaction before this instruction."
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "device_signature",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        },
+        {
+          "name": "claim_nonce",
+          "type": "u64"
+        },
+        {
+          "name": "claim_timestamp",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "claim_rewards",
+      "discriminator": [
+        4,
+        144,
+        132,
+        71,
+        116,
+        23,
+        151,
+        80
+      ],
+      "accounts": [
+        {
+          "name": "stake_info",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "claim_vested",
+      "discriminator": [
+        208,
+        190,
+        166,
+        114,
+        203,
+        225,
+        140,
+        208
+      ],
+      "accounts": [
+        {
+          "name": "vesting",
+          "writable": true
+        },
+        {
+          "name": "founder_ata",
+          "docs": [
+            "Source — the same founder ATA where the premine was minted",
+            "(owner — FOUNDER_WALLET). Tokens cannot be withdrawn from anywhere else."
+          ],
+          "writable": true
+        },
+        {
+          "name": "destination_ata",
+          "docs": [
+            "Destination — the founder wallet ATA."
+          ],
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "create_pool",
+      "discriminator": [
+        233,
+        146,
+        209,
+        142,
+        207,
+        104,
+        64,
+        188
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "threshold",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "create_proposal",
+      "discriminator": [
+        132,
+        116,
+        68,
+        174,
+        216,
+        160,
+        198,
+        22
+      ],
+      "accounts": [
+        {
+          "name": "governance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "prev_proposal",
+          "docs": [
+            "The previous active proposal (passed when one is active)."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "proposal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "governance"
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "id",
+          "type": "u64"
+        },
+        {
+          "name": "title",
+          "type": "string"
+        },
+        {
+          "name": "amount_atomic",
+          "type": "u64"
+        },
+        {
+          "name": "destination",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "distribute_pool",
+      "docs": [
+        "Proportional pool distribution when the threshold is reached (v7.0 §14)."
+      ],
+      "discriminator": [
+        197,
+        192,
+        111,
+        171,
+        18,
+        223,
+        180,
+        86
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.authority",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  114,
+                  99,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "Initiator — pool authority."
+          ],
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "ers_premium_access",
+      "docs": [
+        "Premium access to ENRG Market by ERS (v7.0 §16, §30)."
+      ],
+      "discriminator": [
+        118,
+        77,
+        102,
+        233,
+        160,
+        65,
+        195,
+        251
+      ],
+      "accounts": [
+        {
+          "name": "reputation",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112,
+                  117,
+                  116,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "reputation.authority",
+                "account": "Reputation"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [],
+      "returns": "bool"
+    },
+    {
+      "name": "governance_mint",
+      "discriminator": [
+        243,
+        235,
+        116,
+        243,
+        100,
+        206,
+        205,
+        141
+      ],
+      "accounts": [
+        {
+          "name": "governance",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault PDA — total_supply/max_supply."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint",
+          "docs": [
+            "TokenMint PDA — token configuration."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "SRC Mint (writable — the CPI token::mint_to increases supply)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  114,
+                  99,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "destination",
+          "docs": [
+            "Recipient ATA: same mint, owner == proposer."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "proposal_id",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "init_config",
+      "discriminator": [
+        23,
+        235,
+        115,
+        232,
+        168,
+        96,
+        1,
+        231
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "docs": [
+            "Config PDA — stores active oracle and mint."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "Protocol authority."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "oracle",
+          "type": "pubkey"
+        },
+        {
+          "name": "mint",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "init_energy_profile",
+      "discriminator": [
+        154,
+        225,
+        225,
+        151,
+        146,
+        231,
+        222,
+        111
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Device owner (producer authority)."
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "producer"
+          ]
+        },
+        {
+          "name": "producer",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "profile_program"
+        },
+        {
+          "name": "profile",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_founder_vesting",
+      "discriminator": [
+        176,
+        21,
+        99,
+        234,
+        42,
+        111,
+        161,
+        132
+      ],
+      "accounts": [
+        {
+          "name": "vesting",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  111,
+                  117,
+                  110,
+                  100,
+                  101,
+                  114,
+                  45,
+                  118,
+                  101,
+                  115,
+                  116,
+                  105,
+                  110,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_funds",
+      "discriminator": [
+        124,
+        8,
+        91,
+        52,
+        149,
+        197,
+        42,
+        29
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "docs": [
+            "Vault PDA — global protocol state and owner of all Token Accounts."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint",
+          "docs": [
+            "TokenMint PDA — holds all token configuration addresses."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "SRC Mint."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  114,
+                  99,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "docs": [
+            "Vault PDA as the token authority for all protocol ATAs."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyback_account",
+          "docs": [
+            "Buyback ATA — owned by the Vault PDA.",
+            "Must be created in advance."
+          ],
+          "writable": true
+        },
+        {
+          "name": "staking_account",
+          "docs": [
+            "Staking rewards ATA — owned by the Vault PDA."
+          ],
+          "writable": true
+        },
+        {
+          "name": "dao_account",
+          "docs": [
+            "DAO treasury ATA — owned by the Vault PDA."
+          ],
+          "writable": true
+        },
+        {
+          "name": "emergency_account",
+          "docs": [
+            "Emergency reserve ATA — owned by the Vault PDA."
+          ],
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_governance",
+      "discriminator": [
+        171,
+        87,
+        101,
+        237,
+        27,
+        107,
+        201,
+        57
+      ],
+      "accounts": [
+        {
+          "name": "governance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "members",
+          "type": {
+            "vec": "pubkey"
+          }
+        }
+      ]
+    },
+    {
+      "name": "initialize_manifest_registry",
+      "discriminator": [
+        223,
+        175,
+        101,
+        191,
+        157,
+        253,
+        239,
+        208
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  105,
+                  102,
+                  101,
+                  115,
+                  116,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_oracle_registry",
+      "discriminator": [
+        190,
+        92,
+        228,
+        114,
+        56,
+        71,
+        101,
+        220
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_policy_registry",
+      "docs": [
+        "Initialize the Policy Registry (PDA [b\"policy-registry\"]).",
+        "EXPECTED_DEPLOYER only. Defaults = pre-Policy Engine protocol behavior."
+      ],
+      "discriminator": [
+        46,
+        76,
+        92,
+        59,
+        43,
+        115,
+        79,
+        78
+      ],
+      "accounts": [
+        {
+          "name": "policy_registry",
+          "docs": [
+            "Policy Registry PDA [b\"policy-registry\"]."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "Protocol deployer (H-2 pattern: front-running capture protection)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_reputation",
+      "docs": [
+        "Initialize the Reputation PDA (v7.0 §16 — Energy Reputation Score)."
+      ],
+      "discriminator": [
+        150,
+        240,
+        109,
+        53,
+        147,
+        42,
+        152,
+        162
+      ],
+      "accounts": [
+        {
+          "name": "reputation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112,
+                  117,
+                  116,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_token",
+      "discriminator": [
+        38,
+        209,
+        150,
+        50,
+        190,
+        117,
+        16,
+        54
+      ],
+      "accounts": [
+        {
+          "name": "token_mint",
+          "docs": [
+            "TokenMint PDA — stores all token configuration."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "SRC Mint — the protocol token."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  114,
+                  99,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint_authority",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyback_authority",
+          "docs": [
+            "Seeds: [\"fund-buyback\"]. Bump stored in TokenMint.buyback_authority_bump."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  102,
+                  117,
+                  110,
+                  100,
+                  45,
+                  98,
+                  117,
+                  121,
+                  98,
+                  97,
+                  99,
+                  107
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "rent",
+          "address": "SysvarRent111111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "initialize_vault",
+      "discriminator": [
+        48,
+        191,
+        163,
+        44,
+        71,
+        129,
+        63,
+        164
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "mint",
+          "docs": [
+            "SRC Mint reference (for vault initialization).",
+            "Must match the mint stored in TokenMint PDA."
+          ]
+        },
+        {
+          "name": "token_mint",
+          "docs": [
+            "TokenMint PDA — protocol token configuration."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "join_pool",
+      "discriminator": [
+        14,
+        65,
+        62,
+        16,
+        116,
+        17,
+        195,
+        107
+      ],
+      "accounts": [
+        {
+          "name": "pool",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool.authority",
+                "account": "Pool"
+              }
+            ]
+          }
+        },
+        {
+          "name": "producer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool_share",
+          "docs": [
+            "Pool member contribution (PDA [b\"pool-share\", pool, producer]) —",
+            "created on the first join (v7.0 §14)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  111,
+                  108,
+                  45,
+                  115,
+                  104,
+                  97,
+                  114,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "pool"
+              },
+              {
+                "kind": "account",
+                "path": "producer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "maintenance_device",
+      "discriminator": [
+        126,
+        217,
+        98,
+        188,
+        247,
+        89,
+        62,
+        75
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "producer"
+          ]
+        },
+        {
+          "name": "producer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_devices",
+          "docs": [
+            "Per-owner registry — active-device counter (BLOCK 4)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  119,
+                  110,
+                  101,
+                  114,
+                  45,
+                  100,
+                  101,
+                  118,
+                  105,
+                  99,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "mint_energy",
+      "discriminator": [
+        76,
+        31,
+        77,
+        219,
+        98,
+        60,
+        1,
+        241
+      ],
+      "accounts": [
+        {
+          "name": "producer",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  114,
+                  99,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "mint_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  105,
+                  110,
+                  116,
+                  45,
+                  97,
+                  117,
+                  116,
+                  104,
+                  111,
+                  114,
+                  105,
+                  116,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token_account",
+          "docs": [
+            "Multi-owner mint: the reward goes to the DEVICE OWNER",
+            "(producer.authority), not to the transaction signer (oracle).",
+            "The user token account must belong to producer.authority."
+          ],
+          "writable": true
+        },
+        {
+          "name": "buyback_account",
+          "docs": [
+            "Protocol buyback fund — strictly bound to the TokenMint configuration."
+          ],
+          "writable": true
+        },
+        {
+          "name": "staking_account",
+          "docs": [
+            "Protocol staking fund — strictly bound to the TokenMint configuration."
+          ],
+          "writable": true
+        },
+        {
+          "name": "dao_account",
+          "docs": [
+            "Protocol DAO fund — strictly bound to the TokenMint configuration."
+          ],
+          "writable": true
+        },
+        {
+          "name": "emergency_account",
+          "docs": [
+            "Protocol emergency fund — strictly bound to the TokenMint configuration."
+          ],
+          "writable": true
+        },
+        {
+          "name": "instructions"
+        },
+        {
+          "name": "oracle_registry",
+          "docs": [
+            "Trusted Oracle Registry (whitelist of oracles, ADR-0003 / ADR-0006)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "profile_program"
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "Transaction signer: the device owner OR a trusted oracle from the",
+            "report (multi-owner mint). It does not receive the reward itself —",
+            "the reward goes to producer.authority (see user_token_account)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "profile",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.authority",
+                "account": "EnergyProducer"
+              }
+            ],
+            "program": {
+              "kind": "account",
+              "path": "profile_program"
+            }
+          }
+        },
+        {
+          "name": "reputation",
+          "docs": [
+            "ERS (v7.0 §16) — optional: if provided, updated after the mint.",
+            "Bound to the device owner (producer.authority)."
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112,
+                  117,
+                  116,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.authority",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "pool",
+          "docs": [
+            "Pool (v7.0 §14) — optional: if the producer is a member,",
+            "the contribution is recorded in pool.total_energy and pool_share.energy_wh."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "pool_share",
+          "docs": [
+            "Pool member contribution (PDA [b\"pool-share\", pool, producer])."
+          ],
+          "writable": true,
+          "optional": true
+        },
+        {
+          "name": "policy_registry",
+          "docs": [
+            "Policy Registry (ADR-0003): addressable mint policies. Optional —",
+            "if the PDA [b\"policy-registry\"] is not initialized, the protocol",
+            "default policies apply (full backward compatibility with existing",
+            "deployments and devices)."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "report",
+          "type": {
+            "defined": {
+              "name": "OracleReport"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "provision_device",
+      "discriminator": [
+        40,
+        13,
+        50,
+        24,
+        80,
+        98,
+        134,
+        72
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "producer"
+          ]
+        },
+        {
+          "name": "producer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "quarantine_device",
+      "discriminator": [
+        223,
+        210,
+        158,
+        235,
+        42,
+        254,
+        242,
+        42
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "producer"
+          ]
+        },
+        {
+          "name": "producer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_devices",
+          "docs": [
+            "Per-owner registry — active-device counter (BLOCK 4)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  119,
+                  110,
+                  101,
+                  114,
+                  45,
+                  100,
+                  101,
+                  118,
+                  105,
+                  99,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "register_device",
+      "discriminator": [
+        210,
+        151,
+        56,
+        68,
+        22,
+        158,
+        90,
+        193
+      ],
+      "accounts": [
+        {
+          "name": "operator",
+          "docs": [
+            "Operator: initiates registration and pays the rent."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "producer",
+          "docs": [
+            "PDA device record, strictly bound to device_id."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "device_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "device_id",
+          "docs": [
+            "Used only for deriving PDA seeds."
+          ]
+        },
+        {
+          "name": "instructions",
+          "docs": [
+            "device signature MUST be in the transaction before this instruction."
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "device_signature",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        },
+        {
+          "name": "register_timestamp",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "register_manifest_verification",
+      "discriminator": [
+        240,
+        95,
+        189,
+        175,
+        43,
+        225,
+        140,
+        115
+      ],
+      "accounts": [
+        {
+          "name": "verification",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  105,
+                  102,
+                  101,
+                  115,
+                  116,
+                  45,
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "manifest_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "registry",
+          "docs": [
+            "The only legitimate ManifestRegistry (program PDA).",
+            "The manifest publisher must be the registry `oracle_authority` — a trusted",
+            "party (ADR-0004/ADR-0007). This closes the \"anyone can register an",
+            "arbitrary manifest\" gap (audit 2026-08-18, P0-1)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  105,
+                  102,
+                  101,
+                  115,
+                  116,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "publisher",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "instructions",
+          "docs": [
+            "publisher signature MUST be in the transaction before this instruction."
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "manifest_id",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
+        },
+        {
+          "name": "publisher_key",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "content_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "signature",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        },
+        {
+          "name": "manifest_version",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "release_from_quarantine",
+      "discriminator": [
+        159,
+        98,
+        68,
+        71,
+        198,
+        218,
+        190,
+        185
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "producer"
+          ]
+        },
+        {
+          "name": "producer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_devices",
+          "docs": [
+            "Per-owner registry — active-device counter (BLOCK 4)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  119,
+                  110,
+                  101,
+                  114,
+                  45,
+                  100,
+                  101,
+                  118,
+                  105,
+                  99,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "remove_oracle",
+      "discriminator": [
+        60,
+        93,
+        51,
+        197,
+        182,
+        42,
+        170,
+        26
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "oracle",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "report_anomaly",
+      "docs": [
+        "Record a generation profile anomaly by a trusted oracle (v7.0 §27)."
+      ],
+      "discriminator": [
+        202,
+        154,
+        137,
+        113,
+        130,
+        24,
+        124,
+        142
+      ],
+      "accounts": [
+        {
+          "name": "reputation",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  114,
+                  101,
+                  112,
+                  117,
+                  116,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "reputation.authority",
+                "account": "Reputation"
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "severity",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "revoke_device",
+      "discriminator": [
+        144,
+        73,
+        80,
+        42,
+        245,
+        168,
+        5,
+        211
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Device owner OR protocol admin (vault.authority)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "producer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "owner_devices",
+          "docs": [
+            "Per-owner registry — active-device counter (BLOCK 4).",
+            "Optional: for unclaimed devices (authority == default)",
+            "the owner account may not exist (admin revocation)."
+          ],
+          "writable": true,
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  119,
+                  110,
+                  101,
+                  114,
+                  45,
+                  100,
+                  101,
+                  118,
+                  105,
+                  99,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.authority",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault — the protocol admin (vault.authority) can revoke a device",
+            "(ADR-0005: \"by owner or system\"). Optional: owner revocation works",
+            "without the vault (backward compatibility)."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "rotate_device_key",
+      "docs": [
+        "Device key rotation (ADR-0007): owner/admin changes the device_id.",
+        "The new key MUST sign b\"enrg:device:rotate\" || ... (PoP)."
+      ],
+      "discriminator": [
+        96,
+        133,
+        177,
+        36,
+        92,
+        46,
+        59,
+        153
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Device owner OR protocol admin (vault.authority).",
+            "mut — it is the payer for the init of the new record."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "old_producer",
+          "docs": [
+            "Current device record (PDA of the old device_id)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "old_producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "new_device_id",
+          "docs": [
+            "New device public key (Ed25519, 32 bytes) — new PDA seed."
+          ]
+        },
+        {
+          "name": "new_producer",
+          "docs": [
+            "New device record (PDA of the new device_id) — inherits the state."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "new_device_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Vault — admin-role check (authority == vault.authority).",
+            "Optional: owner rotation works without the vault (backward compatibility)."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "instructions"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "new_device_id",
+          "type": "pubkey"
+        },
+        {
+          "name": "device_signature",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        },
+        {
+          "name": "rotate_nonce",
+          "type": "u64"
+        },
+        {
+          "name": "rotate_timestamp",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "set_device_tier",
+      "docs": [
+        "Assign/change the device tier (v7.0 §15 — Trust Levels)."
+      ],
+      "discriminator": [
+        101,
+        183,
+        129,
+        213,
+        17,
+        177,
+        235,
+        11
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "producer",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  100,
+                  117,
+                  99,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "producer.device_id",
+                "account": "EnergyProducer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "vault"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "tier",
+          "type": {
+            "defined": {
+              "name": "DeviceTier"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "set_oracle_admin",
+      "docs": [
+        "Change oracle_admin (manage the oracle list). Protocol admin only."
+      ],
+      "discriminator": [
+        42,
+        121,
+        230,
+        241,
+        173,
+        83,
+        195,
+        200
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_oracle_admin",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_oracle_authority",
+      "discriminator": [
+        39,
+        155,
+        66,
+        106,
+        213,
+        226,
+        114,
+        174
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  105,
+                  102,
+                  101,
+                  115,
+                  116,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "registry"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "new_oracle",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_policy_authority",
+      "docs": [
+        "Change the policy administrator (role may later go to Governance ADR-0009)."
+      ],
+      "discriminator": [
+        247,
+        33,
+        146,
+        252,
+        21,
+        178,
+        116,
+        187
+      ],
+      "accounts": [
+        {
+          "name": "policy_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_vault_authority",
+      "docs": [
+        "Change Vault.authority (protocol admin / temporary governor)."
+      ],
+      "discriminator": [
+        19,
+        156,
+        233,
+        48,
+        73,
+        143,
+        8,
+        206
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "stake",
+      "discriminator": [
+        206,
+        176,
+        202,
+        18,
+        200,
+        209,
+        179,
+        108
+      ],
+      "accounts": [
+        {
+          "name": "stake_info",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "unstake",
+      "discriminator": [
+        90,
+        95,
+        107,
+        42,
+        205,
+        124,
+        50,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "stake_info",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "update_members",
+      "discriminator": [
+        160,
+        118,
+        226,
+        17,
+        26,
+        202,
+        219,
+        20
+      ],
+      "accounts": [
+        {
+          "name": "governance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "governance"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "members",
+          "type": {
+            "vec": "pubkey"
+          }
+        }
+      ]
+    },
+    {
+      "name": "update_merkle_root",
+      "discriminator": [
+        195,
+        173,
+        38,
+        60,
+        242,
+        203,
+        158,
+        93
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  105,
+                  102,
+                  101,
+                  115,
+                  116,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle",
+          "docs": [
+            "Oracle that is authorized to update the root"
+          ],
+          "signer": true
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "Authority to manage oracle access"
+          ],
+          "signer": true,
+          "relations": [
+            "registry"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "new_root",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "manifest_count",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "update_policy",
+      "docs": [
+        "Update the policy set (registry authority)."
+      ],
+      "discriminator": [
+        212,
+        245,
+        246,
+        7,
+        163,
+        151,
+        18,
+        57
+      ],
+      "accounts": [
+        {
+          "name": "policy_registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  108,
+                  105,
+                  99,
+                  121,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "update",
+          "type": {
+            "defined": {
+              "name": "PolicyUpdate"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "verify_merkle_proof",
+      "discriminator": [
+        51,
+        191,
+        37,
+        169,
+        74,
+        207,
+        201,
+        102
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "docs": [
+            "The only legitimate ManifestRegistry (program PDA)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  110,
+                  105,
+                  102,
+                  101,
+                  115,
+                  116,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "manifest_verification"
+        },
+        {
+          "name": "proof_verification",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  114,
+                  107,
+                  108,
+                  101,
+                  45,
+                  112,
+                  114,
+                  111,
+                  111,
+                  102,
+                  45,
+                  118,
+                  101,
+                  114,
+                  105,
+                  102,
+                  105,
+                  99,
+                  97,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "manifest_id"
+              },
+              {
+                "kind": "account",
+                "path": "registry"
+              }
+            ]
+          }
+        },
+        {
+          "name": "verifier",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "manifest_id",
+          "type": {
+            "array": [
+              "u8",
+              16
+            ]
+          }
+        },
+        {
+          "name": "proof_path",
+          "type": {
+            "vec": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        },
+        {
+          "name": "leaf_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "position",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "vote",
+      "discriminator": [
+        227,
+        110,
+        155,
+        23,
+        136,
+        126,
+        172,
+        25
+      ],
+      "accounts": [
+        {
+          "name": "governance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "proposal_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "voter",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "proposal_id",
+          "type": "u64"
+        },
+        {
+          "name": "yes",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "withdraw_fund",
+      "docs": [
+        "Withdraw SRC from a protocol fund (buyback/staking/dao/emergency)",
+        "to the recipient ATA. Vault.authority only (temporary governor)."
+      ],
+      "discriminator": [
+        251,
+        169,
+        221,
+        19,
+        158,
+        53,
+        139,
+        10
+      ],
+      "accounts": [
+        {
+          "name": "vault",
+          "docs": [
+            "Vault PDA — global protocol state (authority check)."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_mint",
+          "docs": [
+            "TokenMint PDA — holds the fund ATA addresses."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "Temporary governor — Vault.authority."
+          ],
+          "signer": true
+        },
+        {
+          "name": "fund_account",
+          "docs": [
+            "ATA of the specific fund (withdrawal source)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "fund_authority",
+          "docs": [
+            "via seeds. The tag match is checked in the handler."
+          ]
+        },
+        {
+          "name": "destination",
+          "docs": [
+            "Recipient ATA (for the same mint)."
+          ],
+          "writable": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": [
+        {
+          "name": "fund_tag",
+          "type": "u8"
+        },
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    },
+    {
+      "name": "EnergyProducer",
+      "discriminator": [
+        254,
+        74,
+        81,
+        194,
+        9,
+        15,
+        103,
+        59
+      ]
+    },
+    {
+      "name": "EnergyProfile",
+      "discriminator": [
+        187,
+        23,
+        63,
+        205,
+        77,
+        187,
+        96,
+        229
+      ]
+    },
+    {
+      "name": "FounderVesting",
+      "discriminator": [
+        94,
+        149,
+        120,
+        31,
+        36,
+        23,
+        14,
+        164
+      ]
+    },
+    {
+      "name": "GovernanceState",
+      "discriminator": [
+        29,
+        155,
+        54,
+        196,
+        179,
+        215,
+        224,
+        121
+      ]
+    },
+    {
+      "name": "ManifestRegistry",
+      "discriminator": [
+        209,
+        58,
+        59,
+        161,
+        147,
+        218,
+        232,
+        52
+      ]
+    },
+    {
+      "name": "ManifestVerification",
+      "discriminator": [
+        203,
+        105,
+        15,
+        245,
+        231,
+        232,
+        83,
+        135
+      ]
+    },
+    {
+      "name": "MerkleProofVerification",
+      "discriminator": [
+        194,
+        130,
+        195,
+        137,
+        14,
+        62,
+        13,
+        170
+      ]
+    },
+    {
+      "name": "OracleRegistry",
+      "discriminator": [
+        94,
+        153,
+        19,
+        250,
+        94,
+        0,
+        12,
+        172
+      ]
+    },
+    {
+      "name": "OwnerDevices",
+      "discriminator": [
+        239,
+        233,
+        36,
+        45,
+        189,
+        194,
+        34,
+        29
+      ]
+    },
+    {
+      "name": "PolicyRegistry",
+      "discriminator": [
+        175,
+        179,
+        180,
+        44,
+        5,
+        161,
+        62,
+        240
+      ]
+    },
+    {
+      "name": "Pool",
+      "discriminator": [
+        241,
+        154,
+        109,
+        4,
+        17,
+        177,
+        109,
+        188
+      ]
+    },
+    {
+      "name": "PoolContribution",
+      "discriminator": [
+        173,
+        71,
+        103,
+        30,
+        93,
+        212,
+        225,
+        124
+      ]
+    },
+    {
+      "name": "Proposal",
+      "discriminator": [
+        26,
+        94,
+        189,
+        187,
+        116,
+        136,
+        53,
+        33
+      ]
+    },
+    {
+      "name": "Reputation",
+      "discriminator": [
+        55,
+        148,
+        90,
+        71,
+        68,
+        183,
+        193,
+        28
+      ]
+    },
+    {
+      "name": "StakeInfo",
+      "discriminator": [
+        66,
+        62,
+        68,
+        70,
+        108,
+        179,
+        183,
+        235
+      ]
+    },
+    {
+      "name": "TokenMint",
+      "discriminator": [
+        78,
+        9,
+        173,
+        40,
+        126,
+        105,
+        238,
+        172
+      ]
+    },
+    {
+      "name": "Vault",
+      "discriminator": [
+        211,
+        8,
+        232,
+        43,
+        2,
+        152,
+        117,
+        119
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "AnomalyReported",
+      "discriminator": [
+        32,
+        112,
+        128,
+        3,
+        226,
+        60,
+        167,
+        183
+      ]
+    },
+    {
+      "name": "ConfigInitialized",
+      "discriminator": [
+        181,
+        49,
+        200,
+        156,
+        19,
+        167,
+        178,
+        91
+      ]
+    },
+    {
+      "name": "DeviceActivated",
+      "discriminator": [
+        27,
+        86,
+        239,
+        37,
+        132,
+        122,
+        229,
+        87
+      ]
+    },
+    {
+      "name": "DeviceClaimed",
+      "discriminator": [
+        90,
+        5,
+        189,
+        56,
+        26,
+        194,
+        228,
+        48
+      ]
+    },
+    {
+      "name": "DeviceKeyRotated",
+      "discriminator": [
+        220,
+        43,
+        143,
+        107,
+        183,
+        120,
+        161,
+        59
+      ]
+    },
+    {
+      "name": "DeviceMaintenance",
+      "discriminator": [
+        145,
+        211,
+        150,
+        248,
+        42,
+        70,
+        131,
+        130
+      ]
+    },
+    {
+      "name": "DeviceProvisioned",
+      "discriminator": [
+        64,
+        176,
+        170,
+        17,
+        233,
+        81,
+        115,
+        21
+      ]
+    },
+    {
+      "name": "DeviceQuarantined",
+      "discriminator": [
+        17,
+        16,
+        128,
+        26,
+        110,
+        105,
+        97,
+        56
+      ]
+    },
+    {
+      "name": "DeviceRegistered",
+      "discriminator": [
+        221,
+        90,
+        2,
+        153,
+        72,
+        98,
+        71,
+        181
+      ]
+    },
+    {
+      "name": "DeviceReleasedFromQuarantine",
+      "discriminator": [
+        103,
+        194,
+        195,
+        8,
+        88,
+        181,
+        100,
+        223
+      ]
+    },
+    {
+      "name": "DeviceRevoked",
+      "discriminator": [
+        63,
+        57,
+        33,
+        75,
+        105,
+        242,
+        126,
+        44
+      ]
+    },
+    {
+      "name": "DeviceTierSet",
+      "discriminator": [
+        172,
+        99,
+        235,
+        52,
+        203,
+        147,
+        101,
+        207
+      ]
+    },
+    {
+      "name": "EmissionDifficultyChanged",
+      "discriminator": [
+        206,
+        75,
+        154,
+        101,
+        79,
+        251,
+        116,
+        103
+      ]
+    },
+    {
+      "name": "FundsWithdrawn",
+      "discriminator": [
+        56,
+        130,
+        230,
+        154,
+        35,
+        92,
+        11,
+        118
+      ]
+    },
+    {
+      "name": "ManifestRegistryInitialized",
+      "discriminator": [
+        10,
+        84,
+        140,
+        18,
+        69,
+        34,
+        9,
+        27
+      ]
+    },
+    {
+      "name": "ManifestVerificationRegistered",
+      "discriminator": [
+        231,
+        61,
+        232,
+        50,
+        209,
+        86,
+        210,
+        20
+      ]
+    },
+    {
+      "name": "MerkleProofVerified",
+      "discriminator": [
+        181,
+        5,
+        15,
+        83,
+        146,
+        111,
+        12,
+        247
+      ]
+    },
+    {
+      "name": "MerkleRootUpdated",
+      "discriminator": [
+        115,
+        162,
+        36,
+        72,
+        29,
+        55,
+        39,
+        134
+      ]
+    },
+    {
+      "name": "OracleAdded",
+      "discriminator": [
+        48,
+        0,
+        207,
+        33,
+        20,
+        56,
+        215,
+        219
+      ]
+    },
+    {
+      "name": "OracleAdminChanged",
+      "discriminator": [
+        70,
+        86,
+        211,
+        218,
+        162,
+        219,
+        155,
+        12
+      ]
+    },
+    {
+      "name": "OracleAuthorityChanged",
+      "discriminator": [
+        99,
+        202,
+        165,
+        202,
+        245,
+        74,
+        214,
+        220
+      ]
+    },
+    {
+      "name": "OracleRemoved",
+      "discriminator": [
+        62,
+        112,
+        125,
+        81,
+        128,
+        93,
+        194,
+        96
+      ]
+    },
+    {
+      "name": "PolicyAuthorityChanged",
+      "discriminator": [
+        131,
+        129,
+        164,
+        105,
+        121,
+        47,
+        175,
+        157
+      ]
+    },
+    {
+      "name": "PolicyRegistryInitialized",
+      "discriminator": [
+        170,
+        238,
+        181,
+        33,
+        34,
+        15,
+        1,
+        80
+      ]
+    },
+    {
+      "name": "PolicyUpdated",
+      "discriminator": [
+        225,
+        112,
+        112,
+        67,
+        95,
+        236,
+        245,
+        161
+      ]
+    },
+    {
+      "name": "PoolDistributed",
+      "discriminator": [
+        200,
+        124,
+        21,
+        220,
+        63,
+        174,
+        13,
+        70
+      ]
+    },
+    {
+      "name": "PoolEnergyRecorded",
+      "discriminator": [
+        84,
+        178,
+        184,
+        167,
+        113,
+        45,
+        188,
+        5
+      ]
+    },
+    {
+      "name": "PoolJoined",
+      "discriminator": [
+        79,
+        207,
+        125,
+        205,
+        4,
+        167,
+        178,
+        115
+      ]
+    },
+    {
+      "name": "PoolThresholdReached",
+      "discriminator": [
+        187,
+        142,
+        13,
+        100,
+        185,
+        163,
+        170,
+        17
+      ]
+    },
+    {
+      "name": "ProofAccepted",
+      "discriminator": [
+        152,
+        87,
+        2,
+        57,
+        14,
+        170,
+        164,
+        51
+      ]
+    },
+    {
+      "name": "ReputationUpdated",
+      "discriminator": [
+        26,
+        36,
+        187,
+        150,
+        235,
+        90,
+        106,
+        89
+      ]
+    },
+    {
+      "name": "RewardDistributed",
+      "discriminator": [
+        36,
+        65,
+        223,
+        38,
+        136,
+        162,
+        10,
+        30
+      ]
+    },
+    {
+      "name": "TokensBurned",
+      "discriminator": [
+        230,
+        255,
+        34,
+        113,
+        226,
+        53,
+        227,
+        9
+      ]
+    },
+    {
+      "name": "VaultAuthorityChanged",
+      "discriminator": [
+        218,
+        173,
+        43,
+        160,
+        33,
+        248,
+        54,
+        110
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "Unauthorized",
+      "msg": "Unauthorized access"
+    },
+    {
+      "code": 6001,
+      "name": "InvalidNonce",
+      "msg": "Invalid nonce"
+    },
+    {
+      "code": 6002,
+      "name": "StaleProof",
+      "msg": "Stale proof"
+    },
+    {
+      "code": 6003,
+      "name": "ExcessiveEnergy",
+      "msg": "Excessive energy"
+    },
+    {
+      "code": 6004,
+      "name": "InsufficientStake",
+      "msg": "Insufficient stake"
+    },
+    {
+      "code": 6005,
+      "name": "NothingToClaim",
+      "msg": "Nothing to claim"
+    },
+    {
+      "code": 6006,
+      "name": "AlreadyInPool",
+      "msg": "Already in pool"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidParameter",
+      "msg": "Invalid parameter"
+    },
+    {
+      "code": 6008,
+      "name": "NotFound",
+      "msg": "Not found"
+    },
+    {
+      "code": 6009,
+      "name": "AlreadyExists",
+      "msg": "Already exists"
+    },
+    {
+      "code": 6010,
+      "name": "ZeroAmountMint",
+      "msg": "Zero amount mint"
+    },
+    {
+      "code": 6011,
+      "name": "ArithmeticOverflow",
+      "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6012,
+      "name": "InvalidSignatureLength",
+      "msg": "Invalid signature length"
+    },
+    {
+      "code": 6013,
+      "name": "InvalidPublicKeyLength",
+      "msg": "Invalid public key length"
+    },
+    {
+      "code": 6014,
+      "name": "Ed25519VerificationFailed",
+      "msg": "Ed25519 verification failed"
+    },
+    {
+      "code": 6015,
+      "name": "InvalidDeviceState",
+      "msg": "Device is not in the required state for this operation"
+    },
+    {
+      "code": 6016,
+      "name": "InvalidStateTransition",
+      "msg": "Device state transition is not allowed"
+    },
+    {
+      "code": 6017,
+      "name": "DeviceInQuarantine",
+      "msg": "Device is in quarantine — minting is suspended"
+    },
+    {
+      "code": 6018,
+      "name": "DeviceRevoked",
+      "msg": "Device is revoked — operation not allowed"
+    },
+    {
+      "code": 6019,
+      "name": "DeviceAlreadyRevoked",
+      "msg": "Device is already revoked"
+    },
+    {
+      "code": 6020,
+      "name": "NewDeviceKeyRegistered",
+      "msg": "New device key is already registered"
+    },
+    {
+      "code": 6021,
+      "name": "DeviceNotRegistered",
+      "msg": "Device is not registered"
+    },
+    {
+      "code": 6022,
+      "name": "DeviceAlreadyClaimed",
+      "msg": "Device is already claimed by another wallet"
+    },
+    {
+      "code": 6023,
+      "name": "RegistryOverflow",
+      "msg": "Overflow in registry version counter"
+    },
+    {
+      "code": 6024,
+      "name": "ManifestIdMismatch",
+      "msg": "Manifest ID in verification account does not match provided manifest_id"
+    },
+    {
+      "code": 6025,
+      "name": "ProofPathTooLong",
+      "msg": "Merkle proof path is too long (max 32 levels)"
+    },
+    {
+      "code": 6026,
+      "name": "InvalidProof",
+      "msg": "Proof does not match registry root"
+    },
+    {
+      "code": 6027,
+      "name": "InvalidLeafHash",
+      "msg": "Leaf hash is invalid (all zeros)"
+    },
+    {
+      "code": 6028,
+      "name": "UntrustedManifestPublisher",
+      "msg": "Manifest publisher is not trusted by the Manifest Registry"
+    },
+    {
+      "code": 6029,
+      "name": "InvalidManifestLeaf",
+      "msg": "Leaf hash does not match the registered manifest content"
+    },
+    {
+      "code": 6030,
+      "name": "UnauthorizedTokenAccountOwner",
+      "msg": "Mint only allowed into the token account owned by the producer's owner"
+    },
+    {
+      "code": 6031,
+      "name": "DeviceMismatch",
+      "msg": "Report device_id does not match the producer's registered device"
+    },
+    {
+      "code": 6032,
+      "name": "NotProducerOwner",
+      "msg": "Signer is not the owner of the producer"
+    },
+    {
+      "code": 6033,
+      "name": "UntrustedOracle",
+      "msg": "Report oracle is not in the trusted Oracle Registry"
+    },
+    {
+      "code": 6034,
+      "name": "InvalidInstructionsAccount",
+      "msg": "Instructions sysvar is required for Ed25519 signature verification"
+    },
+    {
+      "code": 6035,
+      "name": "FutureTimestamp",
+      "msg": "Timestamp is in the future"
+    },
+    {
+      "code": 6036,
+      "name": "DeviceLimitReached",
+      "msg": "Device limit per owner reached"
+    },
+    {
+      "code": 6037,
+      "name": "SupplyLimitExceeded",
+      "msg": "Supply limit exceeded"
+    },
+    {
+      "code": 6038,
+      "name": "FounderPremineAlreadyMinted",
+      "msg": "Founder premine already minted"
+    },
+    {
+      "code": 6039,
+      "name": "UnauthorizedDeployer",
+      "msg": "Signer is not the expected protocol deployer"
+    },
+    {
+      "code": 6040,
+      "name": "NotGovernanceAuthority",
+      "msg": "Not governance authority"
+    },
+    {
+      "code": 6041,
+      "name": "NotGovernanceMember",
+      "msg": "Not a governance member"
+    },
+    {
+      "code": 6042,
+      "name": "MemberAlreadyVoted",
+      "msg": "Member already voted"
+    },
+    {
+      "code": 6043,
+      "name": "NoActiveProposal",
+      "msg": "No active proposal"
+    },
+    {
+      "code": 6044,
+      "name": "ProposalNotActive",
+      "msg": "Proposal is not active"
+    },
+    {
+      "code": 6045,
+      "name": "ProposalNotApproved",
+      "msg": "Proposal is not approved"
+    },
+    {
+      "code": 6046,
+      "name": "TimelockNotElapsed",
+      "msg": "Timelock not elapsed yet"
+    },
+    {
+      "code": 6047,
+      "name": "AmountCapExceeded",
+      "msg": "Proposal amount exceeds the cap"
+    },
+    {
+      "code": 6048,
+      "name": "ProposalNotFound",
+      "msg": "Proposal not found"
+    },
+    {
+      "code": 6049,
+      "name": "InvalidMemberList",
+      "msg": "Invalid member list (must be 3..=5 unique members)"
+    },
+    {
+      "code": 6050,
+      "name": "DuplicateMember",
+      "msg": "Duplicate member in list"
+    },
+    {
+      "code": 6051,
+      "name": "DestinationMintMismatch",
+      "msg": "Destination token account mint mismatch"
+    },
+    {
+      "code": 6052,
+      "name": "TierLimitExceeded",
+      "msg": "Device tier monthly mining limit exceeded"
+    },
+    {
+      "code": 6053,
+      "name": "NotInPool",
+      "msg": "Producer is not a pool member"
+    },
+    {
+      "code": 6054,
+      "name": "PoolThresholdNotReached",
+      "msg": "Pool distribution threshold not reached"
+    },
+    {
+      "code": 6055,
+      "name": "MintPaused",
+      "msg": "Mint is paused by the Policy Engine"
+    },
+    {
+      "code": 6056,
+      "name": "NotPolicyAuthority",
+      "msg": "Signer is not the policy authority"
+    }
+  ],
+  "types": [
+    {
+      "name": "AnomalyReported",
+      "docs": [
+        "Emitted when a profile anomaly reduces ERS (v7.0 §27)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "reputation",
+            "type": "pubkey"
+          },
+          {
+            "name": "score_after",
+            "type": "u32"
+          },
+          {
+            "name": "severity",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Config",
+      "docs": [
+        "Protocol configuration PDA.",
+        "",
+        "Stores the active Oracle identity and SRC Mint address",
+        "for the current protocol session.",
+        "",
+        "This is NOT a registry — it stores the *working pair*",
+        "(oracle + mint) that the protocol uses at any given time.",
+        "The full set of trusted oracles lives in OracleRegistry.",
+        "",
+        "Single Responsibility:",
+        "Config = active oracle + mint binding",
+        "Vault   = protocol economics",
+        "OracleRegistry = set of trusted oracles"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Protocol authority who initialized the config."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle",
+            "docs": [
+              "Active trusted Oracle public key."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "docs": [
+              "SRC Mint address."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Config PDA bump."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigInitialized",
+      "docs": [
+        "Event emitted when Config is initialized."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceActivated",
+      "docs": [
+        "Emitted when a device is activated",
+        "(ADR-0005: PROVISIONED → ACTIVE; owner-gated)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceClaimed",
+      "docs": [
+        "Emitted when a device is claimed by an owner",
+        "(ADR-0005: REGISTERED → CLAIMED; requires the device Ed25519 signature)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "claim_nonce",
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceKeyRotated",
+      "docs": [
+        "Emitted when a device key is rotated (ADR-0007).",
+        "The old record is marked revoked/rotated_to; the new record inherits the",
+        "state (nonce, energy, tier, owner)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "docs": [
+              "Old (revoked) device_id."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "new_device_id",
+            "docs": [
+              "New device_id (device public key)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "docs": [
+              "Owner (authority) — stays the same."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "changed_by",
+            "docs": [
+              "Who initiated the rotation (owner or protocol admin)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceMaintenance",
+      "docs": [
+        "Emitted when a device is moved to maintenance",
+        "(ADR-0005: ACTIVE/QUARANTINE → MAINTENANCE; owner-gated)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceProvisioned",
+      "docs": [
+        "Emitted when a device is provisioned",
+        "(ADR-0005: CLAIMED → PROVISIONED; owner-gated)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceQuarantined",
+      "docs": [
+        "Emitted when a device is quarantined",
+        "(ADR-0005: ACTIVE → QUARANTINE; owner-gated)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceRegistered",
+      "docs": [
+        "Emitted when a device is registered",
+        "(ADR-0005: UNREGISTERED → REGISTERED; requires the device Ed25519 signature)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "registered_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceReleasedFromQuarantine",
+      "docs": [
+        "Emitted when a device is released from quarantine",
+        "(ADR-0005: QUARANTINE → ACTIVE; owner-gated)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceRevoked",
+      "docs": [
+        "Emitted when a device is revoked",
+        "(ADR-0005: ACTIVE/QUARANTINE/MAINTENANCE → REVOKED; owner-gated, terminal state)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceState",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Unregistered"
+          },
+          {
+            "name": "Registered"
+          },
+          {
+            "name": "Claimed"
+          },
+          {
+            "name": "Provisioned"
+          },
+          {
+            "name": "Active"
+          },
+          {
+            "name": "Quarantine"
+          },
+          {
+            "name": "Maintenance"
+          },
+          {
+            "name": "Revoked"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceTier",
+      "docs": [
+        "Device trust level (v7.0 §15 — Device Trust Levels).",
+        "",
+        "Affects minting limits: Basic ≤ 100 kWh/month, Verified ≤ 10 MWh/month,",
+        "Industrial / Institutional — no limits. The tier is assigned by the protocol",
+        "administrator (Vault authority) via `set_device_tier`."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Basic"
+          },
+          {
+            "name": "Verified"
+          },
+          {
+            "name": "Industrial"
+          },
+          {
+            "name": "Institutional"
+          }
+        ]
+      }
+    },
+    {
+      "name": "DeviceTierSet",
+      "docs": [
+        "Emitted when a device tier changes (v7.0 §15 — Trust Levels)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "producer",
+            "type": "pubkey"
+          },
+          {
+            "name": "tier",
+            "type": {
+              "defined": {
+                "name": "DeviceTier"
+              }
+            }
+          },
+          {
+            "name": "changed_by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EmissionDifficultyChanged",
+      "docs": [
+        "Emitted whenever the emission curve changes."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "current_supply",
+            "docs": [
+              "Current total supply."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "supply_fraction",
+            "docs": [
+              "Supply expressed as a fraction of MAX_SUPPLY (scaled by 1e18)."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "energy_per_token",
+            "docs": [
+              "Current energy required for one SRC token."
+            ],
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EnergyProducer",
+      "docs": [
+        "Core device identity.",
+        "",
+        "Stores only the base on-chain protocol logic.",
+        "Device metadata (power, type, location) and the",
+        "rolling energy window (30 days) live in a separate",
+        "program — enrg-profile (EnergyProfile PDA).",
+        "",
+        "Seeds: [b\"producer\", device_id.key().as_ref()]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Device owner (wallet)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "device_id",
+            "docs": [
+              "Public key of the physical device (Ed25519)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "docs": [
+              "Last used nonce (replay protection)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "energy_wh",
+            "docs": [
+              "Total confirmed energy of all time (Wh)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "timestamp",
+            "docs": [
+              "Timestamp of the last confirmed report."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "state",
+            "docs": [
+              "Current device state (Device Lifecycle, ADR-0005)."
+            ],
+            "type": {
+              "defined": {
+                "name": "DeviceState"
+              }
+            }
+          },
+          {
+            "name": "tier",
+            "docs": [
+              "Device trust level (v7.0 §15) — minting limits."
+            ],
+            "type": {
+              "defined": {
+                "name": "DeviceTier"
+              }
+            }
+          },
+          {
+            "name": "month_energy_wh",
+            "docs": [
+              "Confirmed energy for the current month (Wh) — for the tier limit."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "month_start_ts",
+            "docs": [
+              "Start of the current monthly window (unix ts) — for the tier limit."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "claim_nonce",
+            "docs": [
+              "Monotonic nonce of the last claim message (replay protection).",
+              "Separate from `nonce` (proof nonce of reports): claim and proof do not overlap."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "claimed_at",
+            "docs": [
+              "Timestamp of a successful claim (audit, ADR-0002)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "revoked",
+            "docs": [
+              "Revocation flag (ADR-0007). After revoke/rotate — true: the device cannot",
+              "mint or change state. Duplicates the terminal state",
+              "DeviceState::Revoked for defense-in-depth and simple checks."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "rotated_to",
+            "docs": [
+              "On key rotation (ADR-0007) — the new device_id. Pubkey::default() if no",
+              "rotation happened. Audit trail old → new."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "EnergyProfile",
+      "docs": [
+        "EnergyProfile — хранит метаданные устройства и скользящее окно энергии.",
+        "",
+        "Seeds PDA: [b\"profile\", authority.key().as_ref()]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "rated_power",
+            "type": "u64"
+          },
+          {
+            "name": "device_type",
+            "type": "string"
+          },
+          {
+            "name": "location",
+            "type": "string"
+          },
+          {
+            "name": "device_energy_30d",
+            "type": "u128"
+          },
+          {
+            "name": "device_energy_updated_at",
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FounderVesting",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "founder",
+            "docs": [
+              "Founder wallet."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "total_amount",
+            "docs": [
+              "Total allocated amount (atomic)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "start_time",
+            "docs": [
+              "Vesting start timestamp."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "cliff",
+            "docs": [
+              "Cliff duration (seconds) — 0 vested until start_time + cliff."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "release",
+            "docs": [
+              "Release duration (seconds) — linear after cliff."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "withdrawn",
+            "docs": [
+              "Amount already claimed."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "last_claim",
+            "docs": [
+              "Last claim timestamp."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "FundsWithdrawn",
+      "docs": [
+        "Emitted after SRC are withdrawn from a protocol fund",
+        "(buyback / staking / dao / emergency) by the governor."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "fund_tag",
+            "docs": [
+              "Fund tag: 0=buyback, 1=staking, 2=dao, 3=emergency."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "amount",
+            "docs": [
+              "Amount of SRC transferred out of the fund."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "to",
+            "docs": [
+              "Destination token account."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "by",
+            "docs": [
+              "Initiator (Vault.authority as temporary governor)."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GovernanceState",
+      "docs": [
+        "Single governance account (PDA [b\"governance\"]).",
+        "",
+        "Two-level model: `authority` (contract owner) + `members`",
+        "(3–5 addresses with voting rights). `authority` creates proposals",
+        "and manages the members list; members vote."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Current contract owner (creates proposals, manages members)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "members",
+            "docs": [
+              "Members with voting rights (3..=GOVERNANCE_MEMBER_MAX)."
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "proposal_count",
+            "docs": [
+              "Counter of created proposals (monotonic)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "active_proposal_id",
+            "docs": [
+              "id of the active proposal (0 = none active; one active at a time)."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ManifestRegistry",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Authority that can initialize and manage registry"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle_authority",
+            "docs": [
+              "Oracle authority that can update Merkle root (multisig or trusted oracle)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "merkle_root",
+            "docs": [
+              "Current Merkle root (256-bit hash)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "updated_at",
+            "docs": [
+              "Timestamp of the last root update"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "version",
+            "docs": [
+              "Version of the registry (for upgrades)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "manifest_count",
+            "docs": [
+              "Total number of manifests recorded"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "reserved",
+            "docs": [
+              "Padding for future expansions"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ManifestRegistryInitialized",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "registry",
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ManifestVerification",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "manifest_id",
+            "docs": [
+              "Manifest ID (matches the UUID from the off-chain registry)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "publisher_key",
+            "docs": [
+              "ED25519 public key of the publisher (32 bytes)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "content_hash",
+            "docs": [
+              "Manifest content hash (Keccak256, 32 bytes)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "signature",
+            "docs": [
+              "ED25519 signature (64 bytes)"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "Publication timestamp"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "verified",
+            "docs": [
+              "Verification status"
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "manifest_version",
+            "docs": [
+              "Manifest schema version"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "reserved",
+            "docs": [
+              "Reserved for future extensions"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ManifestVerificationRegistered",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "manifest_id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "publisher",
+            "type": "pubkey"
+          },
+          {
+            "name": "content_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerkleProofVerification",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "registry",
+            "docs": [
+              "Registry PDA (links to the ManifestRegistry)"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "manifest_verification",
+            "docs": [
+              "Manifest verification account that was proven"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "verified_root",
+            "docs": [
+              "Merkle root against which proof was verified"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "verified_at",
+            "docs": [
+              "Timestamp of verification"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "proof_length",
+            "docs": [
+              "Proof path length (for efficiency checks)"
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "verified_by",
+            "docs": [
+              "Device or verifier that submitted the proof"
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "reserved",
+            "docs": [
+              "Reserved for future extensions"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerkleProofVerified",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "registry",
+            "type": "pubkey"
+          },
+          {
+            "name": "manifest_id",
+            "type": {
+              "array": [
+                "u8",
+                16
+              ]
+            }
+          },
+          {
+            "name": "leaf_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "proof_length",
+            "type": "u8"
+          },
+          {
+            "name": "verified_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "verified_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MerkleRootUpdated",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "registry",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_root",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "version",
+            "type": "u64"
+          },
+          {
+            "name": "manifest_count",
+            "type": "u64"
+          },
+          {
+            "name": "updated_by",
+            "type": "pubkey"
+          },
+          {
+            "name": "timestamp",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleAdded",
+      "docs": [
+        "Emitted when a trusted oracle is added."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "oracle",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleAdminChanged",
+      "docs": [
+        "Emitted when the oracle admin role changes (BLOCK 2 — role separation)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "old_oracle_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_oracle_admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "changed_by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleAuthorityChanged",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "registry",
+            "type": "pubkey"
+          },
+          {
+            "name": "old_oracle",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_oracle",
+            "type": "pubkey"
+          },
+          {
+            "name": "changed_by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleRegistry",
+      "docs": [
+        "Oracle Registry.",
+        "",
+        "Stores the set of trusted Oracle identities",
+        "authorized to submit verified reports",
+        "to the ENRG Protocol."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Registry authority (protocol admin / governance root)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle_admin",
+            "docs": [
+              "Oracle admin — manages the list of trusted oracles.",
+              "Role separation: protocol_admin (vault/funds/security)",
+              "vs oracle_admin (add/remove oracles)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "oracles",
+            "docs": [
+              "Trusted Oracle identities."
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleRemoved",
+      "docs": [
+        "Emitted when a trusted oracle is removed."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "oracle",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleReport",
+      "docs": [
+        "Verified Oracle report.",
+        "",
+        "This is the only trusted object accepted",
+        "by the ENRG Protocol Core.",
+        "",
+        "The report is authenticated by TWO signatures:",
+        "- `device_signature` — the device confirms (device_id, nonce, device_timestamp, energy_wh);",
+        "- `oracle_signature` — the trusted oracle confirms that it verified the",
+        "device data (device_id, nonce, device_timestamp, verified_at, energy_wh)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "oracle",
+            "docs": [
+              "Trusted Oracle identity."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "device_id",
+            "docs": [
+              "Producer device."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "docs": [
+              "Sequential proof number."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "device_timestamp",
+            "docs": [
+              "Original device timestamp."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "verified_at",
+            "docs": [
+              "Oracle verification timestamp."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "energy_wh",
+            "docs": [
+              "Verified energy."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "device_signature",
+            "docs": [
+              "Original device signature."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "oracle_signature",
+            "docs": [
+              "Oracle signature over the aggregated (verified) report."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "OwnerDevices",
+      "docs": [
+        "Per-owner device registry — counter of the owner's devices.",
+        "",
+        "Seeds: [b\"owner-devices\", owner.key().as_ref()]",
+        "Created on the owner's first device claim (init_if_needed).",
+        "",
+        "The active-devices-per-owner limit (audit BLOCK 4) protects against",
+        "device \"fragmentation\" — mass registration of small device_ids to",
+        "bypass limits or manipulate the economy."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "docs": [
+              "Owner of the devices (wallet)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "total_claimed",
+            "docs": [
+              "Total devices claimed by the owner of all time."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "active_count",
+            "docs": [
+              "Current number of the owner's devices in the Active state."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyAuthorityChanged",
+      "docs": [
+        "Emitted when the policy authority role changes (ADR-0003 / ADR-0009)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "old_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "changed_by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyRegistry",
+      "docs": [
+        "Policy Registry (ADR-0003).",
+        "",
+        "On-chain set of policies that determine which Proofs and mints are allowed.",
+        "`mint_energy` (Verifier) **does not make decisions** — it executes the",
+        "policies addressed by this registry. This removes the documented",
+        "\"verifier+policy co-location\" deviation (see `instructions/mint.rs`).",
+        "",
+        "PDA: seeds = [b\"policy-registry\"]",
+        "",
+        "**Backward compatibility:** the account is optional in `MintEnergy`. If the",
+        "PDA is not initialized, the protocol default policies apply — behavior",
+        "identical to the pre-Policy Engine version. After initialization, policies",
+        "are set via `update_policy` (registry authority; may later be handed over",
+        "to Governance ADR-0009 via `set_policy_authority`)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Policy administrator. Initially — `EXPECTED_DEPLOYER`; change via",
+              "`set_policy_authority` (the role may be handed over to Governance ADR-0009)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "mint_enabled",
+            "docs": [
+              "Global mint switch (maintenance / pause).",
+              "`false` → `mint_energy` rejects all Proofs (`MintPaused`)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "enforce_oracle_whitelist",
+            "docs": [
+              "Check that `report.oracle` is a member of `OracleRegistry` (C-0)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "enforce_device_state",
+            "docs": [
+              "Device-state gating (ADR-0005: mint only from `Active`)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "enforce_tier_limits",
+            "docs": [
+              "Monthly tier limits (v7.0 §15)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "enforce_energy_caps",
+            "docs": [
+              "Energy cap per proof: `≤ rated_power × max_energy_bps / 10_000`."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "enforce_supply_cap",
+            "docs": [
+              "Supply cap: `total_supply + reward ≤ vault.max_supply`."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "max_energy_bps",
+            "docs": [
+              "Maximum energy per proof in basis points of `rated_power`",
+              "(10_000 == 100%). Default — 10_000 (as in the pre-Policy Engine version)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_clock_skew_sec",
+            "docs": [
+              "Allowed clock skew (sec) for the `verified_at` freshness check."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "version",
+            "docs": [
+              "Policy-set version (incremented on every update)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "updated_at",
+            "docs": [
+              "Timestamp of the last update (unix, sec)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "PDA bump."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyRegistryInitialized",
+      "docs": [
+        "Emitted when the Policy Registry is initialized (ADR-0003)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "version",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyUpdate",
+      "docs": [
+        "Full snapshot of the updatable policies (passed to `update_policy`)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint_enabled",
+            "type": "bool"
+          },
+          {
+            "name": "enforce_oracle_whitelist",
+            "type": "bool"
+          },
+          {
+            "name": "enforce_device_state",
+            "type": "bool"
+          },
+          {
+            "name": "enforce_tier_limits",
+            "type": "bool"
+          },
+          {
+            "name": "enforce_energy_caps",
+            "type": "bool"
+          },
+          {
+            "name": "enforce_supply_cap",
+            "type": "bool"
+          },
+          {
+            "name": "max_energy_bps",
+            "type": "u64"
+          },
+          {
+            "name": "max_clock_skew_sec",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PolicyUpdated",
+      "docs": [
+        "Emitted when the policy set is updated (ADR-0003)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "policy_registry",
+            "type": "pubkey"
+          },
+          {
+            "name": "mint_enabled",
+            "type": "bool"
+          },
+          {
+            "name": "enforce_oracle_whitelist",
+            "type": "bool"
+          },
+          {
+            "name": "enforce_device_state",
+            "type": "bool"
+          },
+          {
+            "name": "enforce_tier_limits",
+            "type": "bool"
+          },
+          {
+            "name": "enforce_energy_caps",
+            "type": "bool"
+          },
+          {
+            "name": "enforce_supply_cap",
+            "type": "bool"
+          },
+          {
+            "name": "max_energy_bps",
+            "type": "u64"
+          },
+          {
+            "name": "max_clock_skew_sec",
+            "type": "i64"
+          },
+          {
+            "name": "version",
+            "type": "u64"
+          },
+          {
+            "name": "updated_by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Pool",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Pool authority."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "total_energy",
+            "docs": [
+              "Total accumulated verified energy (Wh)."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "threshold",
+            "docs": [
+              "Energy threshold required for distribution."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "producers",
+            "docs": [
+              "Registered producers."
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "is_active",
+            "docs": [
+              "Pool status."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "Creation timestamp."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolContribution",
+      "docs": [
+        "Pool member contribution (v7.0 §14) — accumulated energy for proportional",
+        "distribution when the threshold is reached.",
+        "",
+        "Seeds: [b\"pool-share\", pool.key().as_ref(), producer.key().as_ref()]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "docs": [
+              "Pool this contribution belongs to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "producer",
+            "docs": [
+              "Producer (device) — pool member."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "energy_wh",
+            "docs": [
+              "Accumulated verified energy (Wh) since the last distribution."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "updated_at",
+            "docs": [
+              "Time of the last update."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Bump seed for the PDA."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolDistributed",
+      "docs": [
+        "Emitted after proportional pool distribution."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_energy",
+            "type": "u128"
+          },
+          {
+            "name": "total_reward",
+            "type": "u64"
+          },
+          {
+            "name": "members",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolEnergyRecorded",
+      "docs": [
+        "Emitted when a pool member's verified energy is recorded (v7.0 §14)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "producer",
+            "type": "pubkey"
+          },
+          {
+            "name": "energy_wh",
+            "type": "u128"
+          },
+          {
+            "name": "total_energy",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolJoined",
+      "docs": [
+        "Emitted when a producer joins a pool."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "producer",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoolThresholdReached",
+      "docs": [
+        "Emitted when the pool crosses the distribution threshold (v7.0 §14)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "pool",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_energy",
+            "type": "u128"
+          },
+          {
+            "name": "threshold",
+            "type": "u128"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProofAccepted",
+      "docs": [
+        "Emitted after a proof has been accepted by the protocol."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "producer",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle",
+            "type": "pubkey"
+          },
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "type": "u64"
+          },
+          {
+            "name": "energy_wh",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Proposal",
+      "docs": [
+        "Governance proposal (PDA [b\"proposal\", id.to_le_bytes()]).",
+        "",
+        "`member_snapshot_count` is fixed at creation (quorum is computed from it).",
+        "Emission after approval and timelock happens via `governance_mint`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "id",
+            "docs": [
+              "Monotonic id (== GovernanceState.proposal_count at creation time)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "proposer",
+            "docs": [
+              "Authority that created the proposal (the recipient in `destination` is its ATA)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "title",
+            "docs": [
+              "Title / short payload (≤ PROPOSAL_TITLE_MAX_LEN bytes)."
+            ],
+            "type": "string"
+          },
+          {
+            "name": "amount_atomic",
+            "docs": [
+              "Requested emission in atomic units (≤ PROPOSAL_AMOUNT_MAX_ATOMIC)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "destination",
+            "docs": [
+              "Recipient ATA (mint == SRC mint; owner == proposer)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "ProposalStatus"
+              }
+            }
+          },
+          {
+            "name": "created_at",
+            "type": "i64"
+          },
+          {
+            "name": "approved_at",
+            "type": "i64"
+          },
+          {
+            "name": "executed_at",
+            "type": "i64"
+          },
+          {
+            "name": "yes_votes",
+            "docs": [
+              "Vote counts: \"for\" / \"against\"."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "no_votes",
+            "type": "u32"
+          },
+          {
+            "name": "member_snapshot_count",
+            "docs": [
+              "Size of the members list at creation time (for quorum calculation)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "voted_members",
+            "docs": [
+              "Addresses of members who voted (single vote each)."
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProposalStatus",
+      "docs": [
+        "Proposal status (ADR-0009)."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Approved"
+          },
+          {
+            "name": "Rejected"
+          },
+          {
+            "name": "Cancelled"
+          },
+          {
+            "name": "Executed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Reputation",
+      "docs": [
+        "Energy Reputation Score (v7.0 §16).",
+        "",
+        "Reputation PDA for a producer (owner). Takes into account:",
+        "- uptime without failures,",
+        "- volume of verified energy,",
+        "- absence of generation profile anomalies (penalties via `report_anomaly`).",
+        "",
+        "A high ERS provides an advantage in pool reward distribution",
+        "(share weighting, see pool.rs) and access to premium features of",
+        "ENRG Market (v7.0 §16, §30) — `ers_premium_eligible`.",
+        "",
+        "Seeds: [b\"reputation\", authority.key().as_ref()]"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Device owner (authority) whose score is tracked."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "score",
+            "docs": [
+              "Current ERS score (0..=ERS_MAX_SCORE)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "updated_at",
+            "docs": [
+              "Time of the last update."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "total_energy_wh",
+            "docs": [
+              "Total verified energy (Wh) — contribution to the score."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "first_seen",
+            "docs": [
+              "First appearance (unix ts) — basis for uptime calculation."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "anomaly_count",
+            "docs": [
+              "Number of recorded profile anomalies (v7.0 §27)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "percentile",
+            "docs": [
+              "Approximate network percentile (0..=100; on-chain approximation)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "Bump seed for the PDA."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ReputationUpdated",
+      "docs": [
+        "Emitted after ERS is refreshed by a mint (v7.0 §16)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "reputation",
+            "type": "pubkey"
+          },
+          {
+            "name": "score",
+            "type": "u32"
+          },
+          {
+            "name": "total_energy_wh",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "RewardDistributed",
+      "docs": [
+        "Emitted after rewards have been distributed."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "producer",
+            "type": "pubkey"
+          },
+          {
+            "name": "reward",
+            "type": "u64"
+          },
+          {
+            "name": "buyback",
+            "type": "u64"
+          },
+          {
+            "name": "staking",
+            "type": "u64"
+          },
+          {
+            "name": "dao",
+            "type": "u64"
+          },
+          {
+            "name": "emergency",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "StakeInfo",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "docs": [
+              "Owner of the stake."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "staked_amount",
+            "docs": [
+              "Amount currently staked."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "pending_rewards",
+            "docs": [
+              "Pending rewards."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "started_at",
+            "docs": [
+              "Stake creation timestamp."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "last_update",
+            "docs": [
+              "Last rewards update."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokenMint",
+      "docs": [
+        "SPL Token configuration.",
+        "",
+        "Stores the protocol mint configuration and",
+        "all protocol-owned token accounts."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "mint",
+            "docs": [
+              "SRC Mint."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "mint_authority",
+            "docs": [
+              "PDA allowed to mint SRC."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "buyback_account",
+            "docs": [
+              "Buyback fund ATA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "staking_account",
+            "docs": [
+              "Staking rewards ATA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "dao_account",
+            "docs": [
+              "DAO treasury ATA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "emergency_account",
+            "docs": [
+              "Emergency reserve ATA."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "founder_account",
+            "docs": [
+              "Founder ATA — where founder tokens are minted at launch (premine)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "founder_minted",
+            "docs": [
+              "One-shot flag: 1 after the founder premine (repeat forbidden)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "decimals",
+            "docs": [
+              "Token decimals."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "mint_bump",
+            "docs": [
+              "SRC Mint PDA bump."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "mint_authority_bump",
+            "docs": [
+              "Mint Authority PDA bump."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "buyback_authority_bump",
+            "docs": [
+              "Buyback Authority PDA bump."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "TokenMint PDA bump."
+            ],
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "TokensBurned",
+      "docs": [
+        "Emitted after tokens are burned from the buyback fund."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "amount",
+            "docs": [
+              "Amount of SRC burned."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "remaining",
+            "docs": [
+              "Remaining balance in buyback fund."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_supply",
+            "docs": [
+              "New total supply after burn."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "initiator",
+            "docs": [
+              "Initiator of the burn (Vault.authority — governor)."
+            ],
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Vault",
+      "docs": [
+        "Global protocol state.",
+        "",
+        "Vault stores protocol economics,",
+        "emission state and global statistics.",
+        "",
+        "SPL mint configuration is maintained",
+        "separately by the TokenMint PDA."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "deployer",
+            "docs": [
+              "Wallet that deployed the protocol."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "authority",
+            "docs": [
+              "Current protocol authority."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "protocol_version",
+            "docs": [
+              "Protocol version."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "total_supply",
+            "docs": [
+              "Total SRC minted."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "max_supply",
+            "docs": [
+              "Maximum SRC supply."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "emission_k",
+            "docs": [
+              "Current emission coefficient."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_energy_wh",
+            "docs": [
+              "Total verified energy (Wh)."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "total_producers",
+            "docs": [
+              "Total registered producers."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "total_proofs",
+            "docs": [
+              "Total accepted proofs."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "network_energy_30d",
+            "docs": [
+              "Sum of all device energy for last 30 days (Wh).",
+              "Used for dynamic difficulty calculation."
+            ],
+            "type": "u128"
+          },
+          {
+            "name": "network_energy_updated_at",
+            "docs": [
+              "Unix timestamp of the last network energy update."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "VaultAuthorityChanged",
+      "docs": [
+        "Emitted when the vault authority changes (single-step; multisig/timelock planned)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "old_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "changed_by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -63,6 +63,17 @@
 #define ENRG_AP_TIMEOUT_SEC 600
 #endif
 
+// ── WiFi: HARD-CODED credentials (temporary pilot — no Captive Portal) ──
+// Anton's home Wi-Fi, baked in for the pilot. The device connects directly
+// and skips the Axis-Device-XXXX portal. Set both to "" to restore the
+// normal NVS + Captive Portal flow.
+#ifndef WIFI_SSID
+#define WIFI_SSID "MTSRouter_004386"
+#endif
+#ifndef WIFI_PASS
+#define WIFI_PASS "23988521"
+#endif
+
 // Oracle HTTP(S) endpoint. The firmware supports both modes: http://
 // (local network / dev, only when ENRG_ALLOW_HTTP=1) and https:// (with root CA
 // verification, ENRG_CA_CERT). By default — HTTPS ONLY (ADR-0008: TLS 1.3
@@ -70,13 +81,13 @@
 // (ADR-0004), the real URL is taken from manifest.oracle_url.
 // ⚠️ Replace the default address with your oracle before flashing.
 #ifndef ENRG_ORACLE_URL
-#define ENRG_ORACLE_URL "https://oracle.enrg.network/api/v1/proof/submit"
+#define ENRG_ORACLE_URL "https://enrg-oracle.onrender.com/api/v1/proof/submit"
 #endif
 
 // ── Device Manifest (ADR-0004) ──
 // Manifest endpoint base URL: "/<device_id>" is appended to it.
 #ifndef ENRG_MANIFEST_URL_BASE
-#define ENRG_MANIFEST_URL_BASE "https://oracle.enrg.network/api/v1/manifest"
+#define ENRG_MANIFEST_URL_BASE "https://enrg-oracle.onrender.com/api/v1/manifest"
 #endif
 
 // ORACLE public key (founder, Ed25519, 32 bytes) — embedded into the firmware.
@@ -122,7 +133,7 @@
 
 // Oracle firmware endpoint base URL: /latest and /latest/image are appended.
 #ifndef ENRG_FIRMWARE_URL_BASE
-#define ENRG_FIRMWARE_URL_BASE "https://oracle.enrg.network/api/v1/firmware"
+#define ENRG_FIRMWARE_URL_BASE "https://enrg-oracle.onrender.com/api/v1/firmware"
 #endif
 
 // ⚠️ SECURITY (audit 2026-08-18, P0-3): by default the firmware REFUSES
@@ -156,9 +167,12 @@
 
 // Root CA certificate for TLS connection verification.
 // Example for Let's Encrypt (ISRG Root X1): https://letsencrypt.org/certs/isrgrootx1.pem.txt
-#ifndef ENRG_CA_CERT
-#define ENRG_CA_CERT nullptr
-#endif
+// Root CA for the public oracle (https://enrg-oracle.onrender.com).
+// Issuer: Google Trust Services — GTS Root R1 (https://pki.goog/repo/certs/gtsr1.pem).
+static const char ENRG_CA_CERT[] =
+    "-----BEGIN CERTIFICATE-----\n"
+    "MIIFVzCCAz+gAwIBAgINAgPlk28xsBNJiGuiFzANBgkqhkiG9w0BAQwFADBHMQswCQYDVQQGEwJVUzEiMCAGA1UEChMZR29vZ2xlIFRydXN0IFNlcnZpY2VzIExMQzEUMBIGA1UEAxMLR1RTIFJvb3QgUjEwHhcNMTYwNjIyMDAwMDAwWhcNMzYwNjIyMDAwMDAwWjBHMQswCQYDVQQGEwJVUzEiMCAGA1UEChMZR29vZ2xlIFRydXN0IFNlcnZpY2VzIExMQzEUMBIGA1UEAxMLR1RTIFJvb3QgUjEwggIiMA0GCSqGSIb3DQEBAQUAA4ICDwAwggIKAoICAQC2EQKLHuOhd5s73L+UPreVp0A8of2C+X0yBoJx9vaMf/vo27xqLpeXo4xL+Sv2sfnOhB2x+cWX3u+58qPpvBKJXqeqUqv4IyfLpLGcY9vXmX7wCl7raKb0xlpHDU0QM+NOsROjyBhsS+z8CZDfnWQpJSMHobTSPS5g4M/SCYe7zUjwTcLCeoiKu7rPWRnWr4+wB7CeMfGCwcDfLqZtbBkOtdh+JhpFAz2weaSUKK0PfyblqAj+lug8aJRT7oM6iCsVlgmy4HqMLnXWnOunVmSPlk9orj2XwoSPwLxAwAtcvfaHszVsrBhQf4TgTM2S0yDpM7xSma8ytSmzJSq0SPly4cpk9+aCEI3oncKKiPo4Zor8Y/kB+Xj9e1x3+naH+uzfsQ55lVe0vSbv1gHR6xYKu44LtcXFilWr06zqkUspzBmkMiVOKvFlRNACzqrOSbTqn3yDsEB750Orp2yjj32JgfpMpf/VjsPOS+C12LOORc92wO1AK/1TD7Cn1TsNsYqiA94xrcx36m97PtbfkSIS5r762DL8EGMUUXLeXdYWk70paDPvOmbsB4om3xPXV2V4J95eSRQAogB/mqghtqmxlbCluQ0WEdrHbEg8QOB+DVrNVjzRlwW5y0vtOUucxD/SVRNuJLDWcfr0wbrM7Rv1/oFB2ACYPTrIrnqYNxgFlQIDAQABo0IwQDAOBgNVHQ8BAf8EBAMCAYYwDwYDVR0TAQH/BAUwAwEB/zAdBgNVHQ4EFgQU5K8rJnEaK0gnhS9SZizv8IkTcT4wDQYJKoZIhvcNAQEMBQADggIBAJ+qQibbC5u+/x6Wki4+omVKapi6Ist9wTrYggoGxval3sBOh2Z5ofmmWJyq+bXmYOfg6LEeQkEzCzc9zolwFcq1JKjPa7XSQCGYzyI0zzvFIoTgxQ6KfF2I5DUkzps+GlQebtuyh6f88/qBVRRiClmpIgUxPoLW7ttXNLwzldMXG+gnoot7TiYaelpkttGsN/H9oPM47HLwEXWdyzRSjeZ2axfG34arJ45JK3VmgRAhpuo+9K4l/3wV3s6MJT/KYnAK9y8JZgfIPxz88NtFMN9iiMG1D53Dn0reWVlHxYciNuaCp+0KueIHoI17eko8cdLiA6EfMgfdG+RCzgwARWGAtQsgWSl4vflVy2PFPEz0tv/bal8xa5meLMFrUKTX5hgUvYU/Z6tGn6D/Qqc6f1zLXbBwHSs09dR2CQzreExZBfMzQsNhFRAbd03OIozUhfJFfbdT6u9AWpQKXCBfTkBdYiJ23//OYb2MI3jSNwLgjt7RETeJ9r/tSQdirpLsQBqvFAnZ0E6yove+7u7Y/9waLd64NnHi/Hm3lCXRSHNboTXns5lndcEZOitHTtNCjv0xyBZm2tIMPNuzjsmhDYAPexZ3FL//2wmUspO8IFgV6dtxQ/PeEMMA3KgqlbbC1j+Qa3bbbP6MvPJwNQzcmRk13NfIRmPVNnGuV/u3gm3c\n"
+    "-----END CERTIFICATE-----\n";
 
 // ── mTLS (optional): client certificate and key (PEM). ──
 #ifndef ENRG_MTLS
@@ -742,6 +756,16 @@ static bool start_captive_portal() {
 
 /** Orchestration: NVS credentials → 30s connect → otherwise Captive Portal. */
 static bool setup_wifi() {
+    // Temporary pilot: hard-coded credentials — connect directly, no portal.
+    if (String(WIFI_SSID).length() > 0) {
+        wifi_save_creds(WIFI_SSID, WIFI_PASS);  // keep NVS in sync (INFO / Serial WIFI)
+        if (connect_wifi_creds(WIFI_SSID, WIFI_PASS, ENRG_WIFI_CONNECT_TIMEOUT_MS)) {
+            return true;
+        }
+        Serial.println("[WIFI] hard-coded network unavailable — continuing without WiFi");
+        return false;
+    }
+
     String ssid = wifi_ssid_from_nvs();
     if (ssid.length() > 0) {
         if (connect_wifi_creds(ssid, wifi_pass_from_nvs(), ENRG_WIFI_CONNECT_TIMEOUT_MS)) {
@@ -972,7 +996,7 @@ bool verify_manifest(const String &body, const String &deviceId,
         return false;
     }
 
-    DynamicJsonDocument doc(1024);
+    JsonDocument doc;
     if (deserializeJson(doc, body)) return false;
 
     const char *m_id = doc["device_id"];
@@ -1289,6 +1313,8 @@ static void print_help_serial() {
     Serial.println("                      output sig_base64/sig_hex");
     Serial.println("  CLEARWIFI         — erase the WiFi credentials from NVS and reboot");
     Serial.println("                      (the device will start the Axis-Device-XXXX Captive Portal)");
+    Serial.println("  WIFI <ssid> <pass> — save WiFi credentials to NVS and reboot into STA mode");
+    Serial.println("                      (alternative to the Captive Portal; no WiFiManager needed)");
     Serial.println("  Examples:");
     Serial.println("    SIGN 68656c6c6f           (sign 'hello')");
     Serial.println("    SIGN <hex(device_id|public_key)>   (PoP for the oracle)");
@@ -1317,6 +1343,24 @@ static void cmd_clear_wifi() {
     wifi_clear_creds();
     Serial.println("[WIFI] credentials fully erased from Preferences (NVS)");
     Serial.println("[WIFI] rebooting — the device will start the Axis-Device-XXXX Captive Portal");
+    delay(500);
+    ESP.restart();
+}
+
+/** WIFI <ssid> <password>: save credentials to NVS and reboot into STA mode.
+ *  Serial alternative to the Captive Portal (works even while the portal is up). */
+static void cmd_wifi(const String &arg) {
+    int sp = arg.indexOf(' ');
+    String ssid = (sp < 0) ? "" : arg.substring(0, sp);
+    String pass = (sp < 0) ? "" : arg.substring(sp + 1);
+    ssid.trim();
+    pass.trim();
+    if (ssid.length() == 0 || pass.length() == 0) {
+        Serial.println("[WIFI] ERR: usage: WIFI <ssid> <password>");
+        return;
+    }
+    wifi_save_creds(ssid, pass);
+    Serial.printf("[WIFI] saved %s — rebooting into STA mode...\n", ssid.c_str());
     delay(500);
     ESP.restart();
 }
@@ -1356,6 +1400,7 @@ static void process_serial_command(const String &line) {
     if (cmd == "HELP" || cmd == "?") { print_help_serial(); return; }
     if (cmd == "INFO") { print_device_info_serial(); return; }
     if (cmd == "SIGN") { cmd_sign(arg); return; }
+    if (cmd == "WIFI") { cmd_wifi(arg); return; }
     if (cmd == "CLEARWIFI" || cmd == "WIFIRESET") { cmd_clear_wifi(); return; }
 
     Serial.printf("[SERIAL] unknown command: %s (HELP for the list)\n", cmd.c_str());
@@ -1730,7 +1775,7 @@ bool checkForUpdates() {
     String body = http_get(url);
     if (body.length() == 0) { Serial.println("[OTA] oracle did not respond"); return false; }
 
-    DynamicJsonDocument doc(1024);
+    JsonDocument doc;
     if (deserializeJson(doc, body)) { Serial.println("[OTA] invalid JSON"); return false; }
 
     const char *v = doc["version"];
