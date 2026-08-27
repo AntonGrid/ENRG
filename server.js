@@ -407,6 +407,7 @@ async function createProducerIfNeeded() {
 // Reference: scripts/devnet_e2e_lifecycle.ts (oracleMint, v0+LUT, 2× ed25519).
 async function mintEnergy(proof, producerOverride = null) {
     if (!oracleKeypair) return { success: false, error: 'oracle_key_missing' };
+    if (!founderKeypair) return { success: false, error: 'founder_key_missing_for_mint_signer' };
     if (!proof || proof.sig_mode !== 'binary') return { success: false, error: 'device_signature_not_onchain_compatible' };
     const deviceIdPubkey = proof.device_id_pubkey;
     if (!deviceIdPubkey) return { success: false, error: 'device_id_not_a_pubkey' };
@@ -525,7 +526,13 @@ async function mintEnergy(proof, producerOverride = null) {
             oracleRegistry: oracleRegistryPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             profileProgram: PROFILE_PROGRAM_ID,
-            authority: oracleKeypair.publicKey,
+            // Root cause (0x7d6): enrg-profile RecordProduction derives the
+            // profile PDA from the mint SIGNER (authority), not from
+            // producer.authority. The E2E lifecycle always signed with the
+            // device owner, so sign mint_energy with the FOUNDER keypair
+            // (= producer.authority, see CgVK9). The oracle still signs the
+            // report (ed25519 precompile) — it just does not sign the tx.
+            authority: founderKeypair.publicKey,
             profile: profilePda,
             reputation: reputationPda,
             pool: null,
@@ -558,7 +565,7 @@ async function mintEnergy(proof, producerOverride = null) {
             ...(policyRegistry ? [policyRegistry] : []),
         ];
         const lut = await ensureLookupTable(connection, oracleKeypair, lutAddresses);
-        const sig = await sendVersioned(connection, oracleKeypair, [edDeviceIx, edOracleIx, mintIx], lut);
+        const sig = await sendVersioned(connection, founderKeypair, [edDeviceIx, edOracleIx, mintIx], lut);
         logger.info('🎉 Mint successful! TX:', sig);
         return { success: true, tx: sig };
     } catch (e) {
