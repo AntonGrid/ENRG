@@ -1025,7 +1025,7 @@ app.post('/api/v1/proof/submit', async (req, res) => {
         if (producer.revoked) {
             return res.status(403).json({ error: 'device_revoked_on_chain' });
         }
-        const devicePubkey = new PublicKey(producer.device_id.toBytes());
+        const devicePubkey = new PublicKey(producer.deviceId.toBytes());
         if (!devicePubkey.equals(d.deviceIdPubkey)) {
             return res.status(400).json({ error: 'device_id mismatch with on-chain registry' });
         }
