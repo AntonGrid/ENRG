@@ -28,6 +28,7 @@ import {
   Transaction,
 } from "@solana/web3.js";
 import { Ed25519Program } from "@solana/web3.js";
+import nacl from "tweetnacl";
 import fs from "fs";
 
 // ── The physical ESP32 device (public key only) ──
@@ -86,7 +87,9 @@ async function main() {
     process.exit(1);
   }
 
-  const ts = await nowTs();
+  // TS env — reuse the timestamp the device already signed (from --prepare);
+  // otherwise generate a fresh one (only for --prepare).
+  const ts = process.env.TS ? new anchor.BN(process.env.TS) : await nowTs();
   const owner = operator.publicKey;
   const [producerPda] = PublicKey.findProgramAddressSync(
     [Buffer.from("producer"), DEVICE_ID.toBuffer()],
@@ -123,6 +126,18 @@ async function main() {
     console.error("REG_SIG / CLAIM_SIG (base64, 64 bytes) required");
     process.exit(1);
   }
+
+  // ADR-0001: verify the device signatures BEFORE spending any transaction.
+  const devPub = DEVICE_ID.toBytes();
+  if (!nacl.sign.detached.verify(regMsg, regSig, devPub)) {
+    console.error("❌ register signature does NOT match the device key — redo SIGN");
+    process.exit(1);
+  }
+  if (!nacl.sign.detached.verify(claimMsg, claimSig, devPub)) {
+    console.error("❌ claim signature does NOT match the device key — redo SIGN");
+    process.exit(1);
+  }
+  console.log("✅ device signatures verified (ts=" + ts.toString() + ")");
 
   // 1. register_device — PoP от устройства (ed25519 в той же транзакции)
   const regIx = await program.methods
