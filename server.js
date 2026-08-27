@@ -476,14 +476,17 @@ async function mintEnergy(proof, producerOverride = null) {
         }
         const ownerPubkey = new PublicKey(producer.authority.toBytes());
 
-        // The reward goes to the device OWNER: profile/reputation/ATA are bound to
-        // producer.authority (not to the oracle signer).
         const [profilePda] = PublicKey.findProgramAddressSync(
             [Buffer.from('profile'), ownerPubkey.toBuffer()], PROFILE_PROGRAM_ID
         );
         const [reputationPda] = PublicKey.findProgramAddressSync(
             [Buffer.from('reputation'), ownerPubkey.toBuffer()], PROGRAM_ID
         );
+        logger.info('[mintEnergy] producerPda=' + producerPda.toBase58() +
+            ' producer.authority=' + producer.authority.toBase58() +
+            ' oracle=' + oracleKeypair.publicKey.toBase58() +
+            ' profilePda=' + profilePda.toBase58() +
+            ' IDL=' + (ENRG_IDL_PATH || 'default'));
         const userAta = (await getOrCreateAssociatedTokenAccount(
             connection, oracleKeypair, srcMintPda, ownerPubkey
         )).address;
@@ -529,6 +532,9 @@ async function mintEnergy(proof, producerOverride = null) {
             poolShare: null,
             policyRegistry,
         }).instruction();
+
+        logger.info('[mintEnergy-ix] profile=' + (mintIx.keys.find(k => k.pubkey.equals(profilePda) || k.pubkey.equals(PublicKey.default))?.pubkey.toBase58()) +
+            ' producer=' + producerPda.toBase58() + ' authority(ix)=' + mintIx.keys.find(k => k.isSigner)?.pubkey.toBase58());
 
         // ── Two ed25519 precompile instructions BEFORE mint_energy ──
         const edDeviceIx = Ed25519Program.createInstructionWithPublicKey({
