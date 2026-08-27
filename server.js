@@ -89,6 +89,9 @@ if (!founderKeypair) {
 // OTA images are signed with THIS key; the private key lives in
 // offline storage (HSM/cold wallet). The public key is baked into the firmware
 // as ENRG_FIRMWARE_PUBKEY_HEX. Dev copy: firmware/firmware-signing-keypair.json.
+// LUT cache for mint_energy (key = sorted set of addresses; value = AddressLookupTableAccount).
+let mintLutCache = null;
+
 let firmwareSigningKeypair = null;
 function loadFirmwareSigningKeypair() {
     const p = process.env.FIRMWARE_SIGNING_KEY_PATH ||
@@ -564,7 +567,18 @@ async function mintEnergy(proof, producerOverride = null) {
             // Policy Registry — only if initialized (ADR-0003).
             ...(policyRegistry ? [policyRegistry] : []),
         ];
-        const lut = await ensureLookupTable(connection, oracleKeypair, lutAddresses);
+        // Reuse the Address Lookup Table across mint_energy calls: creating one
+        // costs 2 extra transactions (~5-8 s) and pushed the response past the
+        // ESP32 read timeout. The LUT contents are immutable once extended, so
+        // cache by the exact address set.
+        const lutKey = lutAddresses.map((a) => a.toBase58()).join(',');
+        let lut;
+        if (mintLutCache && mintLutCache.key === lutKey) {
+            lut = mintLutCache.lut;
+        } else {
+            lut = await ensureLookupTable(connection, oracleKeypair, lutAddresses);
+            mintLutCache = { key: lutKey, lut };
+        }
         const sig = await sendVersioned(connection, founderKeypair, [edDeviceIx, edOracleIx, mintIx], lut);
         logger.info('🎉 Mint successful! TX:', sig);
         return { success: true, tx: sig };

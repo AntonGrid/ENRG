@@ -870,6 +870,7 @@ int send_proof_http(const String &body) {
             Serial.println("[HTTP] begin failed (https)");
             return -1;
         }
+        http.setTimeout(20000); // mint_energy on-chain takes ~2-8 s; 20 s keeps the response inside the read window
         http.addHeader("Content-Type", "application/json");
         code = http.POST(body);
         if (code > 0) resp = http.getString();
@@ -882,6 +883,7 @@ int send_proof_http(const String &body) {
             Serial.println("[HTTP] begin failed (http)");
             return -1;
         }
+        http.setTimeout(20000); // same read window as the https branch
         http.addHeader("Content-Type", "application/json");
         code = http.POST(body);
         if (code > 0) resp = http.getString();
