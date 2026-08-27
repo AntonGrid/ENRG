@@ -230,11 +230,11 @@ function patchIdl(idl) {
     return idl;
 }
 
-// enrg_mvp IDL (default target/idl/enrg_mvp.json, override via ENRG_IDL_PATH).
-// target/ is in .gitignore — on deploy, put the IDL next to server.js (or set ENRG_IDL_PATH).
+// enrg_mvp IDL (default idls/enrg_mvp.json — kept in git and always current,
+// override via ENRG_IDL_PATH for advanced setups).
 const ENRG_IDL_PATH =
     process.env.ENRG_IDL_PATH ||
-    path.join(__dirname, 'target', 'idl', 'enrg_mvp.json');
+    path.join(__dirname, 'idls', 'enrg_mvp.json');
 let IDL = null;
 try {
     IDL = patchIdl(JSON.parse(fs.readFileSync(ENRG_IDL_PATH, 'utf8')));
