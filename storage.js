@@ -182,6 +182,58 @@ class Storage {
             'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status FROM proofs ORDER BY id DESC LIMIT ?'
         ).all(Math.min(limit, 1000));
     }
+
+    // Ecosystem stats aggregated from the proofs table — the single source of
+    // truth for verified energy (ADR-0010 data bridge). Used by /api/v1/stats.
+    async loadStats() {
+        if (this.backend === 'postgres') {
+            const { rows } = await this.pg.query(`
+                SELECT
+                    COUNT(*) AS total_proofs,
+                    COUNT(*) FILTER (WHERE mint_status = 'minted') AS minted_proofs,
+                    COUNT(*) FILTER (WHERE mint_status = 'deferred') AS deferred_proofs,
+                    COUNT(*) FILTER (WHERE mint_status = 'accepted') AS accepted_proofs,
+                    COALESCE(SUM(energy_wh), 0) AS total_energy_wh,
+                    COALESCE(SUM(energy_wh) FILTER (WHERE mint_status = 'minted'), 0) AS minted_energy_wh,
+                    COUNT(DISTINCT device_id) AS active_producers,
+                    COALESCE(MAX(ts), 0) AS last_proof_ts
+                FROM proofs
+            `);
+            const r = rows[0] || {};
+            return {
+                total_proofs: Number(r.total_proofs) || 0,
+                minted_proofs: Number(r.minted_proofs) || 0,
+                deferred_proofs: Number(r.deferred_proofs) || 0,
+                accepted_proofs: Number(r.accepted_proofs) || 0,
+                total_energy_wh: Number(r.total_energy_wh) || 0,
+                minted_energy_wh: Number(r.minted_energy_wh) || 0,
+                active_producers: Number(r.active_producers) || 0,
+                last_proof_ts: Number(r.last_proof_ts) || 0,
+            };
+        }
+        const row = this.db.prepare(`
+            SELECT
+                COUNT(*) AS total_proofs,
+                SUM(CASE WHEN mint_status = 'minted' THEN 1 ELSE 0 END) AS minted_proofs,
+                SUM(CASE WHEN mint_status = 'deferred' THEN 1 ELSE 0 END) AS deferred_proofs,
+                SUM(CASE WHEN mint_status = 'accepted' THEN 1 ELSE 0 END) AS accepted_proofs,
+                COALESCE(SUM(energy_wh), 0) AS total_energy_wh,
+                COALESCE(SUM(CASE WHEN mint_status = 'minted' THEN energy_wh ELSE 0 END), 0) AS minted_energy_wh,
+                COUNT(DISTINCT device_id) AS active_producers,
+                COALESCE(MAX(ts), 0) AS last_proof_ts
+            FROM proofs
+        `).get();
+        return {
+            total_proofs: Number(row.total_proofs) || 0,
+            minted_proofs: Number(row.minted_proofs) || 0,
+            deferred_proofs: Number(row.deferred_proofs) || 0,
+            accepted_proofs: Number(row.accepted_proofs) || 0,
+            total_energy_wh: Number(row.total_energy_wh) || 0,
+            minted_energy_wh: Number(row.minted_energy_wh) || 0,
+            active_producers: Number(row.active_producers) || 0,
+            last_proof_ts: Number(row.last_proof_ts) || 0,
+        };
+    }
 }
 
 module.exports = new Storage();

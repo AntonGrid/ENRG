@@ -1162,22 +1162,34 @@ app.post('/api/v1/proof/submit', async (req, res) => {
 });
 
 // === WEBSITE STATS ===
-app.get('/api/v1/stats', (req, res) => {
-  try {
-    const totalEnergyWh = Object.values(energyStore).reduce((sum, e) => sum + (e.energy_wh || 0), 0);
-    const totalEnergyMwh = totalEnergyWh / 1000000;
-    const activeProducers = Object.keys(devices).length;
-    const totalSupply = 0; // stub
-    const stats = {
-      total_energy_mwh: Math.round(totalEnergyMwh * 100) / 100,
-      active_producers: activeProducers,
-      total_supply: totalSupply,
-    };
-    res.json(stats);
-  } catch (e) {
-    logger.error('❌ Error fetching stats:', e);
-    res.status(500).json({ error: e.message });
-  }
+// ADR-0010 data bridge: aggregates the proofs table (single source of truth)
+// — previously the endpoint read in-memory state and returned zeros, so the
+// landing showed "0 kWh" even with live minted proofs.
+app.get('/api/v1/stats', async (req, res) => {
+    try {
+        const s = await storage.loadStats();
+        const totalEnergyMwh = s.total_energy_wh / 1000000;
+        // 1 SRC = 1 MWh of verified energy → minted Wh / 1e6.
+        const totalSupply = s.minted_energy_wh / 1000000;
+        const stats = {
+            // Backward-compatible fields (landing pre-ADR-0010):
+            total_energy_mwh: Math.round(totalEnergyMwh * 100) / 100,
+            active_producers: s.active_producers,
+            total_supply: Math.round(totalSupply * 1e6) / 1e6,
+            // New fields (source of truth: proofs table):
+            total_proofs: s.total_proofs,
+            minted_proofs: s.minted_proofs,
+            deferred_proofs: s.deferred_proofs,
+            accepted_proofs: s.accepted_proofs,
+            total_energy_wh: s.total_energy_wh,
+            minted_energy_wh: s.minted_energy_wh,
+            last_proof_ts: s.last_proof_ts,
+        };
+        res.json(stats);
+    } catch (e) {
+        logger.error('❌ Error fetching stats:', e);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 const PORT = process.env.PORT || 3000;
