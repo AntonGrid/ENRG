@@ -1021,6 +1021,22 @@ app.post('/api/v1/pool/create', async (req, res) => {
 // in the Policy Engine (policy-config.json, ADR-0003) and synced with on-chain
 // (constants.rs::MAX_CLOCK_SKEW=300, security/validation.rs::MAX_PROOF_AGE=900).
 
+// === PROOF HISTORY (read-only, ADR-0010 data bridge) ===
+// GET /api/v1/proofs?device_id=…&limit=… — recent proofs persisted in storage
+// (device_id, ts, energy_wh, nonce, mint_tx, mint_status).
+app.get('/api/v1/proofs', async (req, res) => {
+    try {
+        const device_id = req.query.device_id ? String(req.query.device_id).trim() : null;
+        const limit = Math.max(1, Math.min(Number(req.query.limit) || 100, 1000));
+        const proofs = await storage.loadProofs(device_id, limit);
+        res.json({ ok: true, count: proofs.length, proofs });
+    } catch (e) {
+        logger.error('❌ /api/v1/proofs error:', e);
+        res.status(500).json({ error: 'storage_error' });
+    }
+});
+
+// === PROOF SUBMISSION ===
 app.post('/api/v1/proof/submit', async (req, res) => {
     try {
         // P0-2 (ADR-0002): the source of truth for proof verification is on-chain
@@ -1079,6 +1095,7 @@ app.post('/api/v1/proof/submit', async (req, res) => {
         const newEnergy = (stored.energy_wh || 0) + energyWhInt;
         energyStore[device_id] = { energy_wh: newEnergy, nonce: proof.nonce, last_proof: proof };
         await storage.saveEnergy(device_id, newEnergy, proof.nonce);
+        await storage.saveProof(device_id, proof.device_timestamp || nowSec, energyWhInt, proof.nonce, null, 'accepted');
 
         if (pool_id && pools[pool_id]) {
             const pool = pools[pool_id];
@@ -1115,9 +1132,11 @@ app.post('/api/v1/proof/submit', async (req, res) => {
         if (proof.sig_mode === 'binary') {
             const mintRes = await mintEnergy(proof, producer);
             if (mintRes.success) {
+                await storage.updateProofStatus(device_id, proof.nonce, mintRes.tx, 'minted');
                 return res.json({ ok: true, minted: proof.energy_wh, tx: mintRes.tx, accumulated: newEnergy });
             }
             logger.warn(`⚠️ mint_energy deferred for ${device_id}: ${mintRes.error}. Energy accumulated: ${newEnergy}Wh`);
+            await storage.updateProofStatus(device_id, proof.nonce, null, 'deferred');
             return res.json({
                 ok: true,
                 accumulated: newEnergy,

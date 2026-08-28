@@ -40,12 +40,16 @@ class Storage {
             await this.pg.query(
                 'CREATE TABLE IF NOT EXISTS pools (pool_id TEXT PRIMARY KEY, threshold BIGINT, total_energy BIGINT, device_energy TEXT, created_at BIGINT)'
             );
+            await this.pg.query(
+                'CREATE TABLE IF NOT EXISTS proofs (id BIGSERIAL PRIMARY KEY, device_id TEXT, ts BIGINT, energy_wh BIGINT, nonce BIGINT, mint_tx TEXT, mint_status TEXT)'
+            );
             log('Postgres storage ready (DATABASE_URL)');
         } else {
             this.db.exec(`
                 CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, public_key TEXT);
                 CREATE TABLE IF NOT EXISTS energy_store (device_id TEXT PRIMARY KEY, energy_wh INTEGER, nonce INTEGER);
                 CREATE TABLE IF NOT EXISTS pools (pool_id TEXT PRIMARY KEY, threshold INTEGER, total_energy INTEGER, device_energy TEXT, created_at INTEGER);
+                CREATE TABLE IF NOT EXISTS proofs (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, ts INTEGER, energy_wh INTEGER, nonce INTEGER, mint_tx TEXT, mint_status TEXT);
             `);
             log(`SQLite storage ready (${this.sqlitePath})`);
         }
@@ -134,6 +138,49 @@ class Storage {
         }
         this.db.prepare('INSERT OR REPLACE INTO pools (pool_id, threshold, total_energy, device_energy, created_at) VALUES (?, ?, ?, ?, ?)')
             .run(pool_id, threshold, total_energy, JSON.stringify(device_energy), created_at);
+    }
+
+    async saveProof(device_id, ts, energy_wh, nonce, mint_tx, mint_status) {
+        if (this.backend === 'postgres') {
+            await this.pg.query(
+                'INSERT INTO proofs (device_id, ts, energy_wh, nonce, mint_tx, mint_status) VALUES ($1, $2, $3, $4, $5, $6)',
+                [device_id, ts, energy_wh, nonce, mint_tx, mint_status]
+            );
+            return;
+        }
+        this.db.prepare('INSERT INTO proofs (device_id, ts, energy_wh, nonce, mint_tx, mint_status) VALUES (?, ?, ?, ?, ?, ?)')
+            .run(device_id, ts, energy_wh, nonce, mint_tx, mint_status);
+    }
+
+    async updateProofStatus(device_id, nonce, mint_tx, mint_status) {
+        if (this.backend === 'postgres') {
+            await this.pg.query(
+                'UPDATE proofs SET mint_tx = $3, mint_status = $4 WHERE device_id = $1 AND nonce = $2',
+                [device_id, nonce, mint_tx, mint_status]
+            );
+            return;
+        }
+        this.db.prepare('UPDATE proofs SET mint_tx = ?, mint_status = ? WHERE device_id = ? AND nonce = ?')
+            .run(mint_tx, mint_status, device_id, nonce);
+    }
+
+    async loadProofs(device_id = null, limit = 100) {
+        if (this.backend === 'postgres') {
+            const params = [];
+            let sql = 'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status FROM proofs';
+            if (device_id) { sql += ' WHERE device_id = $1'; params.push(device_id); }
+            sql += ' ORDER BY id DESC LIMIT ' + Math.min(limit, 1000);
+            const { rows } = await this.pg.query(sql, params);
+            return rows;
+        }
+        if (device_id) {
+            return this.db.prepare(
+                'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status FROM proofs WHERE device_id = ? ORDER BY id DESC LIMIT ?'
+            ).all(device_id, Math.min(limit, 1000));
+        }
+        return this.db.prepare(
+            'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status FROM proofs ORDER BY id DESC LIMIT ?'
+        ).all(Math.min(limit, 1000));
     }
 }
 
