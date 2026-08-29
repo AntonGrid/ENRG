@@ -17,6 +17,24 @@ ENRG connects physical energy producers (solar panels, wind turbines, meters) to
 
 ---
 
+## Ecosystem
+
+ENRG is **Layer 2** of the Axis ecosystem — the first domain profile (energy),
+living proof that the trust standard works on real hardware.
+One map of all layers: [**Ecosystem map**](https://github.com/AntonGrid/Axis-protocol/blob/main/docs/ECOSYSTEM.md) ·
+[**Constitution**](https://github.com/AntonGrid/Axis-protocol/blob/main/docs/CONSTITUTION.md) ·
+[**Glossary**](https://github.com/AntonGrid/Axis-protocol/blob/main/docs/GLOSSARY.md).
+
+| Layer | Repo |
+|---|---|
+| L0 Standard | [Axis-protocol](https://github.com/AntonGrid/Axis-protocol) |
+| L1 Reference implementation | [Axis-core](https://github.com/AntonGrid/Axis-core) |
+| **L2 Domain profile (energy)** | **ENRG (this repo)** |
+| L3 Intelligence | [ENRG-AI](https://github.com/AntonGrid/ENRG-AI) |
+| L4 Interfaces | [enrg-landing](https://github.com/AntonGrid/enrg-landing) · [Axis-connect](https://github.com/AntonGrid/Axis-connect) |
+
+---
+
 ## Repository Structure
 
 - `programs/` — Solana smart contracts (Anchor).
