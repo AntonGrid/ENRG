@@ -436,4 +436,20 @@ pub mod enrg_mvp {
     ) -> Result<()> {
         instructions::governance::governance_mint(ctx, proposal_id)
     }
+
+    // ═══════════════════════════════════════════════
+    //  PHASE 11 — Proof-of-Intelligence (ADR-0010)
+    // ═══════════════════════════════════════════════
+
+    /// Commit a federated contribution digest on-chain (PDA
+    /// [b"poi-commit", round, device_id]). The device Ed25519-signs
+    /// b"enrg:poi:commit" || round || device_id || digest.
+    pub fn commit_contribution(
+        ctx: Context<CommitContribution>,
+        round: u64,
+        digest: [u8; 32],
+        signature: [u8; 64],
+    ) -> Result<()> {
+        instructions::poi_commitment::commit_contribution(ctx, round, digest, signature)
+    }
 }

@@ -51,13 +51,13 @@ updated as the fixes land. The canonical audit report is
       Ed25519 signature via WebCrypto before labeling an attestation "verified"
       (`enrg-landing/src/lib/aiOracle.ts`); cross-platform canonical bytes
       proven against ENRG-AI `canonical_json_bytes`.
-- [x] **P1-4 PoI/ERS loop (collector)** — `scripts/ai_ers_collector.ts`:
-      signed AI bundle → Ed25519 verify → severity (mirrors `ers_loop.py`) →
-      rate-limited on-chain `report_anomaly` (oracle key). ENRG-AI anomaly
-      signals carry `meta.device_id` (test-covered). Cron workflow
-      `.github/workflows/ers-loop.yml` (every 6h, secrets ORACLE_KEY /
-      AXIS_AI_SIGNING_PUBKEY). _Remaining: on-chain commitment PDA for
-      contribution digests._
+- [x] **P1-4 PoI/ERS loop** — `commit_contribution` on-chain: PDA
+      `[b"poi-commit", round, device_id]` stores the contribution digest +
+      device Ed25519 signature (message layout pinned by Rust + Python tests).
+      `scripts/ai_ers_collector.ts` (signed AI bundle → severity →
+      rate-limited `report_anomaly`), cron workflow `ers-loop.yml`, ENRG-AI
+      anomaly signals carry `meta.device_id`, `digest.py::onchain_commit_message`
+      matches the program. Anchor: 59 passing.
 - [x] **P1-5 Mock tests vs real peg** — `tests/test_mainnet_critical.py` now
       mirrors `math.rs` (`energy_wh * SRC_BASIS / energy_per_src`) + peg tests
       `test_peg_one_mwh_equals_one_src` / `test_peg_fractional_mwh`.

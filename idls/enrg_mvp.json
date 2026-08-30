@@ -592,6 +592,112 @@
       "args": []
     },
     {
+      "name": "commit_contribution",
+      "docs": [
+        "Commit a federated contribution digest on-chain (PDA",
+        "[b\"poi-commit\", round, device_id]). The device Ed25519-signs",
+        "b\"enrg:poi:commit\" || round || device_id || digest."
+      ],
+      "discriminator": [
+        25,
+        178,
+        108,
+        140,
+        194,
+        0,
+        214,
+        214
+      ],
+      "accounts": [
+        {
+          "name": "commitment",
+          "docs": [
+            "Commitment PDA [b\"poi-commit\", round, device_id]."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  111,
+                  105,
+                  45,
+                  99,
+                  111,
+                  109,
+                  109,
+                  105,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "round"
+              },
+              {
+                "kind": "account",
+                "path": "device_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "device_id",
+          "docs": [
+            "The device that produced the contribution. Not a transaction signer —",
+            "ownership is proven by the Ed25519 signature over the commit message.",
+            "signed message; its validity is enforced by verify_ed25519_signature",
+            "against the Ed25519 precompile in the same transaction."
+          ]
+        },
+        {
+          "name": "payer",
+          "docs": [
+            "Rent payer (usually the oracle/aggregator; anyone may commit)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "instructions",
+          "docs": [
+            "Instructions sysvar — required for Ed25519 signature verification.",
+            "verify_ed25519_signature (INSTRUCTIONS_SYSVAR_ID)."
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "round",
+          "type": "u64"
+        },
+        {
+          "name": "digest",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "signature",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
+        }
+      ]
+    },
+    {
       "name": "create_pool",
       "discriminator": [
         233,
@@ -4256,6 +4362,19 @@
       ]
     },
     {
+      "name": "PoiCommitment",
+      "discriminator": [
+        56,
+        158,
+        173,
+        11,
+        68,
+        1,
+        139,
+        88
+      ]
+    },
+    {
       "name": "PolicyRegistry",
       "discriminator": [
         175,
@@ -4645,6 +4764,19 @@
         93,
         194,
         96
+      ]
+    },
+    {
+      "name": "PoiCommitted",
+      "discriminator": [
+        82,
+        12,
+        91,
+        94,
+        160,
+        30,
+        213,
+        131
       ]
     },
     {
@@ -6462,6 +6594,104 @@
               "Current number of the owner's devices in the Active state."
             ],
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoiCommitment",
+      "docs": [
+        "Proof-of-Intelligence contribution commitment (ADR-0010 / ENRG-AI Phase 2).",
+        "",
+        "On-chain binding of a federated contribution digest to a device:",
+        "PDA seeds: [b\"poi-commit\", round(8 LE), device_id(32)]",
+        "",
+        "The device signs",
+        "b\"enrg:poi:commit\" || round(8 LE) || device_id(32) || digest(32)",
+        "(verified on-chain via the Ed25519 precompile + Instructions sysvar), so a",
+        "third party cannot forge a contribution for a device. Anyone may pay the",
+        "rent (the oracle/aggregator usually does) — the signature binds the digest",
+        "to the device, not the payer."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "docs": [
+              "Device Ed25519 public key that signed the contribution."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "round",
+            "docs": [
+              "Federated round number."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "digest",
+            "docs": [
+              "SHA-256 digest of the canonical contribution JSON (raw bytes)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "signature",
+            "docs": [
+              "Ed25519 signature over the canonical commit message."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          },
+          {
+            "name": "committed_at",
+            "docs": [
+              "Commitment timestamp (unix)."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PoiCommitted",
+      "docs": [
+        "Emitted when a device commits a Proof-of-Intelligence contribution digest."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "type": "pubkey"
+          },
+          {
+            "name": "round",
+            "type": "u64"
+          },
+          {
+            "name": "digest",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "committed_at",
+            "type": "i64"
           }
         ]
       }

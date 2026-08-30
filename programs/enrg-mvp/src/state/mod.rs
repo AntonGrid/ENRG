@@ -16,6 +16,7 @@ pub mod events;
 pub mod config;
 pub mod reputation;
 pub mod policy;
+pub mod poi;
 
 pub use vault::*;
 pub use producer::*;
@@ -35,3 +36,4 @@ pub use events::*;
 pub use config::*;
 pub use reputation::*;
 pub use policy::*;
+pub use poi::*;

@@ -28,6 +28,15 @@ pub struct PoolJoined {
     pub producer: Pubkey,
 }
 
+/// Emitted when a device commits a Proof-of-Intelligence contribution digest.
+#[event]
+pub struct PoiCommitted {
+    pub device_id: Pubkey,
+    pub round: u64,
+    pub digest: [u8; 32],
+    pub committed_at: i64,
+}
+
 /// Emitted when a trusted oracle is added.
 #[event]
 pub struct OracleAdded {
