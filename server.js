@@ -647,6 +647,11 @@ const MINT_QUEUE_MAX = parseInt(process.env.MINT_QUEUE_MAX || '10000', 10);
 const MINT_MAX_ATTEMPTS = parseInt(process.env.MINT_MAX_ATTEMPTS || '8', 10);
 const MINT_RETRY_BASE_MS = parseInt(process.env.MINT_RETRY_BASE_MS || '5000', 10);
 const DEVICE_MIN_INTERVAL_MS = parseInt(process.env.DEVICE_MIN_INTERVAL_MS || '0', 10);
+// P3-2 (audit 2026-08-30): mint only proofs >= this energy threshold (Wh).
+// Devices running the firmware aggregation window (P3-1) send ONE aggregated
+// proof per window; smaller/legacy readings still accumulate in stats but do
+// not waste an on-chain transaction. 0 = mint everything (default).
+const MINT_MIN_ENERGY_WH = parseInt(process.env.MINT_MIN_ENERGY_WH || '0', 10);
 
 const mintQueue = [];
 const mintQueueIds = new Set(); // dedupe key `device_id:nonce`
@@ -1320,6 +1325,18 @@ app.post('/api/v1/proof/submit', async (req, res) => {
                 sig_mode: proof.sig_mode,
             };
             await storage.updateProofStatus(device_id, proof.nonce, null, 'accepted');
+            // P3-2: aggregation support — proofs below the mint threshold are
+            // accepted and counted in stats, but do not mint (devices with the
+            // P3-1 firmware window send one aggregated proof per window, so the
+            // on-chain transaction rate drops ~10-60x).
+            if (MINT_MIN_ENERGY_WH > 0 && energyWhInt < MINT_MIN_ENERGY_WH) {
+                return res.json({
+                    ok: true,
+                    accumulated: newEnergy,
+                    mint: 'deferred',
+                    mint_reason: 'below_mint_threshold',
+                });
+            }
             if (enqueueMint({ device_id, proof: persisted, producerOverride: producer })) {
                 return res.json({ ok: true, accumulated: newEnergy, mint: 'queued' });
             }

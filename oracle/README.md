@@ -67,6 +67,7 @@ Binary proofs are **enqueued** and the handler returns immediately with
 | `MINT_MAX_ATTEMPTS` | `8` | per-proof mint retries (exponential backoff) |
 | `MINT_RETRY_BASE_MS` | `5000` | retry backoff base |
 | `DEVICE_MIN_INTERVAL_MS` | `0` (off) | min interval between proofs per device (anti-flood) |
+| `MINT_MIN_ENERGY_WH` | `0` (off) | mint only proofs ≥ this energy (Wh). With the P3-1 firmware aggregation window the device sends one aggregated proof per window; smaller/legacy readings accumulate in stats without spending an on-chain tx |
 
 Monitoring: `GET /api/v1/proofs?mint_status=…` shows `minted` / `accepted` /
 `deferred` per proof; `GET /api/v1/stats` aggregates counts.

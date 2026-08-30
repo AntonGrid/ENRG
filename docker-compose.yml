@@ -20,6 +20,11 @@ services:
       RPC_ENDPOINT: ${RPC_ENDPOINT:-}
       # P0-3 (audit 2026-08-30): comma-separated RPC failover list.
       RPC_ENDPOINTS: ${RPC_ENDPOINTS:-}
+      # P0-2 (audit 2026-08-30): mint queue knobs.
+      MINT_QUEUE_MAX: ${MINT_QUEUE_MAX:-10000}
+      MINT_MAX_ATTEMPTS: ${MINT_MAX_ATTEMPTS:-8}
+      # P3-2 (audit 2026-08-30): mint only proofs >= this energy (Wh).
+      MINT_MIN_ENERGY_WH: ${MINT_MIN_ENERGY_WH:-0}
     volumes:
       # Persistence of the SQLite store and OTA images (ADR-0008).
       - ./enrg.db:/app/enrg.db

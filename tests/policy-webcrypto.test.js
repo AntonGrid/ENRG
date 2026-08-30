@@ -87,4 +87,15 @@ describe('Policy Engine — WebCrypto validation (P2-1a)', function () {
         assert.strictEqual(asyncRes.status, 400);
         assert.strictEqual(asyncRes.error, 'unknown device');
     });
+
+    it('accepts an aggregated proof (P3-2, firmware aggregation window)', async () => {
+        // A device running P3-1 signs ONE proof per window with energy_wh =
+        // the accumulated value (e.g. 0.5 MWh). The oracle mints it directly.
+        const device = makeDevice();
+        const aggWh = 500_000; // 0.5 MWh aggregated
+        const proof = makeBinaryProof(device, 7, device.ctx.nowSec - 5, aggWh);
+        const res = await policy.validateProofAsync(proof, device.ctx);
+        assert.ok(res.ok, `aggregated proof must pass: ${JSON.stringify(res)}`);
+        assert.strictEqual(res.proof.energy_wh, aggWh);
+    });
 });
