@@ -99,19 +99,36 @@ class MockOracleReport:
 def simulate_mint(
     mint_state: MockMintState,
     report: MockOracleReport,
-    conversion_rate: float = 1000.0,  # 1 kWh = 1000 SRC
+    conversion_rate: float | None = None,
 ) -> int:
     """
     Simulate mint_energy logic.
-    Returns amount of SRC tokens minted (in smallest unit, 9 decimals).
+
+    Mirrors the on-chain formula (programs/enrg-mvp/src/math.rs):
+        reward_atomics = energy_wh * SRC_BASIS / energy_per_src(total_supply)
+
+    At genesis energy_per_src(0) = 1_000_000 Wh (= 1 MWh) and SRC_BASIS = 1e9,
+    so 1 MWh of verified energy mints exactly 1 SRC (1e9 atomics) — the
+    protocol peg "1 MWh = 1 SRC".
+
+    NOTE (audit P1-5): the legacy mock used conversion_rate = 1000 SRC/kWh
+    (1 MWh = 1_000_000 SRC), which contradicted the on-chain math. The rate
+    parameter is kept only for explicit off-chain test scenarios.
     """
-    energy_mili = int(report.verified_energy_kwh * conversion_rate * 10_000)
-    mint_state.total_supply += energy_mili
-    return energy_mili
+    if conversion_rate is not None:
+        # Explicit non-peg scenario (documented use only).
+        return int(report.verified_energy_kwh * conversion_rate * 10_000)
+
+    energy_wh = int(report.verified_energy_kwh * 1000)  # kWh -> Wh
+    src_basis = 1_000_000_000  # SRC_BASIS = 10^9 atomics per SRC
+    energy_per_src = 1_000_000  # INITIAL_ENERGY_PER_SRC = 1 MWh (supply == 0)
+    reward = (energy_wh * src_basis) // energy_per_src
+    mint_state.total_supply += reward
+    return reward
 
 
 def test_mint_src_simulation():
-    """Mint SRC tokens from an oracle report."""
+    """Mint SRC tokens from an oracle report (peg: 1 MWh = 1 SRC at genesis)."""
     mint = MockMintState(total_supply=1_000_000_000)  # 1 SRC initial
     report = MockOracleReport(
         device_id="dev_solar_01",
@@ -123,6 +140,25 @@ def test_mint_src_simulation():
     assert minted > 0, "Must mint positive amount"
     assert mint.total_supply == 1_000_000_000 + minted, "Supply must increase"
     print(f"✅ Mint simulation: minted {minted} SRC for {report.verified_energy_kwh} kWh")
+
+
+def test_peg_one_mwh_equals_one_src():
+    """P0-1 (audit 2026-08-30): the protocol peg, 1 MWh = 1 SRC at genesis."""
+    mint = MockMintState(total_supply=0)
+    report = MockOracleReport("dev_solar_01", verified_energy_kwh=1000.0, timestamp=1)  # 1000 kWh = 1 MWh
+    minted = simulate_mint(mint, report)
+    assert minted == 1_000_000_000, f"1 MWh must mint exactly 1 SRC, got {minted}"
+    print("✅ Peg: 1 MWh → 1 SRC (1e9 atomics)")
+
+
+def test_peg_fractional_mwh():
+    """0.5 MWh → 0.5 SRC (linear at genesis)."""
+    mint = MockMintState(total_supply=0)
+    report = MockOracleReport("dev_solar_01", verified_energy_kwh=500.0, timestamp=1)  # 0.5 MWh
+    minted = simulate_mint(mint, report)
+    assert minted == 500_000_000, f"0.5 MWh must mint 0.5 SRC, got {minted}"
+    print("✅ Peg: 0.5 MWh → 0.5 SRC")
+
 
 
 # ──────────────────────────────────────────────
