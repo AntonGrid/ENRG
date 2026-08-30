@@ -74,9 +74,12 @@ updated as the fixes land. The canonical audit report is
       `/api/v1/proof/submit`. Tests: `tests/policy-webcrypto.test.js` (5).
 - [x] **P2-2 CI for Axis-connect & ENRG-AI** — `.github/workflows/ci.yml`
       added to both repos (Axis-connect: vitest+build+e2e; ENRG-AI: pytest).
-- [x] **P2-3 Browser wallet (provider step)** — `src/lib/walletProvider.ts`
-      + tests: injected-wallet detection/normalization (Phantom/Solflare).
-      _Remaining: wire it into App/Settings/enrgTx signing._
+- [x] **P2-3 Browser wallet** — `src/lib/walletProvider.ts` (detection +
+      `WalletLike` type) and full integration: `Settings` can connect
+      Phantom/Solflare, `App` switches the active wallet, `enrgTx` signs via
+      the extension (`signTransaction`/`signAllTransactions`) — the private key
+      never touches the page. Local (localStorage) wallet remains as fallback.
+      Tests: 64 vitest passing (+2 Settings injected cases).
 - [x] **P2-4 Mainnet runbook** — `docs/MAINNET-RUNBOOK.md` (key ceremony,
       deploy, bootstrap, oracle, firmware, AI, go/no-go).
 
