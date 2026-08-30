@@ -98,4 +98,27 @@ describe('Policy Engine — WebCrypto validation (P2-1a)', function () {
         assert.ok(res.ok, `aggregated proof must pass: ${JSON.stringify(res)}`);
         assert.strictEqual(res.proof.energy_wh, aggWh);
     });
+
+    it('validateRegisterAsync: accepts a valid proof-of-possession', async () => {
+        const kp = nacl.sign.keyPair();
+        const deviceId = new PublicKey(kp.publicKey).toBase58();
+        const publicKeyB64 = Buffer.from(kp.publicKey).toString('base64');
+        const msg = Buffer.from(`${deviceId}|${publicKeyB64}`, 'utf8');
+        const sig = Buffer.from(nacl.sign.detached(msg, kp.secretKey)).toString('base64');
+
+        const res = await policy.validateRegisterAsync(deviceId, publicKeyB64, sig);
+        assert.ok(res.ok);
+    });
+
+    it('validateRegisterAsync: rejects a wrong signature (403)', async () => {
+        const kp = nacl.sign.keyPair();
+        const other = nacl.sign.keyPair();
+        const deviceId = new PublicKey(kp.publicKey).toBase58();
+        const publicKeyB64 = Buffer.from(kp.publicKey).toString('base64');
+        const msg = Buffer.from(`${deviceId}|${publicKeyB64}`, 'utf8');
+        const sig = Buffer.from(nacl.sign.detached(msg, other.secretKey)).toString('base64'); // wrong key
+
+        const res = await policy.validateRegisterAsync(deviceId, publicKeyB64, sig);
+        assert.strictEqual(res.status, 403);
+    });
 });

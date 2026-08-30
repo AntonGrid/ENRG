@@ -749,7 +749,7 @@ app.post('/api/v1/device/register', [
 
     // CR-1: Policy Engine — device_id format, key/signature lengths and
     // proof-of-possession over the message `${device_id}|${public_key}` (ADR-0003).
-    const v = policy.validateRegister(device_id, public_key, signature);
+    const v = await policy.validateRegisterAsync(device_id, public_key, signature);
     if (!v.ok) {
         if (v.status === 403) {
             logger.warn(`⛔ Register denied (bad signature) for device ${device_id}`);

@@ -812,6 +812,46 @@ function validateRegister(device_id, public_key, signature) {
     return { ok: true, pubBytes, sigBytes };
 }
 
+/**
+ * P2-1a: WebCrypto equivalent of validateRegister (proof-of-possession).
+ * Same contract and HTTP codes; used by /api/v1/device/register.
+ */
+async function validateRegisterAsync(device_id, public_key, signature) {
+    const d = validateDeviceId(device_id);
+    if (!d.ok) return d;
+
+    let pubBytes;
+    try {
+        pubBytes = Buffer.from(public_key, 'base64');
+        if (pubBytes.length !== 32) {
+            return fail(400, 'invalid public key (must be 32 bytes base64)');
+        }
+    } catch (e) {
+        return fail(400, 'invalid public key format');
+    }
+
+    let sigBytes;
+    try {
+        sigBytes = Buffer.from(signature, 'base64');
+        if (sigBytes.length !== 64) {
+            return fail(400, 'invalid signature (must be 64 bytes base64)');
+        }
+    } catch (e) {
+        return fail(400, 'invalid signature format');
+    }
+
+    const msgBytes = Buffer.from(`${device_id}|${public_key}`, 'utf8');
+    const verified = await verifyEd25519WebCrypto(
+        new Uint8Array(msgBytes),
+        new Uint8Array(sigBytes),
+        new Uint8Array(pubBytes),
+    );
+    if (!verified) {
+        return fail(403, 'invalid signature: proof of device key ownership required');
+    }
+    return { ok: true, pubBytes, sigBytes };
+}
+
 // Load the configuration when the module is imported (oracle startup).
 loadConfig();
 
@@ -849,6 +889,7 @@ module.exports = {
     validateProof,
     validateProofAsync,
     validateRegister,
+    validateRegisterAsync,
     // webcrypto (P2-1a)
     verifyEd25519WebCrypto,
     validateSignatureAsync,
