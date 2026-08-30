@@ -41,12 +41,17 @@ class Storage {
                 'CREATE TABLE IF NOT EXISTS pools (pool_id TEXT PRIMARY KEY, threshold BIGINT, total_energy BIGINT, device_energy TEXT, created_at BIGINT)'
             );
             await this.pg.query(
-                'CREATE TABLE IF NOT EXISTS proofs (id BIGSERIAL PRIMARY KEY, device_id TEXT, ts BIGINT, energy_wh BIGINT, nonce BIGINT, mint_tx TEXT, mint_status TEXT, proof_json TEXT)'
+                'CREATE TABLE IF NOT EXISTS proofs (id BIGSERIAL PRIMARY KEY, device_id TEXT, ts BIGINT, energy_wh BIGINT, nonce BIGINT, mint_tx TEXT, mint_status TEXT, proof_json TEXT, oracle_id TEXT)'
             );
             // P0-2 (audit 2026-08-30): migration for pre-existing deployments —
             // add proof_json for the mint queue recovery (drain after restart).
             await this.pg.query(
                 "ALTER TABLE proofs ADD COLUMN IF NOT EXISTS proof_json TEXT"
+            ).catch(() => {});
+            // P0-1a/P3-5 (audit 2026-08-30): per-oracle attribution for the
+            // multi-oracle network — which oracle accepted/minted each proof.
+            await this.pg.query(
+                "ALTER TABLE proofs ADD COLUMN IF NOT EXISTS oracle_id TEXT"
             ).catch(() => {});
             log('Postgres storage ready (DATABASE_URL)');
         } else {
@@ -54,12 +59,15 @@ class Storage {
                 CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, public_key TEXT);
                 CREATE TABLE IF NOT EXISTS energy_store (device_id TEXT PRIMARY KEY, energy_wh INTEGER, nonce INTEGER);
                 CREATE TABLE IF NOT EXISTS pools (pool_id TEXT PRIMARY KEY, threshold INTEGER, total_energy INTEGER, device_energy TEXT, created_at INTEGER);
-                CREATE TABLE IF NOT EXISTS proofs (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, ts INTEGER, energy_wh INTEGER, nonce INTEGER, mint_tx TEXT, mint_status TEXT, proof_json TEXT);
+                CREATE TABLE IF NOT EXISTS proofs (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, ts INTEGER, energy_wh INTEGER, nonce INTEGER, mint_tx TEXT, mint_status TEXT, proof_json TEXT, oracle_id TEXT);
             `);
             // P0-2: SQLite migration for pre-existing databases.
             const cols = this.db.prepare("PRAGMA table_info(proofs)").all();
             if (!cols.some((c) => c.name === 'proof_json')) {
                 this.db.exec('ALTER TABLE proofs ADD COLUMN proof_json TEXT');
+            }
+            if (!cols.some((c) => c.name === 'oracle_id')) {
+                this.db.exec('ALTER TABLE proofs ADD COLUMN oracle_id TEXT');
             }
             log(`SQLite storage ready (${this.sqlitePath})`);
         }
@@ -150,16 +158,16 @@ class Storage {
             .run(pool_id, threshold, total_energy, JSON.stringify(device_energy), created_at);
     }
 
-    async saveProof(device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json = null) {
+    async saveProof(device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json = null, oracle_id = null) {
         if (this.backend === 'postgres') {
             await this.pg.query(
-                'INSERT INTO proofs (device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-                [device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json]
+                'INSERT INTO proofs (device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)',
+                [device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id]
             );
             return;
         }
-        this.db.prepare('INSERT INTO proofs (device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json) VALUES (?, ?, ?, ?, ?, ?, ?)')
-            .run(device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json);
+        this.db.prepare('INSERT INTO proofs (device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id);
     }
 
     async updateProofStatus(device_id, nonce, mint_tx, mint_status) {
@@ -177,7 +185,7 @@ class Storage {
     async loadProofs(device_id = null, limit = 100) {
         if (this.backend === 'postgres') {
             const params = [];
-            let sql = 'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json FROM proofs';
+            let sql = 'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id FROM proofs';
             if (device_id) { sql += ' WHERE device_id = $1'; params.push(device_id); }
             sql += ' ORDER BY id DESC LIMIT ' + Math.min(limit, 1000);
             const { rows } = await this.pg.query(sql, params);
@@ -185,11 +193,11 @@ class Storage {
         }
         if (device_id) {
             return this.db.prepare(
-                'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json FROM proofs WHERE device_id = ? ORDER BY id DESC LIMIT ?'
+                'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id FROM proofs WHERE device_id = ? ORDER BY id DESC LIMIT ?'
             ).all(device_id, Math.min(limit, 1000));
         }
         return this.db.prepare(
-            'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json FROM proofs ORDER BY id DESC LIMIT ?'
+            'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id FROM proofs ORDER BY id DESC LIMIT ?'
         ).all(Math.min(limit, 1000));
     }
 
@@ -202,14 +210,65 @@ class Storage {
         const cap = Math.min(limit, 50000);
         if (this.backend === 'postgres') {
             const { rows } = await this.pg.query(
-                "SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json FROM proofs WHERE mint_status = 'accepted' ORDER BY id ASC LIMIT $1",
+                "SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id FROM proofs WHERE mint_status = 'accepted' ORDER BY id ASC LIMIT $1",
                 [cap]
             );
             return rows;
         }
         return this.db.prepare(
-            "SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json FROM proofs WHERE mint_status = 'accepted' ORDER BY id ASC LIMIT ?"
+            "SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id FROM proofs WHERE mint_status = 'accepted' ORDER BY id ASC LIMIT ?"
         ).all(cap);
+    }
+
+    /**
+     * P3-5 (audit 2026-08-30): per-oracle attribution — how many proofs and
+     * how much energy each oracle accepted/minted. Feeds the public
+     * multi-oracle status endpoint (/api/v1/oracles).
+     */
+    async loadOracleStats() {
+        if (this.backend === 'postgres') {
+            const { rows } = await this.pg.query(`
+                SELECT
+                    oracle_id,
+                    COUNT(*) AS total_proofs,
+                    COUNT(*) FILTER (WHERE mint_status = 'minted') AS minted_proofs,
+                    COALESCE(SUM(energy_wh), 0) AS total_energy_wh,
+                    COALESCE(SUM(energy_wh) FILTER (WHERE mint_status = 'minted'), 0) AS minted_energy_wh,
+                    COALESCE(MAX(ts), 0) AS last_proof_ts
+                FROM proofs
+                WHERE oracle_id IS NOT NULL
+                GROUP BY oracle_id
+                ORDER BY total_energy_wh DESC
+            `);
+            return rows.map((r) => ({
+                oracle_id: r.oracle_id,
+                total_proofs: Number(r.total_proofs) || 0,
+                minted_proofs: Number(r.minted_proofs) || 0,
+                total_energy_wh: Number(r.total_energy_wh) || 0,
+                minted_energy_wh: Number(r.minted_energy_wh) || 0,
+                last_proof_ts: Number(r.last_proof_ts) || 0,
+            }));
+        }
+        return this.db.prepare(`
+            SELECT
+                oracle_id,
+                COUNT(*) AS total_proofs,
+                SUM(CASE WHEN mint_status = 'minted' THEN 1 ELSE 0 END) AS minted_proofs,
+                COALESCE(SUM(energy_wh), 0) AS total_energy_wh,
+                COALESCE(SUM(CASE WHEN mint_status = 'minted' THEN energy_wh ELSE 0 END), 0) AS minted_energy_wh,
+                COALESCE(MAX(ts), 0) AS last_proof_ts
+            FROM proofs
+            WHERE oracle_id IS NOT NULL
+            GROUP BY oracle_id
+            ORDER BY total_energy_wh DESC
+        `).all().map((r) => ({
+            oracle_id: r.oracle_id,
+            total_proofs: Number(r.total_proofs) || 0,
+            minted_proofs: Number(r.minted_proofs) || 0,
+            total_energy_wh: Number(r.total_energy_wh) || 0,
+            minted_energy_wh: Number(r.minted_energy_wh) || 0,
+            last_proof_ts: Number(r.last_proof_ts) || 0,
+        }));
     }
 
     // Ecosystem stats aggregated from the proofs table — the single source of

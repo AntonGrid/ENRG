@@ -79,4 +79,29 @@ describe('Mint queue storage (P0-2)', function () {
         assert.strictEqual(rows.length, 2);
         assert.ok('proof_json' in rows[0], 'loadProofs must include proof_json');
     });
+
+    it('persists oracle_id and aggregates per-oracle stats (P3-5)', async () => {
+        // Fresh oracle-attributed rows.
+        await storage.saveProof('dev-ora-a', 1722000100, 1000, 11, null, 'accepted', '{}', 'ora-AAA');
+        await storage.saveProof('dev-ora-a', 1722000101, 2000, 12, null, 'minted', '{}', 'ora-AAA');
+        await storage.saveProof('dev-ora-b', 1722000102, 500, 13, null, 'minted', '{}', 'ora-BBB');
+
+        const stats = await storage.loadOracleStats();
+        const a = stats.find((s) => s.oracle_id === 'ora-AAA');
+        const b = stats.find((s) => s.oracle_id === 'ora-BBB');
+
+        assert.ok(a, 'oracle AAA present in stats');
+        assert.strictEqual(a.total_proofs, 2);
+        assert.strictEqual(a.minted_proofs, 1);
+        assert.strictEqual(a.total_energy_wh, 3000);
+        assert.strictEqual(a.minted_energy_wh, 2000);
+
+        assert.ok(b, 'oracle BBB present in stats');
+        assert.strictEqual(b.minted_proofs, 1);
+        assert.strictEqual(b.total_energy_wh, 500);
+
+        // loadProofs now carries oracle_id for per-proof attribution.
+        const rows = await storage.loadProofs('dev-ora-a');
+        assert.strictEqual(rows[0].oracle_id, 'ora-AAA');
+    });
 });

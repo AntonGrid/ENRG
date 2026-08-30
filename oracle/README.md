@@ -71,6 +71,23 @@ Binary proofs are **enqueued** and the handler returns immediately with
 
 Monitoring: `GET /api/v1/proofs?mint_status=…` shows `minted` / `accepted` /
 `deferred` per proof; `GET /api/v1/stats` aggregates counts.
+
+## Multi-oracle network (P3-5, audit 2026-08-30)
+
+Every accepted proof is attributed to the oracle instance that accepted it
+(`oracle_id` column). The public status endpoint makes the network observable:
+
+- `GET /api/v1/oracles` → the trusted oracle set from the **on-chain
+  OracleRegistry** + per-oracle attribution (proofs / energy) from storage.
+  Every instance reports the same on-chain set, so anyone can verify which
+  oracle handled which proofs.
+- `GET /api/v1/proofs` now includes `oracle_id` per proof.
+
+This is the foundation of the multi-oracle rollout: 2+ independent instances
+(separate hosts, RPC providers, keys) can run against the same OracleRegistry
+and mint independently; attribution and the on-chain registry make the
+network state verifiable. See `docs/MAINNET-GOVERNANCE.md` and
+`docs/MAINNET-RUNBOOK.md` for the operator steps.
   - ⚠️ **Pool (audit 2026-08-18, P1):** the off-chain pool accumulates energy,
     but does NOT distribute tokens. The real distribution happens on-chain
     (`instructions/pool.rs::distribute_pool`); the oracle passes `pool=null` to

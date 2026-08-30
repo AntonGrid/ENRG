@@ -1280,7 +1280,10 @@ app.post('/api/v1/proof/submit', async (req, res) => {
             device_signature: Array.from(proof.device_signature || []),
             sig_mode: proof.sig_mode,
         });
-        await storage.saveProof(device_id, proof.device_timestamp || nowSec, energyWhInt, proof.nonce, null, 'accepted', proofJson);
+        // P3-5 (audit 2026-08-30): attribute every proof to the oracle instance
+        // that accepted it — the multi-oracle network must be observable.
+        const acceptedBy = oracleKeypair ? oracleKeypair.publicKey.toBase58() : null;
+        await storage.saveProof(device_id, proof.device_timestamp || nowSec, energyWhInt, proof.nonce, null, 'accepted', proofJson, acceptedBy);
 
         if (pool_id && pools[pool_id]) {
             const pool = pools[pool_id];
@@ -1388,6 +1391,55 @@ app.get('/api/v1/stats', async (req, res) => {
         res.json(stats);
     } catch (e) {
         logger.error('❌ Error fetching stats:', e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
+// === MULTI-ORACLE STATUS (P3-5, audit 2026-08-30) ===
+// Public view of the oracle network: the trusted set from the on-chain
+// OracleRegistry + per-oracle attribution (proofs/energy) from the local
+// storage. Every oracle instance serves this endpoint, so the network state
+// is observable by anyone.
+app.get('/api/v1/oracles', async (req, res) => {
+    try {
+        const [registryPda] = PublicKey.findProgramAddressSync(
+            [Buffer.from('oracle-registry')], PROGRAM_ID
+        );
+        const connection = getConnection();
+        const program = readOnlyProgram(connection);
+        let onChain = [];
+        try {
+            const reg = await program.account.oracleRegistry.fetch(registryPda);
+            onChain = (reg.oracles || []).map((o) => o.toBase58());
+        } catch (e) {
+            // Registry not initialized yet — report an empty network.
+            logger.warn('⚠️ /api/v1/oracles: oracle-registry not readable: ' + (e && e.message));
+        }
+        const stats = await storage.loadOracleStats();
+        const self = oracleKeypair ? oracleKeypair.publicKey.toBase58() : null;
+
+        const oracles = onChain.map((id) => {
+            const s = stats.find((x) => x.oracle_id === id) || {};
+            return {
+                oracle_id: id,
+                is_this_instance: id === self,
+                total_proofs: s.total_proofs || 0,
+                minted_proofs: s.minted_proofs || 0,
+                total_energy_wh: s.total_energy_wh || 0,
+                minted_energy_wh: s.minted_energy_wh || 0,
+                last_proof_ts: s.last_proof_ts || 0,
+            };
+        });
+
+        res.json({
+            ok: true,
+            this_instance: self,
+            registry_pda: registryPda.toBase58(),
+            count: onChain.length,
+            oracles,
+        });
+    } catch (e) {
+        logger.error('❌ /api/v1/oracles error:', e);
         res.status(500).json({ error: e.message });
     }
 });

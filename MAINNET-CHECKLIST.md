@@ -100,6 +100,10 @@ updated as the fixes land. The canonical audit report is
       Ed25519-signed contributions, the server verifies each, closes the round
       with FedAvg + MAD and serves global weights. Tests:
       `ENRG-AI/tests/test_fed_transport.py` (5).
+- [x] **P3-5 Multi-oracle observability** — `oracle_id` attribution on every
+      proof + public `GET /api/v1/oracles` (on-chain OracleRegistry set +
+      per-oracle stats). Foundation for the 2+ oracle rollout; verified live
+      against the devnet registry (new oracle `HC8Was…` shows as this_instance).
 
 ---
 *Updated: 2026-08-30 (audit day 1).*
