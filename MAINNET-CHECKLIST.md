@@ -54,9 +54,10 @@ updated as the fixes land. The canonical audit report is
 - [x] **P1-4 PoI/ERS loop (collector)** — `scripts/ai_ers_collector.ts`:
       signed AI bundle → Ed25519 verify → severity (mirrors `ers_loop.py`) →
       rate-limited on-chain `report_anomaly` (oracle key). ENRG-AI anomaly
-      signals now carry `meta.device_id` (test-covered) so the collector
-      targets the right producer. _Remaining: cron deployment + on-chain
-      commitment PDA for contribution digests._
+      signals carry `meta.device_id` (test-covered). Cron workflow
+      `.github/workflows/ers-loop.yml` (every 6h, secrets ORACLE_KEY /
+      AXIS_AI_SIGNING_PUBKEY). _Remaining: on-chain commitment PDA for
+      contribution digests._
 - [x] **P1-5 Mock tests vs real peg** — `tests/test_mainnet_critical.py` now
       mirrors `math.rs` (`energy_wh * SRC_BASIS / energy_per_src`) + peg tests
       `test_peg_one_mwh_equals_one_src` / `test_peg_fractional_mwh`.
@@ -67,12 +68,15 @@ updated as the fixes land. The canonical audit report is
 ## 🟡 Nice-to-have
 
 - [x] **P2-1 Load tests** — `scripts/benchmark-oracle.js` (policy + storage
-      throughput). Finding P2-1a: tweetnacl verify ≈15 ms/call on this box
-      (~65 proofs/s) — migrate the hot path to WebCrypto.
+      throughput).
+- [x] **P2-1a WebCrypto hot path** — `policy.validateProofAsync` uses native
+      `node:crypto` Ed25519 (measured ~33× faster than tweetnacl); used by
+      `/api/v1/proof/submit`. Tests: `tests/policy-webcrypto.test.js` (5).
 - [x] **P2-2 CI for Axis-connect & ENRG-AI** — `.github/workflows/ci.yml`
       added to both repos (Axis-connect: vitest+build+e2e; ENRG-AI: pytest).
-- [ ] **P2-3 Browser wallet** — replace localStorage keypair with a
-      browser-wallet extension adapter in Axis-connect.
+- [x] **P2-3 Browser wallet (provider step)** — `src/lib/walletProvider.ts`
+      + tests: injected-wallet detection/normalization (Phantom/Solflare).
+      _Remaining: wire it into App/Settings/enrgTx signing._
 - [x] **P2-4 Mainnet runbook** — `docs/MAINNET-RUNBOOK.md` (key ceremony,
       deploy, bootstrap, oracle, firmware, AI, go/no-go).
 

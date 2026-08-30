@@ -1242,12 +1242,13 @@ app.post('/api/v1/proof/submit', async (req, res) => {
         }
 
         // CR-1/CR-2/CR-3/M-3/M-5: ALL incoming proof checks are done by the Policy
-        // Engine — policy.validateProof(): device_id format, energyWh, freshness
-        // timestamp, unknown device, monotonic nonce and Ed25519 signature.
-        // Key and nonce come from the on-chain Registry (single source of truth).
+        // Engine — policy.validateProofAsync(): device_id format, energyWh,
+        // freshness timestamp, unknown device, monotonic nonce and Ed25519
+        // signature (WebCrypto native verify, P2-1a). Key and nonce come from
+        // the on-chain Registry (single source of truth).
         const onChainNonce = producer.nonce ? producer.nonce.toNumber() : 0;
         const localNonce = (energyStore[device_id] || { nonce: 0 }).nonce;
-        const v = policy.validateProof(req.body, {
+        const v = await policy.validateProofAsync(req.body, {
             getPublicKey: () => Buffer.from(devicePubkey.toBytes()).toString('base64'),
             getLastNonce: () => Math.max(onChainNonce, localNonce),
         });

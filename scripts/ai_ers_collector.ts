@@ -122,7 +122,9 @@ async function main() {
     return;
   }
 
-  const keypair = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(ORACLE_KEY_PATH, 'utf8'))));
+  const keypair = Keypair.fromSecretKey(
+    Uint8Array.from(JSON.parse(process.env.ORACLE_KEY || fs.readFileSync(ORACLE_KEY_PATH, 'utf8'))),
+  );
   const connection = new Connection(RPC, 'confirmed');
   const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(keypair), {
     commitment: 'confirmed',

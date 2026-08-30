@@ -646,6 +646,124 @@ function validateProof(proof, ctx = {}) {
     };
 }
 
+// ════════════════════════════════════════════════════════════════
+// P2-1a (audit 2026-08-30): WebCrypto Ed25519 verification.
+//
+// tweetnacl (pure JS) measures ~15 ms/verify on some hosts (~65 proofs/s
+// ceiling). node:crypto WebCrypto uses native Ed25519 (~0.05-0.2 ms).
+// validateProofAsync is the drop-in async replacement for the hot path
+// /api/v1/proof/submit; the sync validateProof (tweetnacl) stays for
+// tests and non-critical callers.
+// ════════════════════════════════════════════════════════════════
+const { webcrypto } = require('crypto');
+const subtle = webcrypto.subtle;
+
+async function verifyEd25519WebCrypto(message, signature, publicKey) {
+    try {
+        const key = await subtle.importKey('raw', publicKey, { name: 'Ed25519' }, false, ['verify']);
+        return await subtle.verify({ name: 'Ed25519' }, key, signature, message);
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Async equivalent of validateSignature (WebCrypto). Same contract.
+ */
+async function validateSignatureAsync(p) {
+    let sigBytes;
+    let pubBytes;
+    try {
+        if (typeof p.signature !== 'string') throw new Error('bad signature type');
+        sigBytes = Buffer.from(p.signature, 'base64');
+        pubBytes = Buffer.from(p.publicKeyB64, 'base64');
+    } catch (e) {
+        return fail(400, 'invalid signature format');
+    }
+    if (sigBytes.length !== 64 || pubBytes.length !== 32) {
+        return fail(401, 'invalid signature');
+    }
+
+    let sigMode = null;
+    try {
+        if (p.deviceIdPubkey) {
+            const bmsg = buildDeviceMessage(p.deviceIdPubkey, p.nonce, p.timestamp, p.energyWhInt);
+            if (await verifyEd25519WebCrypto(new Uint8Array(bmsg), new Uint8Array(sigBytes), new Uint8Array(pubBytes))) {
+                sigMode = 'binary';
+            }
+        }
+        if (!sigMode) {
+            const lmsg = Buffer.from(`${p.device_id}|${p.rawTimestamp}|${p.rawEnergyWh}|${p.rawNonce}`, 'utf8');
+            if (await verifyEd25519WebCrypto(new Uint8Array(lmsg), new Uint8Array(sigBytes), new Uint8Array(pubBytes))) {
+                sigMode = 'legacy';
+            }
+        }
+    } catch (e) {
+        return fail(400, 'invalid signature');
+    }
+    if (!sigMode) return fail(401, 'invalid signature');
+
+    return { ok: true, sigMode, sigBytes, pubBytes, deviceIdPubkey: p.deviceIdPubkey };
+}
+
+/**
+ * Async equivalent of validateProof (WebCrypto verification). Same contract,
+ * same check order and HTTP codes.
+ */
+async function validateProofAsync(proof, ctx = {}) {
+    if (!proof || typeof proof !== 'object') {
+        return fail(400, 'missing fields');
+    }
+    const { device_id, timestamp, energyWh, nonce, signature, pool_id } = proof;
+    if (!device_id || timestamp === undefined || energyWh === undefined || nonce === undefined || !signature) {
+        return fail(400, 'missing fields');
+    }
+
+    const d = validateDeviceId(device_id);
+    if (!d.ok) return d;
+
+    const e = validateEnergyWh(energyWh);
+    if (!e.ok) return e;
+
+    const t = validateTimestamp(timestamp, ctx.nowSec);
+    if (!t.ok) return t;
+
+    const publicKeyB64 = ctx.getPublicKey ? ctx.getPublicKey(device_id) : ctx.publicKeyB64;
+    if (!publicKeyB64) return fail(400, 'unknown device');
+
+    const lastNonce = ctx.getLastNonce ? ctx.getLastNonce(device_id) : ctx.lastNonce || 0;
+    const n = validateNonce(nonce, lastNonce);
+    if (!n.ok) return n;
+
+    const s = await validateSignatureAsync({
+        device_id,
+        deviceIdPubkey: d.deviceIdPubkey,
+        publicKeyB64,
+        signature,
+        rawNonce: nonce,
+        rawTimestamp: timestamp,
+        rawEnergyWh: energyWh,
+        nonce: n.nonce,
+        timestamp: t.timestamp,
+        energyWhInt: e.energyWhInt,
+    });
+    if (!s.ok) return s;
+
+    return {
+        ok: true,
+        proof: {
+            device_id,
+            device_id_pubkey: s.deviceIdPubkey,
+            nonce: n.nonce,
+            device_timestamp: t.timestamp,
+            energy_wh: e.energyWhInt,
+            device_signature: s.sigBytes,
+            sig_mode: s.sigMode,
+        },
+        pool_id,
+    };
+}
+
 
 /**
  * Aggregate: full device-registration validation for /api/v1/device/register.
@@ -729,6 +847,10 @@ module.exports = {
     validateSignature,
     // aggregates
     validateProof,
+    validateProofAsync,
     validateRegister,
+    // webcrypto (P2-1a)
+    verifyEd25519WebCrypto,
+    validateSignatureAsync,
 };
 

@@ -1,0 +1,34 @@
+name: ERS loop (AI → on-chain report_anomaly)
+
+on:
+  schedule:
+    # Every 6 hours (ADR-0010 Layer 3, rate-limited per device).
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ERS collector
+        # ORACLE_KEY: JSON secret key of a member of the on-chain OracleRegistry.
+        env:
+          RPC_ENDPOINT: ${{ vars.RPC_ENDPOINT }}
+          ORACLE_KEY: ${{ secrets.ORACLE_KEY }}
+          AXIS_AI_SIGNING_PUBKEY: ${{ secrets.AXIS_AI_SIGNING_PUBKEY }}
+          DEVICES: ${{ vars.ERS_DEVICES }}
+          MIN_REPORT_INTERVAL_H: "24"
+        run: npx ts-node --transpile-only scripts/ai_ers_collector.ts

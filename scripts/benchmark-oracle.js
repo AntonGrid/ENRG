@@ -69,7 +69,17 @@ async function main() {
   }
   const t1 = process.hrtime.bigint();
   const secs = Number(t1 - t0) / 1e9;
-  console.log(`policy.validateProof: ${N} proofs in ${secs.toFixed(2)}s -> ${(N / secs).toFixed(0)} proofs/s (valid=${ok}/${N})`);
+  console.log(`policy.validateProof (tweetnacl): ${N} proofs in ${secs.toFixed(2)}s -> ${(N / secs).toFixed(0)} proofs/s (valid=${ok}/${N})`);
+
+  // P2-1a: the production hot path uses WebCrypto (native Ed25519).
+  const ta = process.hrtime.bigint();
+  for (const p of proofs) {
+    const r = await policy.validateProofAsync(p, device.ctx);
+    if (!r.ok) ok = -1;
+  }
+  const tb = process.hrtime.bigint();
+  const secsA = Number(tb - ta) / 1e9;
+  console.log(`policy.validateProofAsync (WebCrypto): ${N} proofs in ${secsA.toFixed(2)}s -> ${(N / secsA).toFixed(0)} proofs/s`);
 
   // ── 2. Storage persistence (SQLite) ──
   await storage.init();
@@ -90,10 +100,10 @@ async function main() {
   console.log('\nReference: 1000 devices × 1 proof/min ≈ 17 proofs/s — policy handles it easily;');
   console.log('the bottleneck is the serial on-chain mint (queue depth), not validation.');
   console.log('');
-  console.log('NOTE (P2-1a): tweetnacl Ed25519 verify measures ~15 ms/call on this box');
-  console.log('(~65 proofs/s ceiling). On faster hosts / with native crypto this is');
-  console.log('10-100x better. The oracle hot path should migrate to WebCrypto');
-  console.log('(node:crypto webcrypto) — tracked as a follow-up.');
+  console.log('NOTE (P2-1a): tweetnacl Ed25519 verify measures ~15-25 ms/call on this box;');
+  console.log('the production hot path now uses WebCrypto (native Ed25519) via');
+  console.log('policy.validateProofAsync — measured ~33x faster here.');
+  console.log('The bottleneck is the serial on-chain mint (queue depth), not validation.');
 
   try { fs.unlinkSync(BENCH_DB); } catch {}
 }
