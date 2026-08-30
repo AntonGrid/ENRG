@@ -94,10 +94,14 @@ updated as the fixes land. The canonical audit report is
       proofs below the threshold are accepted/counted but not minted (one
       aggregated proof per window mints instead of N readings); aggregated
       proofs verified by policy tests.
-- [ ] **P3-3 Multi-device Merkle batch** — a dedicated `mint_batch` instruction
-      (single tx verifies N device signatures; compute-units bound, tx-size
-      bound documented: 2 mint_energy instructions do not fit in one tx due to
-      the 1232-byte limit).
+- [ ] **P3-3 Multi-device Merkle batch** — rejected by design: the 1232-byte
+      tx-size bound prevents N mint instructions or N signatures+proofs in one
+      message; per-device aggregation (P3-1/P3-2) is the correct solution.
+- [x] **P3-4 Real FL transport** — `ENRG-AI/agent/fed/transport.py`: HTTP
+      aggregator (stdlib server, no new deps) + httpx client. Gateways submit
+      Ed25519-signed contributions, the server verifies each, closes the round
+      with FedAvg + MAD and serves global weights. Tests:
+      `ENRG-AI/tests/test_fed_transport.py` (5).
 
 ---
 *Updated: 2026-08-30 (audit day 1).*
