@@ -78,16 +78,21 @@ function verifyBundle(payload: any): boolean {
 }
 
 /** Severity mirror of agent/fed/ers_loop.py::anomaly_severity. */
-function severityOf(signals: any[]): number {
+function severityOf(signals: any[]): { severity: number; devices: string[] } {
   const anomalies = (signals || []).filter((s) => s?.kind === 'generation_anomaly');
-  if (anomalies.length === 0) return 0;
+  if (anomalies.length === 0) return { severity: 0, devices: [] };
   let strength = 0;
+  const devices = new Set<string>();
   for (const a of anomalies) {
     const threshold = Number(a?.meta?.threshold_wh || 0);
     const residual = Math.abs(Number(a?.meta?.residual_wh || 0));
     if (threshold > 0) strength = Math.max(strength, Math.min(2, residual / threshold));
+    // P1-4: anomaly signals now carry meta.device_id for targeted reporting.
+    const dev = a?.meta?.device_id;
+    if (typeof dev === 'string' && dev) devices.add(dev);
   }
-  return Math.max(1, Math.min(10, 1 + Math.round(strength) + Math.max(0, anomalies.length - 1)));
+  const severity = Math.max(1, Math.min(10, 1 + Math.round(strength) + Math.max(0, anomalies.length - 1)));
+  return { severity, devices: [...devices] };
 }
 
 async function main() {
@@ -102,16 +107,18 @@ async function main() {
   console.log('[collector] AI bundle signature OK');
 
   const signals = payload.message?.signals || [];
-  const severity = severityOf(signals);
+  const { severity, devices } = severityOf(signals);
+  // P1-4: prefer device ids carried by the anomaly signals; fall back to env.
+  const targets = devices.length > 0 ? devices : DEVICES;
   const anomalyCount = signals.filter((s: any) => s?.kind === 'generation_anomaly').length;
-  console.log(`[collector] anomaly signals=${anomalyCount}, severity=${severity}`);
+  console.log(`[collector] anomaly signals=${anomalyCount}, severity=${severity}, targets=${targets.join(',')}`);
   if (severity === 0) {
     console.log('[collector] no anomalies — nothing to report');
     return;
   }
 
   if (DRY_RUN) {
-    console.log(`[collector][dry-run] would call report_anomaly(severity=${severity}) for ${DEVICES.join(', ')}`);
+    console.log(`[collector][dry-run] would call report_anomaly(severity=${severity}) for ${targets.join(', ')}`);
     return;
   }
 
@@ -129,7 +136,7 @@ async function main() {
   );
   const [oracleRegistryPda] = PublicKey.findProgramAddressSync([Buffer.from('oracle-registry')], PROGRAM_ID);
 
-  for (const device of DEVICES) {
+  for (const device of targets) {
     try {
       const producerPda = PublicKey.findProgramAddressSync(
         [Buffer.from('producer'), new PublicKey(device).toBuffer()], PROGRAM_ID,

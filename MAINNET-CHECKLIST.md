@@ -28,8 +28,11 @@ updated as the fixes land. The canonical audit report is
       with automatic rotation on RPC errors (503 instead of fake 404). _≥2
       independent oracle instances and key separation are ops decisions —
       documented, need deployment._
-- [ ] **P0-4 Single-key governance** — vault/policy/oracle-registry/upgrade
-      authorities behind a multisig (Squads), timelock on member updates.
+- [x] **P0-4 Single-key governance (ops path)** —
+      `docs/MAINNET-GOVERNANCE.md` + `scripts/transfer-authorities-to-squads.ts`
+      (vault/policy/oracle-registry authorities + governance members →
+      Squads multisig; compiles). _Execution requires the Squads address and
+      the founder key — an operator step._
 - [ ] **P0-5 Independent security audit** — external review (Zellic/OtterSec/
       Halborn) of the final binaries before deployment.
 
@@ -50,9 +53,10 @@ updated as the fixes land. The canonical audit report is
       proven against ENRG-AI `canonical_json_bytes`.
 - [x] **P1-4 PoI/ERS loop (collector)** — `scripts/ai_ers_collector.ts`:
       signed AI bundle → Ed25519 verify → severity (mirrors `ers_loop.py`) →
-      rate-limited on-chain `report_anomaly` (oracle key). _Remaining for full
-      production: per-device `device_id` in ENRG-AI anomaly signals + cron
-      deployment + on-chain commitment PDA for contribution digests._
+      rate-limited on-chain `report_anomaly` (oracle key). ENRG-AI anomaly
+      signals now carry `meta.device_id` (test-covered) so the collector
+      targets the right producer. _Remaining: cron deployment + on-chain
+      commitment PDA for contribution digests._
 - [x] **P1-5 Mock tests vs real peg** — `tests/test_mainnet_critical.py` now
       mirrors `math.rs` (`energy_wh * SRC_BASIS / energy_per_src`) + peg tests
       `test_peg_one_mwh_equals_one_src` / `test_peg_fractional_mwh`.
@@ -62,12 +66,15 @@ updated as the fixes land. The canonical audit report is
 
 ## 🟡 Nice-to-have
 
-- [ ] **P2-1 Load tests** — oracle benchmark (proofs/s, mint queue depth).
-- [ ] **P2-2 CI for Axis-connect & ENRG-AI** — test workflows are missing.
+- [x] **P2-1 Load tests** — `scripts/benchmark-oracle.js` (policy + storage
+      throughput). Finding P2-1a: tweetnacl verify ≈15 ms/call on this box
+      (~65 proofs/s) — migrate the hot path to WebCrypto.
+- [x] **P2-2 CI for Axis-connect & ENRG-AI** — `.github/workflows/ci.yml`
+      added to both repos (Axis-connect: vitest+build+e2e; ENRG-AI: pytest).
 - [ ] **P2-3 Browser wallet** — replace localStorage keypair with a
       browser-wallet extension adapter in Axis-connect.
-- [ ] **P2-4 Mainnet runbook** — deploy steps (keys, anchor, IDL, oracle env,
-      firmware, monitoring) + 30-minute local quickstart.
+- [x] **P2-4 Mainnet runbook** — `docs/MAINNET-RUNBOOK.md` (key ceremony,
+      deploy, bootstrap, oracle, firmware, AI, go/no-go).
 
 ---
 *Updated: 2026-08-30 (audit day 1).*
