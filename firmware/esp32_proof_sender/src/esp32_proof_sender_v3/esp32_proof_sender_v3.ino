@@ -213,6 +213,18 @@ static const char ENRG_CA_CERT[] =
 #define ENRG_SE050_I2C_ADDR 0x48
 #endif
 
+// ── Mainnet build (P1-1, audit 2026-08-30) ──
+// Env `esp32dev-mainnet` sets ENRG_MAINNET=1 + ENRG_USE_SE050=1 +
+// ENRG_MANIFEST_REQUIRED=1 + ENRG_ENABLE_HW_ANTI_ROLLBACK=1.
+// On mainnet the device MUST sign inside the SE050 (ADR-0007 "conforming"
+// tier) and MUST NOT fall back to NVS/ATECC (fail-closed at runtime too).
+#ifndef ENRG_MAINNET
+#define ENRG_MAINNET 0
+#endif
+#if ENRG_MAINNET && !ENRG_USE_SE050
+#error "ENRG_MAINNET requires ENRG_USE_SE050 (mainnet build, ADR-0007 conforming tier)"
+#endif
+
 // ── Hardware OTA anti-rollback (ADR-0008) ──
 // 1 = dual-bank A/B + monotonic eFuse secure_version (env esp32dev-ota).
 // Requires partitions_ota.csv (app0/app1/otadata) and
@@ -1537,6 +1549,15 @@ void setup() {
         // The private key never leaves the SE050 — no seed in RAM needed.
         memset(g_privateKey, 0, sizeof(g_privateKey));
     } else {
+#if ENRG_MAINNET
+        // P1-1 (audit 2026-08-30): mainnet is fail-closed — no NVS/ATECC
+        // fallback. A device without a working SE050 must not mint.
+        Serial.println("[MAINNET] FATAL: SE050 unavailable — mainnet requires hardware Ed25519 (ADR-0007 conforming). HALT.");
+#if ENRG_ENABLE_HW_ANTI_ROLLBACK
+        ota_mark_app_invalid(); // A/B rollback to the previous image
+#endif
+        while (true) { delay(1000); }
+#else
         Serial.println("[SE050] chip unavailable — falling back to ATECC/NVS");
         if (!identity_init_v3(g_privateKey, g_publicKey)) {
             Serial.println("[FATAL] key init failed");
@@ -1546,6 +1567,7 @@ void setup() {
             while (true) { delay(1000); }
 #endif
         }
+#endif
     }
 #else
     if (!identity_init_v3(g_privateKey, g_publicKey)) {

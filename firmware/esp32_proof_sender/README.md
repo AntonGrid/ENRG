@@ -71,10 +71,17 @@ pio run -t upload -e esp32dev
 ```bash
 cd firmware/esp32_proof_sender
 
-# OTA-версия (dual-bank A/B + anti-rollback, ADR-0008) — для серийных устройств
+# ═══ MAINNET (P1-1, audit 2026-08-30) — ЕДИНСТВЕННАЯ production-сборка ═══
+# SE050 (tier conforming, ADR-0007) + manifest required + A/B eFuse anti-rollback.
+# Fail-closed: без SE050 устройство НЕ запускается. Требует плату с NXP SE050
+# и библиотеку se050 (pio pkg install se050).
+pio run -e esp32dev-mainnet
+
+# OTA-версия (dual-bank A/B + anti-rollback, ADR-0008) — dev/QA с SE050-опцией
 pio run -e esp32dev-ota
 
 # Базовая версия (ключ в NVS — tier basic) / ATECC608A (tier hardware-aided)
+# ⚠️ НЕ для mainnet — только разработка/обучение (ADR-0007 запрещает basic).
 pio run -e esp32dev
 pio run -e esp32dev-atecc
 ```
