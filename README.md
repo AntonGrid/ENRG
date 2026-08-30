@@ -35,6 +35,23 @@ One map of all layers: [**Ecosystem map**](https://github.com/AntonGrid/Axis-pro
 
 ---
 
+## Mainnet readiness (audit 2026-08-30)
+
+Before the mainnet launch, follow in order:
+
+1. **[`MAINNET-CHECKLIST.md`](./MAINNET-CHECKLIST.md)** — the hard
+   requirements tracker (all technical items closed by the audit).
+2. **[`docs/MAINNET-RUNBOOK.md`](./docs/MAINNET-RUNBOOK.md)** — the step-by-step
+   deployment runbook (key ceremony → deploy → bootstrap → oracle → firmware → AI).
+3. **[`docs/MAINNET-GOVERNANCE.md`](./docs/MAINNET-GOVERNANCE.md)** — how to
+   move the protocol authorities to a Squads multisig.
+4. **`scripts/rotate-keys.sh`** — generate FRESH keys (the founder key leaked
+   at `d3664c1` is compromised and must be rotated).
+5. **`scripts/transfer-authorities-to-squads.ts`** — transfer vault / policy /
+   oracle-registry / governance members to the multisig.
+
+---
+
 ## Repository Structure
 
 - `programs/` — Solana smart contracts (Anchor).
