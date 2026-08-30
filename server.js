@@ -39,7 +39,38 @@ const FOUNDER_WALLET = '6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8';
 
 // CR-3: RPC endpoint (env RPC_ENDPOINT, devnet by default) and enrg-profile program id
 // (see programs/enrg-profile/src/lib.rs, declare_id).
+// P0-3 (audit 2026-08-30): RPC failover. `RPC_ENDPOINTS` (comma-separated)
+// provides a fallback list; `RPC_ENDPOINT` stays backward compatible.
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || clusterApiUrl('devnet');
+const RPC_ENDPOINTS = (process.env.RPC_ENDPOINTS || RPC_ENDPOINT)
+    .split(',').map((s) => s.trim()).filter(Boolean);
+let rpcCursor = 0;
+
+function getRpcEndpoint() {
+    if (RPC_ENDPOINTS.length === 0) return clusterApiUrl('devnet');
+    return RPC_ENDPOINTS[rpcCursor % RPC_ENDPOINTS.length];
+}
+
+/** Rotate to the next RPC endpoint (failover). Returns the new endpoint. */
+function failoverRpc() {
+    if (RPC_ENDPOINTS.length <= 1) return getRpcEndpoint();
+    rpcCursor = (rpcCursor + 1) % RPC_ENDPOINTS.length;
+    const next = getRpcEndpoint();
+    logger.warn(`🔁 RPC failover -> ${next}`);
+    return next;
+}
+
+/** Build a Connection on the current active endpoint. */
+function getConnection(commitment = 'confirmed') {
+    return new Connection(getRpcEndpoint(), commitment);
+}
+
+/** True when the error is a deterministic "account not found" (not an RPC failure). */
+function isAccountNotFoundError(e) {
+    const m = String(e && e.message || e);
+    return m.includes('Account does not exist') || m.includes('account does not exist') || m.includes('could not find account');
+}
+
 const PROFILE_PROGRAM_ID = new PublicKey('78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt');
 
 // ── OTA (ADR-0008) ──
@@ -107,7 +138,8 @@ try {
 } catch (e) {
     firmwareSigningKeypair = null;
     logger.warn('⚠️ Firmware-signing keypair not found (' +
-        'set FIRMWARE_SIGNING_KEY_PATH) — FALLBACK to founder key for OTA signing.');
+        'set FIRMWARE_SIGNING_KEY_PATH or firmware/firmware-signing-keypair.json). ' +
+        'P1-2 (audit 2026-08-30): OTA publishing is DISABLED until a cold firmware key is configured (no founder fallback).');
 }
 
 // Multi-owner mint (ADR-0003): the OracleReport is signed with
@@ -379,7 +411,7 @@ async function sendVersioned(connection, signer, instructions, lut) {
 
 async function createProducerIfNeeded() {
     if (!founderKeypair) return false;
-    const connection = new Connection(clusterApiUrl('devnet'), 'confirmed');
+    const connection = getConnection();
     const accountInfo = await connection.getAccountInfo(producerPda);
     if (accountInfo) {
         logger.info('✅ Producer already exists:', producerPda.toBase58());
@@ -419,7 +451,7 @@ async function mintEnergy(proof, producerOverride = null) {
     if (!deviceIdPubkey) return { success: false, error: 'device_id_not_a_pubkey' };
     if (!IDL) return { success: false, error: 'idl_missing' };
     try {
-        const connection = new Connection(RPC_ENDPOINT, 'confirmed');
+        const connection = getConnection();
         const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(oracleKeypair), {
             commitment: 'confirmed',
             preflightCommitment: 'confirmed',
@@ -587,12 +619,116 @@ async function mintEnergy(proof, producerOverride = null) {
         return { success: true, tx: sig };
     } catch (e) {
         logger.error('❌ mintEnergy error:', e);
+        // P0-3: rotate RPC endpoint so the next worker retry uses a fresh node.
+        failoverRpc();
         return { success: false, error: e.message };
     }
 }
 
-// The device_id format (base58/hex) and all input validation live
-// in the Policy Engine — policy.validateDeviceId() / policy.validateProof() (ADR-0003).
+// ════════════════════════════════════════════════════════════════
+//  MINT QUEUE (P0-2, audit 2026-08-30)
+//
+//  Previously /proof/submit awaited mintEnergy() inside the HTTP handler:
+//  one RPC transaction (~1-2s) blocked the whole Node process, so a device
+//  flood (or 1000+ devices at 1 proof/min) became a liveness/DoS vector.
+//
+//  Now every accepted binary proof is enqueued and the handler returns
+//  immediately with `mint: 'queued'`. A single worker mints serially in the
+//  background. Proofs persist in storage (mint_status='accepted' + proof_json)
+//  so the queue resumes after a restart (drain in bootstrap()).
+//
+//  Env knobs:
+//   MINT_QUEUE_MAX          queue depth before proofs are marked deferred (10000)
+//   MINT_MAX_ATTEMPTS       per-proof mint retries before giving up (8)
+//   MINT_RETRY_BASE_MS      exponential retry base (5000)
+//   DEVICE_MIN_INTERVAL_MS  per-device proof interval gate; 0 = disabled (0)
+// ════════════════════════════════════════════════════════════════
+const MINT_QUEUE_MAX = parseInt(process.env.MINT_QUEUE_MAX || '10000', 10);
+const MINT_MAX_ATTEMPTS = parseInt(process.env.MINT_MAX_ATTEMPTS || '8', 10);
+const MINT_RETRY_BASE_MS = parseInt(process.env.MINT_RETRY_BASE_MS || '5000', 10);
+const DEVICE_MIN_INTERVAL_MS = parseInt(process.env.DEVICE_MIN_INTERVAL_MS || '0', 10);
+
+const mintQueue = [];
+const mintQueueIds = new Set(); // dedupe key `device_id:nonce`
+let mintWorkerRunning = false;
+// P0-2: per-device last-proof timestamps for the optional interval gate.
+const deviceLastProofMs = new Map();
+
+function enqueueMint(entry, force = false) {
+    const key = `${entry.device_id}:${entry.proof.nonce}`;
+    if (!force && mintQueueIds.has(key)) return false; // already queued
+    if (!force && mintQueue.length >= MINT_QUEUE_MAX) return false; // queue full → deferred
+    if (!force) mintQueueIds.add(key);
+    mintQueue.push(entry);
+    // Kick the worker (non-blocking).
+    setImmediate(() => { mintQueueWorker().catch((e) => logger.error('❌ mint worker error:', e && e.message)); });
+    return true;
+}
+
+async function mintQueueWorker() {
+    if (mintWorkerRunning) return;
+    mintWorkerRunning = true;
+    try {
+        while (mintQueue.length > 0) {
+            const entry = mintQueue.shift();
+            mintQueueIds.delete(`${entry.device_id}:${entry.proof.nonce}`);
+            try {
+                const mintRes = await mintEnergy(entry.proof, entry.producerOverride || null);
+                if (mintRes.success) {
+                    await storage.updateProofStatus(entry.device_id, entry.proof.nonce, mintRes.tx, 'minted');
+                    logger.info(`🎉 [queue] minted ${entry.proof.energy_wh}Wh for ${entry.device_id}, tx=${mintRes.tx}`);
+                } else {
+                    // Graceful degradation: keep the energy, retry with backoff.
+                    entry.attempts = (entry.attempts || 0) + 1;
+                    if (entry.attempts < MINT_MAX_ATTEMPTS) {
+                        const delay = MINT_RETRY_BASE_MS * entry.attempts;
+                        logger.warn(`⏳ [queue] mint_energy retry ${entry.attempts}/${MINT_MAX_ATTEMPTS} for ${entry.device_id}: ${mintRes.error} (retry in ${delay}ms)`);
+                        await storage.updateProofStatus(entry.device_id, entry.proof.nonce, null, 'accepted');
+                        setTimeout(() => { enqueueMint(entry, true); }, delay);
+                    } else {
+                        await storage.updateProofStatus(entry.device_id, entry.proof.nonce, null, 'deferred');
+                        logger.warn(`⚠️ [queue] mint_energy gave up after ${MINT_MAX_ATTEMPTS} attempts for ${entry.device_id}: ${mintRes.error}`);
+                    }
+                }
+            } catch (e) {
+                logger.error('❌ [queue] worker entry error:', e && e.message);
+                await storage.updateProofStatus(entry.device_id, entry.proof.nonce, null, 'deferred').catch(() => {});
+            }
+        }
+    } finally {
+        mintWorkerRunning = false;
+        // If more items arrived while we were finishing, keep draining.
+        if (mintQueue.length > 0) {
+            setImmediate(() => { mintQueueWorker().catch(() => {}); });
+        }
+    }
+}
+
+/** Resume the queue after a restart from persisted 'accepted' proofs. */
+async function drainPendingProofs() {
+    try {
+        const pending = await storage.loadPendingProofs();
+        let restored = 0;
+        for (const row of pending) {
+            if (!row.proof_json) {
+                // Pre-queue rows carry no signatures — cannot be minted;
+                // their energy is already in energy_store. Leave as-is.
+                continue;
+            }
+            let proof;
+            try { proof = JSON.parse(row.proof_json); } catch { continue; }
+            if (!proof || !proof.device_id_pubkey || !proof.device_signature) continue;
+            if (enqueueMint({ device_id: row.device_id, proof })) restored++;
+        }
+        if (restored > 0) {
+            logger.info(`🔁 [queue] restored ${restored} pending proof(s) from storage`);
+        }
+    } catch (e) {
+        logger.error('❌ [queue] drainPendingProofs failed:', e && e.message);
+    }
+}
+
+
 
 // === Device registration ===
 app.post('/api/v1/device/register', [
@@ -800,13 +936,21 @@ app.post('/api/v1/firmware/update', express.raw({
         await fs.promises.writeFile(binPath, buf);
 
         const firmware = { version, image_hash, image_size };
-        const signature = policy.signFirmware(firmware, (firmwareSigningKeypair || founderKeypair).secretKey);
+        // P1-2 (audit 2026-08-30): OTA images MUST be signed with the dedicated
+        // cold firmware key. The founder-key fallback is forbidden — otherwise a
+        // compromised founder key could sign arbitrary firmware. The device
+        // verifies with ENRG_FIRMWARE_PUBKEY_HEX, which never equals the founder
+        // key, so a founder-signed image would be rejected on-device anyway.
+        if (!firmwareSigningKeypair) {
+            return res.status(503).json({ error: 'firmware_signing_key_missing' });
+        }
+        const signature = policy.signFirmware(firmware, firmwareSigningKeypair.secretKey);
         const meta = {
             ...firmware,
             model,
             image_url: '/api/v1/firmware/latest/image',
             signature,
-            signed_by: founderKeypair.publicKey.toBase58(),
+            signed_by: firmwareSigningKeypair.publicKey.toBase58(),
             issued_at: Math.floor(Date.now() / 1000),
         };
         await fs.promises.writeFile(path.join(FIRMWARE_UPDATES_DIR, 'latest.json'), JSON.stringify(meta, null, 2));
@@ -884,7 +1028,7 @@ app.post('/api/v1/device/revoke/:device_id', async (req, res) => {
     if (!IDL) return res.status(500).json({ error: 'idl_missing' });
 
     try {
-        const connection = new Connection(RPC_ENDPOINT, 'confirmed');
+        const connection = getConnection();
         const program = anchorProgram(connection);
 
         const producerPda = findProducerPda(d.deviceIdPubkey);
@@ -934,7 +1078,7 @@ app.post('/api/v1/device/rotate/:device_id', async (req, res) => {
     if (!IDL) return res.status(500).json({ error: 'idl_missing' });
 
     try {
-        const connection = new Connection(RPC_ENDPOINT, 'confirmed');
+        const connection = getConnection();
         const program = anchorProgram(connection);
         const producerPda = findProducerPda(d.deviceIdPubkey);
 
@@ -1054,15 +1198,36 @@ app.post('/api/v1/proof/submit', async (req, res) => {
         }
         if (!IDL) return res.status(500).json({ error: 'idl_missing' });
 
+        // P0-2 (audit 2026-08-30): optional per-device proof interval gate.
+        // Disabled by default (0); set DEVICE_MIN_INTERVAL_MS to cap a single
+        // device's submission rate (anti-flood). Devices report every ~60 s.
+        if (DEVICE_MIN_INTERVAL_MS > 0) {
+            const nowMs = Date.now();
+            const prev = deviceLastProofMs.get(d.deviceIdPubkey.toBase58()) || 0;
+            if (nowMs - prev < DEVICE_MIN_INTERVAL_MS) {
+                return res.status(429).json({ error: 'proof_too_frequent' });
+            }
+            deviceLastProofMs.set(d.deviceIdPubkey.toBase58(), nowMs);
+        }
+
         // Read the device from the on-chain Registry.
+        // P0-3: a deterministic "account does not exist" is a real 404; an RPC
+        // failure triggers failover and returns 503 so the device retries.
         let producer;
         try {
-            const connection = new Connection(RPC_ENDPOINT, 'confirmed');
+            const connection = getConnection();
             const program = readOnlyProgram(connection);
             producer = await program.account.energyProducer.fetch(findProducerPda(d.deviceIdPubkey));
         } catch (e) {
-            return res.status(404).json({
-                error: 'device_not_registered_on_chain',
+            if (isAccountNotFoundError(e)) {
+                return res.status(404).json({
+                    error: 'device_not_registered_on_chain',
+                    reason: (e && e.message) || '',
+                });
+            }
+            failoverRpc();
+            return res.status(503).json({
+                error: 'rpc_unavailable',
                 reason: (e && e.message) || '',
             });
         }
@@ -1098,7 +1263,18 @@ app.post('/api/v1/proof/submit', async (req, res) => {
         const newEnergy = (stored.energy_wh || 0) + energyWhInt;
         energyStore[device_id] = { energy_wh: newEnergy, nonce: proof.nonce, last_proof: proof };
         await storage.saveEnergy(device_id, newEnergy, proof.nonce);
-        await storage.saveProof(device_id, proof.device_timestamp || nowSec, energyWhInt, proof.nonce, null, 'accepted');
+        // P0-2: persist the full proof (proof_json) so the mint queue can resume
+        // after a restart even if the worker never saw it.
+        const proofJson = JSON.stringify({
+            device_id,
+            device_id_pubkey: proof.device_id_pubkey,
+            nonce: proof.nonce,
+            device_timestamp: proof.device_timestamp,
+            energy_wh: proof.energy_wh,
+            device_signature: Array.from(proof.device_signature || []),
+            sig_mode: proof.sig_mode,
+        });
+        await storage.saveProof(device_id, proof.device_timestamp || nowSec, energyWhInt, proof.nonce, null, 'accepted', proofJson);
 
         if (pool_id && pools[pool_id]) {
             const pool = pools[pool_id];
@@ -1126,25 +1302,31 @@ app.post('/api/v1/proof/submit', async (req, res) => {
 
         logger.info(`📊 Device ${device_id} submitted ${energyWhInt}Wh (nonce=${proof.nonce}, sig=${proof.sig_mode}). Accumulated: ${newEnergy}Wh`);
 
-        // CR-3: on-chain-compatible (binary) signature → each proof is minted
-        // in a separate mint_energy transaction (as in devnet_e2e_lifecycle.ts).
-        // If minting is temporarily impossible (ORACLE_KEY unset, device not yet
-        // registered on-chain, no profile created, RPC unavailable) — the proof
-        // IS ACCEPTED, energy accumulates, minting is deferred. This is graceful
-        // degradation, not a failure: proofs must not be lost because minting is down.
+        // CR-3 / P0-2: on-chain-compatible (binary) signature → enqueue the mint.
+        // The HTTP handler returns immediately (`mint: 'queued'`); the background
+        // worker mints serially and persists the outcome. Proofs are NEVER lost:
+        // they are stored with mint_status='accepted' + proof_json, so a restart
+        // drains the queue. If the queue is full, the proof stays accepted and
+        // energy accumulates; minting is deferred (graceful degradation).
         if (proof.sig_mode === 'binary') {
-            const mintRes = await mintEnergy(proof, producer);
-            if (mintRes.success) {
-                await storage.updateProofStatus(device_id, proof.nonce, mintRes.tx, 'minted');
-                return res.json({ ok: true, minted: proof.energy_wh, tx: mintRes.tx, accumulated: newEnergy });
+            const persisted = {
+                device_id,
+                device_id_pubkey: proof.device_id_pubkey,
+                nonce: proof.nonce,
+                device_timestamp: proof.device_timestamp,
+                energy_wh: proof.energy_wh,
+                device_signature: Array.from(proof.device_signature),
+                sig_mode: proof.sig_mode,
+            };
+            await storage.updateProofStatus(device_id, proof.nonce, null, 'accepted');
+            if (enqueueMint({ device_id, proof: persisted, producerOverride: producer })) {
+                return res.json({ ok: true, accumulated: newEnergy, mint: 'queued' });
             }
-            logger.warn(`⚠️ mint_energy deferred for ${device_id}: ${mintRes.error}. Energy accumulated: ${newEnergy}Wh`);
-            await storage.updateProofStatus(device_id, proof.nonce, null, 'deferred');
             return res.json({
                 ok: true,
                 accumulated: newEnergy,
                 mint: 'deferred',
-                mint_reason: mintRes.error,
+                mint_reason: 'mint_queue_full',
             });
         }
 
@@ -1202,6 +1384,8 @@ async function bootstrap() {
     energyStore = await storage.loadEnergyStore();
     pools = await storage.loadPools();
     logger.info(`✅ Storage=${storage.name}: loaded ${Object.keys(devices).length} devices, ${Object.keys(pools).length} pools`);
+    // P0-2: resume the mint queue from persisted 'accepted' proofs (restart-safe).
+    await drainPendingProofs();
     app.listen(PORT, '0.0.0.0', () => {
         logger.info(`🚀 Oracle server listening on port ${PORT} (storage: ${storage.name})`);
     });

@@ -18,6 +18,8 @@ services:
       FOUNDER_KEY_PATH: ${FOUNDER_KEY_PATH:-}
       FOUNDER_KEY: ${FOUNDER_KEY:-}
       RPC_ENDPOINT: ${RPC_ENDPOINT:-}
+      # P0-3 (audit 2026-08-30): comma-separated RPC failover list.
+      RPC_ENDPOINTS: ${RPC_ENDPOINTS:-}
     volumes:
       # Persistence of the SQLite store and OTA images (ADR-0008).
       - ./enrg.db:/app/enrg.db

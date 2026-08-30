@@ -53,6 +53,23 @@ This server receives signed energy proofs from IoT devices, verifies Ed25519 sig
     the new record inherits the state (owner, nonce, energy, tier)
 - `GET /api/v1/device/:id/status` | `GET /api/v1/device/:id/balance` | `GET /api/v1/device/:id/history`
 - `POST /api/v1/pool/create`, `GET /api/v1/stats`
+
+## Mint queue (P0-2, audit 2026-08-30)
+
+`POST /api/v1/proof/submit` no longer blocks on the on-chain transaction.
+Binary proofs are **enqueued** and the handler returns immediately with
+`mint: 'queued'`; a background worker mints serially. Proofs persist with
+`mint_status='accepted'` + `proof_json`, so a restart drains the queue.
+
+| Env | Default | Meaning |
+|---|---|---|
+| `MINT_QUEUE_MAX` | `10000` | queue depth; overflow → `mint: 'deferred'` |
+| `MINT_MAX_ATTEMPTS` | `8` | per-proof mint retries (exponential backoff) |
+| `MINT_RETRY_BASE_MS` | `5000` | retry backoff base |
+| `DEVICE_MIN_INTERVAL_MS` | `0` (off) | min interval between proofs per device (anti-flood) |
+
+Monitoring: `GET /api/v1/proofs?mint_status=…` shows `minted` / `accepted` /
+`deferred` per proof; `GET /api/v1/stats` aggregates counts.
   - ⚠️ **Pool (audit 2026-08-18, P1):** the off-chain pool accumulates energy,
     but does NOT distribute tokens. The real distribution happens on-chain
     (`instructions/pool.rs::distribute_pool`); the oracle passes `pool=null` to

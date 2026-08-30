@@ -41,16 +41,26 @@ class Storage {
                 'CREATE TABLE IF NOT EXISTS pools (pool_id TEXT PRIMARY KEY, threshold BIGINT, total_energy BIGINT, device_energy TEXT, created_at BIGINT)'
             );
             await this.pg.query(
-                'CREATE TABLE IF NOT EXISTS proofs (id BIGSERIAL PRIMARY KEY, device_id TEXT, ts BIGINT, energy_wh BIGINT, nonce BIGINT, mint_tx TEXT, mint_status TEXT)'
+                'CREATE TABLE IF NOT EXISTS proofs (id BIGSERIAL PRIMARY KEY, device_id TEXT, ts BIGINT, energy_wh BIGINT, nonce BIGINT, mint_tx TEXT, mint_status TEXT, proof_json TEXT)'
             );
+            // P0-2 (audit 2026-08-30): migration for pre-existing deployments —
+            // add proof_json for the mint queue recovery (drain after restart).
+            await this.pg.query(
+                "ALTER TABLE proofs ADD COLUMN IF NOT EXISTS proof_json TEXT"
+            ).catch(() => {});
             log('Postgres storage ready (DATABASE_URL)');
         } else {
             this.db.exec(`
                 CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, public_key TEXT);
                 CREATE TABLE IF NOT EXISTS energy_store (device_id TEXT PRIMARY KEY, energy_wh INTEGER, nonce INTEGER);
                 CREATE TABLE IF NOT EXISTS pools (pool_id TEXT PRIMARY KEY, threshold INTEGER, total_energy INTEGER, device_energy TEXT, created_at INTEGER);
-                CREATE TABLE IF NOT EXISTS proofs (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, ts INTEGER, energy_wh INTEGER, nonce INTEGER, mint_tx TEXT, mint_status TEXT);
+                CREATE TABLE IF NOT EXISTS proofs (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, ts INTEGER, energy_wh INTEGER, nonce INTEGER, mint_tx TEXT, mint_status TEXT, proof_json TEXT);
             `);
+            // P0-2: SQLite migration for pre-existing databases.
+            const cols = this.db.prepare("PRAGMA table_info(proofs)").all();
+            if (!cols.some((c) => c.name === 'proof_json')) {
+                this.db.exec('ALTER TABLE proofs ADD COLUMN proof_json TEXT');
+            }
             log(`SQLite storage ready (${this.sqlitePath})`);
         }
     }
@@ -140,16 +150,16 @@ class Storage {
             .run(pool_id, threshold, total_energy, JSON.stringify(device_energy), created_at);
     }
 
-    async saveProof(device_id, ts, energy_wh, nonce, mint_tx, mint_status) {
+    async saveProof(device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json = null) {
         if (this.backend === 'postgres') {
             await this.pg.query(
-                'INSERT INTO proofs (device_id, ts, energy_wh, nonce, mint_tx, mint_status) VALUES ($1, $2, $3, $4, $5, $6)',
-                [device_id, ts, energy_wh, nonce, mint_tx, mint_status]
+                'INSERT INTO proofs (device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                [device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json]
             );
             return;
         }
-        this.db.prepare('INSERT INTO proofs (device_id, ts, energy_wh, nonce, mint_tx, mint_status) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(device_id, ts, energy_wh, nonce, mint_tx, mint_status);
+        this.db.prepare('INSERT INTO proofs (device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json) VALUES (?, ?, ?, ?, ?, ?, ?)')
+            .run(device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json);
     }
 
     async updateProofStatus(device_id, nonce, mint_tx, mint_status) {
@@ -167,7 +177,7 @@ class Storage {
     async loadProofs(device_id = null, limit = 100) {
         if (this.backend === 'postgres') {
             const params = [];
-            let sql = 'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status FROM proofs';
+            let sql = 'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json FROM proofs';
             if (device_id) { sql += ' WHERE device_id = $1'; params.push(device_id); }
             sql += ' ORDER BY id DESC LIMIT ' + Math.min(limit, 1000);
             const { rows } = await this.pg.query(sql, params);
@@ -175,12 +185,31 @@ class Storage {
         }
         if (device_id) {
             return this.db.prepare(
-                'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status FROM proofs WHERE device_id = ? ORDER BY id DESC LIMIT ?'
+                'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json FROM proofs WHERE device_id = ? ORDER BY id DESC LIMIT ?'
             ).all(device_id, Math.min(limit, 1000));
         }
         return this.db.prepare(
-            'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status FROM proofs ORDER BY id DESC LIMIT ?'
+            'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json FROM proofs ORDER BY id DESC LIMIT ?'
         ).all(Math.min(limit, 1000));
+    }
+
+    /**
+     * P0-2 (audit 2026-08-30): proofs accepted by the verifier but not yet
+     * minted on-chain. Used by the mint queue to resume after a restart.
+     * Oldest first (FIFO), capped to avoid unbounded memory on startup.
+     */
+    async loadPendingProofs(limit = 10000) {
+        const cap = Math.min(limit, 50000);
+        if (this.backend === 'postgres') {
+            const { rows } = await this.pg.query(
+                "SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json FROM proofs WHERE mint_status = 'accepted' ORDER BY id ASC LIMIT $1",
+                [cap]
+            );
+            return rows;
+        }
+        return this.db.prepare(
+            "SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json FROM proofs WHERE mint_status = 'accepted' ORDER BY id ASC LIMIT ?"
+        ).all(cap);
     }
 
     // Ecosystem stats aggregated from the proofs table — the single source of
