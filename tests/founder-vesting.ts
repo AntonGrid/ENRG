@@ -6,7 +6,7 @@
  *   - allocate_founder:  премайн 2e17 на ATA основателя, supply cap, одноразовость.
  *
  * Факты из кода (источник истины):
- *   - FOUNDER_WALLET = 6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8; тест загружает
+ *   - FOUNDER_WALLET = FnqKH4bjMRM6hzrw6tjcpfyszovbRsvyNjuNwALmcZNC; тест загружает
  *     founder-ключ из ~/.config/solana/founder-wallet.json (pubkey == FOUNDER_WALLET).
  *   - initialize_vault вызывается в before() как setup (allocate_founder требует vault),
  *     вне it-тестов скопа.
@@ -73,7 +73,7 @@ describe("ENRG — Founder premine & vesting baseline (runtime)", () => {
     founder = Keypair.fromSecretKey(Uint8Array.from(founderSecret));
     assert.strictEqual(
       founder.publicKey.toBase58(),
-      "6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8",
+      "FnqKH4bjMRM6hzrw6tjcpfyszovbRsvyNjuNwALmcZNC",
       "founder keypair должен совпадать с FOUNDER_WALLET",
     );
 

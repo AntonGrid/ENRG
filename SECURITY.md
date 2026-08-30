@@ -53,14 +53,15 @@ committed to git at `d3664c1` ("Add founder-wallet.json for Render deployment").
 - **Impact:** the key is present in repository history and MUST be considered
   **compromised**. Anyone with repo access can sign as `FOUNDER_WALLET` /
   `EXPECTED_DEPLOYER`.
-- **Required action before mainnet:** rotate ALL protocol keys (founder,
-  deployer, oracle, firmware signing). The program constants
-  (`FOUNDER_WALLET`, `EXPECTED_DEPLOYER` in
-  `programs/enrg-mvp/src/constants.rs`) and the firmware's
-  `ENRG_FOUNDER_PUBKEY_HEX` must be updated to the new keys, and the program
-  must be redeployed. See `MAINNET-CHECKLIST.md`.
+- **ROTATION COMPLETED (P0-1a, 2026-08-30):** all protocol keys were freshly
+  generated (`~/keys/enrg-mainnet`, 0600, outside the repo). The program
+  constants (`FOUNDER_WALLET`, `EXPECTED_DEPLOYER` in
+  `programs/enrg-mvp/src/constants.rs`), the oracle (`FOUNDER_WALLET` in
+  `server.js`), the firmware (`ENRG_FOUNDER_PUBKEY_HEX` /
+  `ENRG_FIRMWARE_PUBKEY_HEX`) and the local key files were updated to the new
+  keys. **The old key (6gM2…) must never be used on mainnet.**
 - **Prevention:** `.gitignore` now blocks `founder-wallet*.json` and
-  `*-wallet.json`; gitleaks runs on every push/PR.
+  `*-keypair.json`; gitleaks runs on every push/PR.
 
 ## Key Hygiene Rules (all repos)
 

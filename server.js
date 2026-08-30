@@ -35,7 +35,7 @@ const logger = winston.createLogger({
 
 const PROGRAM_ID = new PublicKey('HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb');
 const MINT_ADDRESS = '3PDsZUDQwgx1SV4dSTtyKDEoL9HYCdt4GN63UBYpLvwB';
-const FOUNDER_WALLET = '6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8';
+const FOUNDER_WALLET = 'FnqKH4bjMRM6hzrw6tjcpfyszovbRsvyNjuNwALmcZNC';
 
 // CR-3: RPC endpoint (env RPC_ENDPOINT, devnet by default) and enrg-profile program id
 // (see programs/enrg-profile/src/lib.rs, declare_id).

@@ -89,8 +89,10 @@ pub const MAX_DEVICES_PER_OWNER: u64 = 100;
 /// source of all founder roles. The address is hard-coded into the program: the
 /// vesting account can be initialized and funded only by this wallet.
 /// (Devnet continues to use the current program authority.)
+/// P0-1a (2026-08-30): ROTATED — the key leaked at d3664c1 (6gM2…) is
+/// compromised. FOUNDER_WALLET now points to the fresh mainnet key.
 pub const FOUNDER_WALLET: Pubkey =
-    pubkey!("6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8");
+    pubkey!("FnqKH4bjMRM6hzrw6tjcpfyszovbRsvyNjuNwALmcZNC");
 
 /// H-2 (front-running): the address allowed to initialize the protocol
 /// (initialize_token / initialize_vault / initialize_oracle_registry /

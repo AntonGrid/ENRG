@@ -54,7 +54,7 @@ account = [
   # to --mint (the operator), so the bootstrap tests (governance.ts, the
   # zz-e2e-smoke FRESH path) can never fund the founder key via requestAirdrop.
   # Injecting 10 SOL at genesis makes the anchor suite deterministic.
-  { address = "6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8", filename = "tests/genesis/founder-wallet.json" },
+  { address = "FnqKH4bjMRM6hzrw6tjcpfyszovbRsvyNjuNwALmcZNC", filename = "tests/genesis/founder-wallet.json" },
 ]
 
 [hooks]

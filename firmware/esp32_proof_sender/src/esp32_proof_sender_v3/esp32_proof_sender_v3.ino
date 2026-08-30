@@ -98,9 +98,10 @@
 // Real founder key (Ed25519, 32 hex bytes) — the oracle public key used
 // to sign Device Manifests (ADR-0004) and firmware images (ADR-0008).
 // Corresponds to the founder wallet ~/.config/solana/founder-wallet.json
-// (base58: 6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8).
+// (base58: FnqKH4bjMRM6hzrw6tjcpfyszovbRsvyNjuNwALmcZNC).
+// P0-1a (2026-08-30): ROTATED — the key leaked at d3664c1 (6gM2…) is compromised.
 // IMPORTANT: when FOUNDER_KEY changes on the oracle, update the key and reflash the devices.
-#define ENRG_FOUNDER_PUBKEY_HEX "545ebb75bdc2022c089a4813eb4e76acc7c6628cadd18eb84d74131ccf9bfafd"
+#define ENRG_FOUNDER_PUBKEY_HEX "dbc1622a3ebf5976302132bc3207476e543b0533ea92c465ad1d8840d40132a5"
 #endif
 
 // ── SEPARATE "cold" firmware-signing key (ADR-0008, D-5) ──
@@ -109,8 +110,9 @@
 // The private key lives in an offline store (HSM/cold wallet); a dev copy is in
 // firmware/firmware-signing-keypair.json (gitignored). The public key is embedded
 // here to verify OTA metadata signatures on the device.
+// P0-1a (2026-08-30): firmware key rotated together with the founder key.
 #ifndef ENRG_FIRMWARE_PUBKEY_HEX
-#define ENRG_FIRMWARE_PUBKEY_HEX "393561ec672d078ea3cae1962db935568fd1af06ddd25b65be3bdfe746d23354"
+#define ENRG_FIRMWARE_PUBKEY_HEX "b3bdbc02c02c4eeb967cf38585571cb041a0c7b86888b13e2842657aa2a90146"
 #endif
 
 // 1 — the manifest is required: without a valid manifest proofs are NOT sent.

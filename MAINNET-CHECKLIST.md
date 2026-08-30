@@ -13,12 +13,10 @@ updated as the fixes land. The canonical audit report is
 - [x] **P0-1 Key leak (d3664c1)** — `founder-wallet.json` removed from index,
       added to `.gitignore`, gitleaks CI added. _History still contains the key:
       `git filter-repo` is a separate, owner-approved operation._
-- [ ] **P0-1a Rotate all protocol keys** — founder/deployer/oracle/firmware
-      keys must be freshly generated. Program constants
-      (`FOUNDER_WALLET`, `EXPECTED_DEPLOYER` — `programs/enrg-mvp/src/constants.rs`)
-      and firmware `ENRG_FOUNDER_PUBKEY_HEX` / `ENRG_FIRMWARE_PUBKEY_HEX`
-      (`esp32_proof_sender_v3.ino`) must be updated; program redeployed at a
-      NEW program id with a fresh mint.
+- [ ] **P0-1a Rotate all protocol keys** — **DONE (2026-08-30):** fresh keys
+      generated (`~/keys/enrg-mainnet`, 0600); program constants, oracle,
+      firmware and local key files updated. Program still needs a mainnet
+      deploy at a NEW program id (operator step).
 - [x] **P0-2 Sequential mint** — mint queue implemented in `server.js`
       (`MINT_QUEUE_MAX` / `MINT_MAX_ATTEMPTS` / `MINT_RETRY_BASE_MS`), proofs
       persist with `proof_json` + `mint_status='accepted'`, queue drains after

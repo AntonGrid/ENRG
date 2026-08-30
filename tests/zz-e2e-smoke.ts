@@ -51,7 +51,7 @@ const PROGRAM_ID = new PublicKey(
   "HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb",
 );
 const FOUNDER_WALLET = new PublicKey(
-  "6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8",
+  "FnqKH4bjMRM6hzrw6tjcpfyszovbRsvyNjuNwALmcZNC",
 );
 
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || "http://127.0.0.1:8899";
