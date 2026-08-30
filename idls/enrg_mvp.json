@@ -3658,6 +3658,114 @@
       ]
     },
     {
+      "name": "slash_oracle",
+      "docs": [
+        "Slash an oracle deposit for a contradictory report (governance)."
+      ],
+      "discriminator": [
+        69,
+        85,
+        18,
+        20,
+        205,
+        99,
+        149,
+        145
+      ],
+      "accounts": [
+        {
+          "name": "oracle_stake",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "oracle"
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle",
+          "docs": [
+            "The oracle being slashed (read-only).",
+            "from this pubkey, so it cannot be forged."
+          ]
+        },
+        {
+          "name": "vault",
+          "docs": [
+            "Protocol vault (receives the deposit)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "governance",
+          "docs": [
+            "Governance authority executing the slash."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "governance"
+          ]
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "stake",
       "discriminator": [
         206,
@@ -3684,6 +3792,299 @@
         {
           "name": "amount",
           "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "stake_oracle",
+      "docs": [
+        "Deposit lamports as the oracle reputation stake (votes require it)."
+      ],
+      "discriminator": [
+        86,
+        27,
+        159,
+        136,
+        82,
+        86,
+        113,
+        84
+      ],
+      "accounts": [
+        {
+          "name": "oracle_stake",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "oracle_signer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_signer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "lamports",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "submit_oracle_attestation",
+      "docs": [
+        "A trusted oracle votes on a proof attestation (PDA",
+        "[b\"oracle-attest\", device_id, nonce]); ≥ threshold votes finalize it."
+      ],
+      "discriminator": [
+        107,
+        13,
+        189,
+        121,
+        227,
+        22,
+        128,
+        255
+      ],
+      "accounts": [
+        {
+          "name": "attestation",
+          "docs": [
+            "Attestation PDA [b\"oracle-attest\", device_id, nonce]."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  97,
+                  116,
+                  116,
+                  101,
+                  115,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "device_id"
+              },
+              {
+                "kind": "arg",
+                "path": "nonce"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vote",
+          "docs": [
+            "One vote per oracle (dedupe): [b\"oracle-vote\", attestation, oracle]."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  118,
+                  111,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "attestation"
+              },
+              {
+                "kind": "account",
+                "path": "oracle"
+              }
+            ]
+          }
+        },
+        {
+          "name": "device_id",
+          "docs": [
+            "The device whose proof is confirmed (read-only, used in the signed msg)."
+          ]
+        },
+        {
+          "name": "oracle",
+          "docs": [
+            "The voting oracle (must be in the registry; signs via precompile).",
+            "constraint and the Ed25519 precompile signature."
+          ]
+        },
+        {
+          "name": "oracle_registry",
+          "docs": [
+            "On-chain OracleRegistry — the trusted oracle set."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_stake",
+          "docs": [
+            "The oracle's reputation deposit must exist to count the vote."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "oracle"
+              }
+            ]
+          }
+        },
+        {
+          "name": "payer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "instructions",
+          "docs": [
+            "Instructions sysvar — required for Ed25519 signature verification."
+          ]
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "nonce",
+          "type": "u64"
+        },
+        {
+          "name": "proof_hash",
+          "type": {
+            "array": [
+              "u8",
+              32
+            ]
+          }
+        },
+        {
+          "name": "signature",
+          "type": {
+            "array": [
+              "u8",
+              64
+            ]
+          }
         }
       ]
     },
@@ -4336,6 +4737,19 @@
       ]
     },
     {
+      "name": "OracleAttestation",
+      "discriminator": [
+        14,
+        90,
+        51,
+        239,
+        101,
+        104,
+        147,
+        12
+      ]
+    },
+    {
       "name": "OracleRegistry",
       "discriminator": [
         94,
@@ -4346,6 +4760,32 @@
         0,
         12,
         172
+      ]
+    },
+    {
+      "name": "OracleStake",
+      "discriminator": [
+        4,
+        129,
+        7,
+        149,
+        153,
+        172,
+        197,
+        166
+      ]
+    },
+    {
+      "name": "OracleVote",
+      "discriminator": [
+        11,
+        96,
+        183,
+        172,
+        9,
+        209,
+        48,
+        242
       ]
     },
     {
@@ -6396,6 +6836,84 @@
       }
     },
     {
+      "name": "OracleAttestation",
+      "docs": [
+        "On-chain oracle quorum (P3-6, audit 2026-08-30).",
+        "",
+        "A proof (device_id, nonce, proof_hash) is confirmed when `threshold`",
+        "DISTINCT trusted oracles from the OracleRegistry voted for it. Every vote",
+        "is a separate PDA `OracleVote`, so a single oracle cannot vote twice and",
+        "the N-in-one-transaction tx-size limit is avoided (each vote is its own tx).",
+        "",
+        "OracleAttestation PDA: [b\"oracle-attest\", device_id, nonce]",
+        "OracleVote PDA:        [b\"oracle-vote\", attestation, oracle]",
+        "OracleStake PDA:       [b\"oracle-stake\", oracle]",
+        "",
+        "The first vote fixes the canonical `proof_hash`; a later vote carrying a",
+        "different hash sets `conflict = true` (a contradictory report — the",
+        "economic basis for `slash_oracle`)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "device_id",
+            "docs": [
+              "Device whose proof is being confirmed."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "nonce",
+            "docs": [
+              "Proof nonce (uniquely identifies the report together with device_id)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "proof_hash",
+            "docs": [
+              "Canonical proof hash fixed by the first oracle vote."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "votes",
+            "docs": [
+              "Number of distinct oracle votes received."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "finalized",
+            "docs": [
+              "votes >= threshold → the attestation is finalized."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "conflict",
+            "docs": [
+              "A later vote carried a different proof_hash (basis for slashing)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "created_at",
+            "docs": [
+              "First vote timestamp."
+            ],
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "OracleAuthorityChanged",
       "type": {
         "kind": "struct",
@@ -6555,6 +7073,89 @@
                 64
               ]
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleStake",
+      "docs": [
+        "Oracle reputation deposit (lamports escrowed by the oracle on the PDA)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "oracle",
+            "docs": [
+              "The oracle."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "lamports",
+            "docs": [
+              "Escrowed lamports (deposit). 0 if slashed/withdrawn."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "joined_at",
+            "docs": [
+              "Joined timestamp."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "slashed",
+            "docs": [
+              "Set when the deposit was slashed (funds moved to the vault)."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleVote",
+      "docs": [
+        "One oracle's vote on an attestation (dedupe via PDA seeds)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "oracle",
+            "docs": [
+              "The oracle that voted."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "attestation",
+            "docs": [
+              "The attestation this vote belongs to."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "proof_hash",
+            "docs": [
+              "The proof hash the oracle signed."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "voted_at",
+            "docs": [
+              "Vote timestamp."
+            ],
+            "type": "i64"
           }
         ]
       }

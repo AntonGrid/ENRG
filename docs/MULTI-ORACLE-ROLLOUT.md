@@ -56,12 +56,25 @@ curl -s http://YOUR_HOST/api/v1/oracles
 - Run `pio` firmware with your build only if you are the device manufacturer
   or have the firmware cold key.
 
-## Economics (next phase)
+## Quorum and economics (P3-6, implemented)
 
-Deposits + slashing for contradictory reports and reward distribution from
-the staking fund will make honest operation economically rational. The
-k-of-n on-chain quorum (per the EVM attestation pattern) is the planned
-follow-up (P3-6).
+On-chain attestation quorum is live in `enrg-mvp`:
+
+- **`stake_oracle`** — each oracle deposits SOL (≥ 0.001) into its
+  `OracleStake` PDA (`[oracle-stake, oracle]`); only staked oracles can vote.
+- **`submit_oracle_attestation`** — an oracle signs
+  `b"enrg:oracle:attest" || device_id || nonce || proof_hash` (Ed25519
+  precompile). `votes >= 2` finalizes the attestation; a vote with a different
+  hash sets `conflict=true`.
+- **`slash_oracle`** — governance moves a slashed oracle's deposit to the
+  vault (punishment for a contradictory report).
+- Verification: `cargo test` + `anchor test` (63 passing), incl.
+  `tests/oracle-quorum.ts` (5 cases: finalize, duplicate-vote PDA collision,
+  conflict, non-registered oracle rejection).
+
+Next phase: reward distribution from the staking fund (40% of mint
+commission) proportional to confirmed attestations, and wiring
+`mint_energy` to a finalized attestation.
 
 ## Related
 

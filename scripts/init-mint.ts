@@ -109,6 +109,19 @@ async function main() {
     }).rpc();
     step("initialize_reputation", true, reputation.toBase58());
   }
+
+  // 5. initialize_policy_registry — required by mint_energy
+  const policyRegistry = find(Buffer.from("policy-registry"));
+  if (await exists(policyRegistry)) {
+    step("policy_registry exists", true, policyRegistry.toBase58());
+  } else {
+    await program.methods.initializePolicyRegistry().accounts({
+      policyRegistry,
+      authority: operator.publicKey,
+      systemProgram: SystemProgram.programId,
+    }).rpc();
+    step("initialize_policy_registry", true, policyRegistry.toBase58());
+  }
   console.log("🎉 mint infrastructure ready!");
 }
 

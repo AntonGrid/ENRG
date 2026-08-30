@@ -452,4 +452,29 @@ pub mod enrg_mvp {
     ) -> Result<()> {
         instructions::poi_commitment::commit_contribution(ctx, round, digest, signature)
     }
+
+    // ═══════════════════════════════════════════════
+    //  PHASE 12 — Oracle Quorum (P3-6, ADR-0010)
+    // ═══════════════════════════════════════════════
+
+    /// A trusted oracle votes on a proof attestation (PDA
+    /// [b"oracle-attest", device_id, nonce]); ≥ threshold votes finalize it.
+    pub fn submit_oracle_attestation(
+        ctx: Context<SubmitOracleAttestation>,
+        nonce: u64,
+        proof_hash: [u8; 32],
+        signature: [u8; 64],
+    ) -> Result<()> {
+        instructions::oracle_quorum::submit_oracle_attestation(ctx, nonce, proof_hash, signature)
+    }
+
+    /// Deposit lamports as the oracle reputation stake (votes require it).
+    pub fn stake_oracle(ctx: Context<StakeOracle>, lamports: u64) -> Result<()> {
+        instructions::oracle_quorum::stake_oracle(ctx, lamports)
+    }
+
+    /// Slash an oracle deposit for a contradictory report (governance).
+    pub fn slash_oracle(ctx: Context<SlashOracle>) -> Result<()> {
+        instructions::oracle_quorum::slash_oracle(ctx)
+    }
 }

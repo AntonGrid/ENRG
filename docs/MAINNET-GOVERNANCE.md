@@ -46,6 +46,31 @@ every protocol authority MUST move behind a multisig (Squads v4 on Solana).
    controls the protocol; keep it only as the program-deploy bootstrap key
    until the program is redeployed with fresh constants.
 
+## Upgrades
+
+Program and IDL upgrades require the Squads multisig signature (upgrade
+authority is `SQUADS_PUBKEY`).
+
+1. Build and test locally: `anchor build && anchor test --skip-build`.
+2. Upload the new binary (operator pays; buffer authority → Squads):
+
+   ```bash
+   solana program write-buffer -u <CLUSTER> --output json-compact \
+     target/deploy/enrg_mvp.so > /tmp/buffer-info.json
+   BUFFER=$(python3 -c "import json;print(json.load(open('/tmp/buffer-info.json'))['buffer'])")
+   solana program set-buffer-authority -u <CLUSTER> --buffer "$BUFFER" \
+     --new-buffer-authority <SQUADS_PUBKEY>
+   ```
+
+3. In Squads UI create a transaction: **Program → Upgrade**, args:
+   `program_id = HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb`,
+   `buffer = $BUFFER`, `spill = <operator>`; guardians sign and execute.
+4. Update the IDL the same way (`anchor idl upgrade` with the multisig, or
+   `solana program invoke` on the `Upgrade` instruction carrying the IDL).
+
+> On devnet the upgrade authority is `H3tXm4Z…` (Squads); verify with
+> `solana program show HkuC3FT… -u devnet`.
+
 ## Emergency
 
 Squads supports an emergency (timelocked) flow: freeze minting

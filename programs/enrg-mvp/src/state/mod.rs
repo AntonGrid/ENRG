@@ -17,6 +17,7 @@ pub mod config;
 pub mod reputation;
 pub mod policy;
 pub mod poi;
+pub mod oracle_attestation;
 
 pub use vault::*;
 pub use producer::*;
@@ -37,3 +38,4 @@ pub use config::*;
 pub use reputation::*;
 pub use policy::*;
 pub use poi::*;
+pub use oracle_attestation::*;
