@@ -120,6 +120,23 @@
 #define ENRG_MANIFEST_REQUIRED 0
 #endif
 
+// ── Aggregation (P3, audit 2026-08-30) ──────────────────────────────────────
+// 0 = send every reading (default, unchanged behavior).
+// >0 = accumulate energy and send ONE aggregated proof per window (ms).
+// The device signs the SAME canonical message
+//   device_id(32) || nonce(8 LE) || timestamp(8 LE) || energy_wh(8 LE)
+// with energy_wh = accumulated value, so the oracle mints ONE transaction per
+// window instead of one per reading (10-60x fewer on-chain txs) — the on-chain
+// mint_energy already accepts arbitrary energy_wh.
+// Safety: the accumulator is flushed early when it reaches rated_power (the
+// per-report on-chain cap) or 1 MWh, so a valid proof never exceeds the cap.
+#ifndef ENRG_AGGREGATE_WINDOW_MS
+#define ENRG_AGGREGATE_WINDOW_MS 0
+#endif
+#ifndef ENRG_AGGREGATE_MAX_WH
+#define ENRG_AGGREGATE_MAX_WH 1000000ULL // 1 MWh absolute safety cap
+#endif
+
 // How often to retry fetching the manifest (ms) when it has not been received.
 #ifndef ENRG_MANIFEST_RETRY_MS
 #define ENRG_MANIFEST_RETRY_MS 60000UL
@@ -1112,6 +1129,11 @@ bool init_manifest(const String &deviceId) {
 //  PROOF
 // ════════════════════════════════════════════════════════════════
 
+// P3 (audit 2026-08-30): aggregation accumulator.
+static uint64_t g_agg_energy_wh = 0;
+static uint64_t g_agg_readings = 0;
+static unsigned long g_agg_start_ms = 0;
+
 void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
     // ADR-0004: if the manifest is required but not received/invalid — we do NOT send proofs.
     if (ENRG_MANIFEST_REQUIRED && !g_manifest_valid) {
@@ -1124,15 +1146,37 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
         return;
     }
 
-    uint64_t energyWh = read_energy_wh();
+    uint64_t readingWh = read_energy_wh();
 
     // ADR-0004: if the rated power is known (rated_power from the manifest),
     // the energy of one report is capped by it (coarse protection against false readings).
-    if (g_rated_power > 0 && energyWh > g_rated_power) {
+    if (g_rated_power > 0 && readingWh > g_rated_power) {
         Serial.printf("[PROOF] WARN: energy %lluWh > rated_power %lluW — clamping\n",
-                      (unsigned long long)energyWh, (unsigned long long)g_rated_power);
-        energyWh = g_rated_power;
+                      (unsigned long long)readingWh, (unsigned long long)g_rated_power);
+        readingWh = g_rated_power;
     }
+
+    uint64_t energyWh = readingWh;
+
+#if ENRG_AGGREGATE_WINDOW_MS > 0
+    // P3: accumulate within the window and send ONE aggregated proof.
+    g_agg_energy_wh += readingWh;
+    g_agg_readings++;
+    if (g_agg_start_ms == 0) g_agg_start_ms = millis();
+
+    bool windowElapsed = (millis() - g_agg_start_ms) >= (unsigned long)ENRG_AGGREGATE_WINDOW_MS;
+    bool atRatedCap = (g_rated_power > 0 && g_agg_energy_wh >= (uint64_t)g_rated_power);
+    bool atHardCap = g_agg_energy_wh >= (uint64_t)ENRG_AGGREGATE_MAX_WH;
+
+    if (!(windowElapsed || atRatedCap || atHardCap)) {
+        Serial.printf("[AGG] accumulating: %llu Wh (%llu readings)\n",
+                      (unsigned long long)g_agg_energy_wh, (unsigned long long)g_agg_readings);
+        return; // keep reading, do not send yet
+    }
+    energyWh = g_agg_energy_wh;
+    Serial.printf("[AGG] flush window: %llu Wh from %llu readings\n",
+                  (unsigned long long)energyWh, (unsigned long long)g_agg_readings);
+#endif
 
     uint32_t nonce = next_nonce();
     int64_t timestamp = (int64_t)time(nullptr); // wall-clock (epoch)
@@ -1182,6 +1226,13 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
         if (!connect_wifi_from_nvs(20000)) return;
     }
     send_proof_http(body);
+
+#if ENRG_AGGREGATE_WINDOW_MS > 0
+    // Reset the accumulator after a successful flush.
+    g_agg_energy_wh = 0;
+    g_agg_readings = 0;
+    g_agg_start_ms = 0;
+#endif
 }
 
 // ════════════════════════════════════════════════════════════════

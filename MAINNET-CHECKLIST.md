@@ -83,5 +83,19 @@ updated as the fixes land. The canonical audit report is
 - [x] **P2-4 Mainnet runbook** — `docs/MAINNET-RUNBOOK.md` (key ceremony,
       deploy, bootstrap, oracle, firmware, AI, go/no-go).
 
+## P3 — Proof aggregation (roadmap)
+
+- [x] **P3-1 Device-side aggregation** — firmware `ENRG_AGGREGATE_WINDOW_MS`:
+      one signed aggregated proof per window (same canonical message, so
+      `mint_energy` on-chain needs NO change). Flush guards: rated_power cap
+      (avoids ExcessiveEnergy) + 1 MWh hard cap. Documented in
+      `firmware/esp32_proof_sender/README.md`.
+- [ ] **P3-2 Oracle-side windowing** — aggregate accepted proofs of a device
+      and mint once per window (requires devices running P3-1).
+- [ ] **P3-3 Multi-device Merkle batch** — a dedicated `mint_batch` instruction
+      (single tx verifies N device signatures; compute-units bound, tx-size
+      bound documented: 2 mint_energy instructions do not fit in one tx due to
+      the 1232-byte limit).
+
 ---
 *Updated: 2026-08-30 (audit day 1).*
