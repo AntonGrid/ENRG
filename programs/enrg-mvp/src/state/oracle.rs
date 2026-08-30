@@ -63,4 +63,14 @@ impl OracleReport {
 
         Ok(buf)
     }
+
+    /// Canonical proof hash used by the oracle quorum (P3-6): SHA-256 of the
+    /// oracle message. Oracles sign `b"enrg:oracle:attest" || device || nonce
+    /// || proof_hash` in `submit_oracle_attestation`, and `mint_energy` (when
+    /// the quorum is required) demands a finalized attestation whose hash
+    /// equals this value.
+    pub fn proof_hash(&self) -> Result<[u8; 32]> {
+        let msg = self.oracle_message_to_sign()?;
+        Ok(solana_sha256_hasher::hash(&msg).to_bytes())
+    }
 }

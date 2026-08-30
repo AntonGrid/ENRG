@@ -1,10 +1,11 @@
 use anchor_lang::prelude::*;
+use anchor_spl::token::{self, Mint, Token, TokenAccount};
 
 use crate::error::ErrorCode;
 use crate::security::verify_ed25519_signature;
 use crate::state::{
-    oracle_attest_message, OracleAttestation, OracleRegistry, OracleStake, OracleVote,
-    ORACLE_ATTESTATION_THRESHOLD,
+    oracle_attest_message, OracleAttestation, OracleQuorumConfig, OracleRegistry, OracleStake,
+    OracleVote, TokenMint, ORACLE_ATTESTATION_THRESHOLD,
 };
 
 /// Submit one oracle vote on a proof attestation (P3-6).
@@ -62,6 +63,14 @@ pub struct SubmitOracleAttestation<'info> {
     )]
     pub oracle_stake: Account<'info, OracleStake>,
 
+    /// Quorum config — optional; when present its `threshold` overrides the
+    /// default ORACLE_ATTESTATION_THRESHOLD.
+    #[account(
+        seeds = [b"oracle-quorum-config"],
+        bump
+    )]
+    pub oracle_quorum_config: Option<Account<'info, OracleQuorumConfig>>,
+
     #[account(mut)]
     pub payer: Signer<'info>,
 
@@ -112,7 +121,13 @@ pub fn submit_oracle_attestation(
     }
 
     attestation.votes = attestation.votes.saturating_add(1);
-    if attestation.votes >= ORACLE_ATTESTATION_THRESHOLD {
+    let threshold = ctx
+        .accounts
+        .oracle_quorum_config
+        .as_ref()
+        .map(|c| c.threshold)
+        .unwrap_or(ORACLE_ATTESTATION_THRESHOLD);
+    if attestation.votes >= threshold {
         attestation.finalized = true;
     }
 
@@ -244,3 +259,178 @@ pub fn slash_oracle(ctx: Context<SlashOracle>) -> Result<()> {
     );
     Ok(())
 }
+
+/// Initialize the oracle quorum config (P3-6 phase 2). The PDA
+/// `[b"oracle-quorum-config"]` gates `mint_energy`: when `required` is set,
+/// every mint must present a FINALIZED attestation. Only the OracleRegistry
+/// authority may create it.
+#[derive(Accounts)]
+pub struct InitOracleQuorum<'info> {
+    #[account(
+        init,
+        payer = authority,
+        space = 8 + OracleQuorumConfig::INIT_SPACE,
+        seeds = [b"oracle-quorum-config"],
+        bump
+    )]
+    pub oracle_quorum_config: Account<'info, OracleQuorumConfig>,
+
+    #[account(
+        seeds = [b"oracle-registry"],
+        bump,
+        constraint = oracle_registry.authority == authority.key() @ ErrorCode::NotOracleAuthority
+    )]
+    pub oracle_registry: Account<'info, OracleRegistry>,
+
+    #[account(mut)]
+    pub authority: Signer<'info>,
+
+    pub system_program: Program<'info, System>,
+}
+
+pub fn init_oracle_quorum(
+    ctx: Context<InitOracleQuorum>,
+    required: bool,
+    threshold: u8,
+    reward_per_vote: u64,
+) -> Result<()> {
+    require!(
+        threshold >= 2 && threshold <= OracleRegistry::MAX_ORACLES as u8,
+        ErrorCode::InvalidQuorumThreshold
+    );
+    let cfg = &mut ctx.accounts.oracle_quorum_config;
+    cfg.authority = ctx.accounts.authority.key();
+    cfg.required = required;
+    cfg.threshold = threshold;
+    cfg.reward_per_vote = reward_per_vote;
+    msg!(
+        "Oracle quorum config: required={} threshold={} reward_per_vote={}",
+        cfg.required,
+        cfg.threshold,
+        cfg.reward_per_vote
+    );
+    Ok(())
+}
+
+/// Update the quorum config (required / threshold / reward).
+#[derive(Accounts)]
+pub struct SetOracleQuorum<'info> {
+    #[account(
+        mut,
+        seeds = [b"oracle-quorum-config"],
+        bump,
+        constraint = oracle_quorum_config.authority == authority.key() @ ErrorCode::NotQuorumAuthority
+    )]
+    pub oracle_quorum_config: Account<'info, OracleQuorumConfig>,
+
+    pub authority: Signer<'info>,
+}
+
+pub fn set_oracle_quorum(
+    ctx: Context<SetOracleQuorum>,
+    required: bool,
+    threshold: u8,
+    reward_per_vote: u64,
+) -> Result<()> {
+    require!(
+        threshold >= 2 && threshold <= OracleRegistry::MAX_ORACLES as u8,
+        ErrorCode::InvalidQuorumThreshold
+    );
+    let cfg = &mut ctx.accounts.oracle_quorum_config;
+    cfg.required = required;
+    cfg.threshold = threshold;
+    cfg.reward_per_vote = reward_per_vote;
+    Ok(())
+}
+
+/// Claim the SRC reward for a vote in a FINALIZED attestation. The tokens are
+/// transferred from the protocol staking fund (owned by the Vault PDA) to the
+/// oracle's token account.
+#[derive(Accounts)]
+pub struct ClaimOracleReward<'info> {
+    /// The vote PDA [b"oracle-vote", attestation, oracle].
+    #[account(
+        seeds = [b"oracle-vote", attestation.key().as_ref(), oracle_signer.key().as_ref()],
+        bump
+    )]
+    pub oracle_vote: Account<'info, OracleVote>,
+
+    /// The attestation the vote belongs to (read-only).
+    /// CHECK: address is bound into the vote PDA seeds; finalized checked in logic.
+    pub attestation: Account<'info, OracleAttestation>,
+
+    #[account(
+        seeds = [b"oracle-quorum-config"],
+        bump
+    )]
+    pub oracle_quorum_config: Account<'info, OracleQuorumConfig>,
+
+    pub oracle_signer: Signer<'info>,
+
+    #[account(
+        seeds = [b"token-mint"],
+        bump = token_mint.bump
+    )]
+    pub token_mint: Account<'info, TokenMint>,
+
+    #[account(
+        mut,
+        constraint = staking_account.key() == token_mint.staking_account @ ErrorCode::InvalidParameter,
+        constraint = staking_account.mint == mint.key() @ ErrorCode::InvalidParameter
+    )]
+    pub staking_account: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        mut,
+        constraint = oracle_ata.mint == mint.key() @ ErrorCode::InvalidParameter,
+        constraint = oracle_ata.owner == oracle_signer.key() @ ErrorCode::UnauthorizedTokenAccountOwner
+    )]
+    pub oracle_ata: Box<Account<'info, TokenAccount>>,
+
+    #[account(
+        seeds = [b"src-mint"],
+        bump = token_mint.mint_bump,
+        constraint = mint.key() == token_mint.mint @ ErrorCode::InvalidParameter
+    )]
+    pub mint: Box<Account<'info, Mint>>,
+
+    /// CHECK: Vault PDA — signs the staking-fund transfer via its seeds.
+    #[account(seeds = [b"vault"], bump)]
+    pub vault_authority: UncheckedAccount<'info>,
+
+    pub token_program: Program<'info, Token>,
+}
+
+pub fn claim_oracle_reward(ctx: Context<ClaimOracleReward>) -> Result<()> {
+    let vote = &mut ctx.accounts.oracle_vote;
+    require!(vote.attestation == ctx.accounts.attestation.key(), ErrorCode::InvalidParameter);
+    require!(ctx.accounts.attestation.finalized, ErrorCode::AttestationNotFinalized);
+    require!(!vote.reward_claimed, ErrorCode::AlreadyClaimed);
+
+    let reward = ctx.accounts.oracle_quorum_config.reward_per_vote;
+    require!(reward > 0, ErrorCode::NothingToClaim);
+
+    let vault_seeds: &[&[u8]] = &[b"vault".as_ref(), &[ctx.bumps.vault_authority]];
+    token::transfer(
+        CpiContext::new_with_signer(
+            ctx.accounts.token_program.to_account_info(),
+            token::Transfer {
+                from: ctx.accounts.staking_account.to_account_info(),
+                to: ctx.accounts.oracle_ata.to_account_info(),
+                authority: ctx.accounts.vault_authority.to_account_info(),
+            },
+            &[vault_seeds],
+        ),
+        reward,
+    )?;
+
+    vote.reward_claimed = true;
+    msg!(
+        "Oracle reward: {} += {} SRC for attestation {}",
+        ctx.accounts.oracle_signer.key(),
+        reward,
+        ctx.accounts.attestation.key()
+    );
+    Ok(())
+}
+

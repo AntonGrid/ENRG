@@ -119,4 +119,18 @@ pub enum ErrorCode {
     MintPaused,
     #[msg("Signer is not the policy authority")]
     NotPolicyAuthority,
+    #[msg("Oracle quorum is required but no attestation was provided")]
+    AttestationRequired,
+    #[msg("The attestation is not finalized (quorum not reached)")]
+    AttestationNotFinalized,
+    #[msg("Attestation proof hash does not match the report")]
+    AttestationHashMismatch,
+    #[msg("Quorum threshold must be >= 2 and <= 100")]
+    InvalidQuorumThreshold,
+    #[msg("Oracle vote reward was already claimed")]
+    AlreadyClaimed,
+    #[msg("Signer is not the quorum authority")]
+    NotQuorumAuthority,
+    #[msg("Signer is not the oracle registry authority")]
+    NotOracleAuthority,
 }

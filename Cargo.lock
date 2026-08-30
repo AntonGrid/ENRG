@@ -491,6 +491,7 @@ dependencies = [
  "hex",
  "solana-instruction",
  "solana-instructions-sysvar",
+ "solana-sha256-hasher",
 ]
 
 [[package]]

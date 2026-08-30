@@ -89,6 +89,37 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     // ── Proof validation: nonce (verifier) ──
     verify_nonce(producer, report.nonce)?;
 
+    // ══ C-Q: oracle quorum gate (P3-6) ══
+    // When the quorum config exists and requires it, the report must be
+    // backed by a FINALIZED attestation for (device_id, nonce) whose
+    // proof_hash equals SHA-256 of the oracle message. With a single trusted
+    // oracle (or no config) the legacy flow is preserved.
+    if let Some(cfg) = &ctx.accounts.oracle_quorum_config {
+        if cfg.required {
+            let att = ctx
+                .accounts
+                .attestation
+                .as_ref()
+                .ok_or(ErrorCode::AttestationRequired)?;
+            require!(att.finalized, ErrorCode::AttestationNotFinalized);
+            require!(att.device_id == report.device_id, ErrorCode::DeviceMismatch);
+            require!(att.nonce == report.nonce, ErrorCode::InvalidNonce);
+            let (canonical, _) = Pubkey::find_program_address(
+                &[
+                    b"oracle-attest".as_ref(),
+                    report.device_id.as_ref(),
+                    report.nonce.to_le_bytes().as_ref(),
+                ],
+                ctx.program_id,
+            );
+            require!(att.key() == canonical, ErrorCode::InvalidParameter);
+            require!(
+                att.proof_hash == report.proof_hash()?,
+                ErrorCode::AttestationHashMismatch
+            );
+        }
+    }
+
     // ══ Policy Engine (ADR-0003): all proof-admissibility decisions ══
     // The Verifier (this instruction) makes no decisions — it executes the
     // policies from PolicyRegistry (or protocol defaults if the registry is not initialized).
@@ -512,6 +543,20 @@ pub struct MintEnergy<'info> {
         bump
     )]
     pub policy_registry: Option<Account<'info, PolicyRegistry>>,
+
+    /// Oracle quorum config (P3-6) — optional. When initialized with
+    /// required=true, the report must carry a FINALIZED attestation with a
+    /// matching proof hash. Not initialized → the legacy single-oracle flow.
+    #[account(
+        seeds = [b"oracle-quorum-config"],
+        bump
+    )]
+    pub oracle_quorum_config: Option<Account<'info, OracleQuorumConfig>>,
+
+    /// The finalized attestation for (report.device_id, report.nonce) —
+    /// required when the quorum config has `required = true`.
+    /// CHECK: address is re-derived in the gate (PDA seeds check).
+    pub attestation: Option<Account<'info, OracleAttestation>>,
 }
 
 /// Whether the transaction signer (submitter) may initiate a mint for the device:

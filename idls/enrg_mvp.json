@@ -523,6 +523,173 @@
       ]
     },
     {
+      "name": "claim_oracle_reward",
+      "docs": [
+        "Claim the SRC reward for a vote in a finalized attestation (from the",
+        "staking fund)."
+      ],
+      "discriminator": [
+        69,
+        182,
+        58,
+        69,
+        179,
+        0,
+        30,
+        35
+      ],
+      "accounts": [
+        {
+          "name": "oracle_vote",
+          "docs": [
+            "The vote PDA [b\"oracle-vote\", attestation, oracle]."
+          ],
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  118,
+                  111,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "attestation"
+              },
+              {
+                "kind": "account",
+                "path": "oracle_signer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "attestation",
+          "docs": [
+            "The attestation the vote belongs to (read-only)."
+          ]
+        },
+        {
+          "name": "oracle_quorum_config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  113,
+                  117,
+                  111,
+                  114,
+                  117,
+                  109,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_signer",
+          "signer": true
+        },
+        {
+          "name": "token_mint",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  116,
+                  111,
+                  107,
+                  101,
+                  110,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "staking_account",
+          "writable": true
+        },
+        {
+          "name": "oracle_ata",
+          "writable": true
+        },
+        {
+          "name": "mint",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  114,
+                  99,
+                  45,
+                  109,
+                  105,
+                  110,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault_authority",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        }
+      ],
+      "args": []
+    },
+    {
       "name": "claim_rewards",
       "discriminator": [
         4,
@@ -1332,6 +1499,108 @@
         }
       ],
       "args": []
+    },
+    {
+      "name": "init_oracle_quorum",
+      "docs": [
+        "Initialize the oracle quorum config (PDA [b\"oracle-quorum-config\"]).",
+        "required=true makes mint_energy demand a finalized attestation."
+      ],
+      "discriminator": [
+        213,
+        237,
+        163,
+        236,
+        150,
+        123,
+        191,
+        222
+      ],
+      "accounts": [
+        {
+          "name": "oracle_quorum_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  113,
+                  117,
+                  111,
+                  114,
+                  117,
+                  109,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_registry",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "required",
+          "type": "bool"
+        },
+        {
+          "name": "threshold",
+          "type": "u8"
+        },
+        {
+          "name": "reward_per_vote",
+          "type": "u64"
+        }
+      ]
     },
     {
       "name": "initialize_founder_vesting",
@@ -2520,6 +2789,52 @@
               }
             ]
           }
+        },
+        {
+          "name": "oracle_quorum_config",
+          "docs": [
+            "Oracle quorum config (P3-6) — optional. When initialized with",
+            "required=true, the report must carry a FINALIZED attestation with a",
+            "matching proof hash. Not initialized → the legacy single-oracle flow."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  113,
+                  117,
+                  111,
+                  114,
+                  117,
+                  109,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "attestation",
+          "docs": [
+            "The finalized attestation for (report.device_id, report.nonce) —",
+            "required when the quorum config has `required = true`."
+          ],
+          "optional": true
         }
       ],
       "args": [
@@ -3556,6 +3871,75 @@
       ]
     },
     {
+      "name": "set_oracle_quorum",
+      "docs": [
+        "Update the quorum config (required / threshold / reward_per_vote)."
+      ],
+      "discriminator": [
+        108,
+        213,
+        186,
+        98,
+        77,
+        198,
+        136,
+        69
+      ],
+      "accounts": [
+        {
+          "name": "oracle_quorum_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  113,
+                  117,
+                  111,
+                  114,
+                  117,
+                  109,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "required",
+          "type": "bool"
+        },
+        {
+          "name": "threshold",
+          "type": "u8"
+        },
+        {
+          "name": "reward_per_vote",
+          "type": "u64"
+        }
+      ]
+    },
+    {
       "name": "set_policy_authority",
       "docs": [
         "Change the policy administrator (role may later go to Governance ADR-0009)."
@@ -4043,6 +4427,43 @@
               {
                 "kind": "account",
                 "path": "oracle"
+              }
+            ]
+          }
+        },
+        {
+          "name": "oracle_quorum_config",
+          "docs": [
+            "Quorum config — optional; when present its `threshold` overrides the",
+            "default ORACLE_ATTESTATION_THRESHOLD."
+          ],
+          "optional": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  113,
+                  117,
+                  111,
+                  114,
+                  117,
+                  109,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
               }
             ]
           }
@@ -4747,6 +5168,19 @@
         104,
         147,
         12
+      ]
+    },
+    {
+      "name": "OracleQuorumConfig",
+      "discriminator": [
+        86,
+        22,
+        237,
+        133,
+        253,
+        74,
+        14,
+        40
       ]
     },
     {
@@ -5661,6 +6095,41 @@
       "code": 6056,
       "name": "NotPolicyAuthority",
       "msg": "Signer is not the policy authority"
+    },
+    {
+      "code": 6057,
+      "name": "AttestationRequired",
+      "msg": "Oracle quorum is required but no attestation was provided"
+    },
+    {
+      "code": 6058,
+      "name": "AttestationNotFinalized",
+      "msg": "The attestation is not finalized (quorum not reached)"
+    },
+    {
+      "code": 6059,
+      "name": "AttestationHashMismatch",
+      "msg": "Attestation proof hash does not match the report"
+    },
+    {
+      "code": 6060,
+      "name": "InvalidQuorumThreshold",
+      "msg": "Quorum threshold must be >= 2 and <= 100"
+    },
+    {
+      "code": 6061,
+      "name": "AlreadyClaimed",
+      "msg": "Oracle vote reward was already claimed"
+    },
+    {
+      "code": 6062,
+      "name": "NotQuorumAuthority",
+      "msg": "Signer is not the quorum authority"
+    },
+    {
+      "code": 6063,
+      "name": "NotOracleAuthority",
+      "msg": "Signer is not the oracle registry authority"
     }
   ],
   "types": [
@@ -6938,6 +7407,52 @@
       }
     },
     {
+      "name": "OracleQuorumConfig",
+      "docs": [
+        "On-chain oracle quorum configuration (P3-6, phase 2).",
+        "",
+        "PDA `[b\"oracle-quorum-config\"]`. When the PDA is NOT initialized the quorum",
+        "is disabled and `mint_energy` behaves exactly like the single-oracle",
+        "legacy flow (full backward compatibility). When initialized with",
+        "`required = true`, every mint must present a FINALIZED attestation whose",
+        "proof_hash equals SHA-256(oracle_message) of the report."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "docs": [
+              "Authority — must equal the OracleRegistry authority (protocol admin)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "required",
+            "docs": [
+              "mint_energy requires a finalized attestation when true."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "threshold",
+            "docs": [
+              "Votes needed to finalize an attestation (2..=MAX_ORACLES)."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "reward_per_vote",
+            "docs": [
+              "SRC reward (atomic units) paid to an oracle for a vote in a FINALIZED",
+              "attestation, sourced from the staking fund."
+            ],
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "OracleRegistry",
       "docs": [
         "Oracle Registry.",
@@ -7156,6 +7671,14 @@
               "Vote timestamp."
             ],
             "type": "i64"
+          },
+          {
+            "name": "reward_claimed",
+            "docs": [
+              "Reward for a vote in a FINALIZED attestation was already claimed",
+              "(SRC minted from the staking fund)."
+            ],
+            "type": "bool"
           }
         ]
       }

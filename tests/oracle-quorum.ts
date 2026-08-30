@@ -94,7 +94,13 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
     return stakePda;
   }
 
-  async function vote(ora: Keypair, deviceId: PublicKey, nonce: BN, hash: Buffer) {
+  async function vote(
+    ora: Keypair,
+    deviceId: PublicKey,
+    nonce: BN,
+    hash: Buffer,
+    configPda?: PublicKey | null
+  ) {
     const attestPda = find("oracle-attest", [deviceId.toBytes(), nonce.toArrayLike(Buffer, "le", 8)]);
     const [votePda] = PublicKey.findProgramAddressSync(
       [Buffer.from("oracle-vote"), attestPda.toBytes(), ora.publicKey.toBytes()],
@@ -116,6 +122,7 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
         oracle: ora.publicKey,
         oracleRegistry: registryPda,
         oracleStake: stakePda,
+        oracleQuorumConfig: configPda ?? null,
         payer: provider.wallet.publicKey,
         instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
         systemProgram: SystemProgram.programId,
@@ -218,6 +225,7 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
           oracle: stranger.publicKey,
           oracleRegistry: registryPda,
           oracleStake: stakePda,
+          oracleQuorumConfig: null,
           payer: provider.wallet.publicKey,
           instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
           systemProgram: SystemProgram.programId,
@@ -225,6 +233,87 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
         .preInstructions([ed25519Ix(msg, stranger)])
         .rpc(),
       /custom program error|already initialized|AccountNotInitialized/
+    );
+  });
+
+  it("config: init sets authority + required, threshold overrides finalize", async () => {
+    const configPda = find("oracle-quorum-config");
+    if (!(await connection.getAccountInfo(configPda))) {
+      await program.methods
+        .initOracleQuorum(false, 3, new BN(1_000_000_000)) // 3 votes needed, 1 SRC/vote
+        .accounts({
+          oracleQuorumConfig: configPda,
+          oracleRegistry: registryPda,
+          authority: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+    }
+    let cfg: any = await program.account.oracleQuorumConfig.fetch(configPda);
+    assert.strictEqual(cfg.required, false);
+    assert.strictEqual(cfg.threshold, 3);
+    assert.strictEqual(cfg.rewardPerVote.toNumber(), 1_000_000_000);
+    assert.ok(cfg.authority.equals(provider.wallet.publicKey));
+
+    // Threshold 3 (from the config) → 2 votes do NOT finalize.
+    const nonce = new BN(5);
+    await vote(ora1, device.publicKey, nonce, hashA, configPda);
+    await vote(ora2, device.publicKey, nonce, hashA, configPda);
+    const attestPda = find("oracle-attest", [
+      device.publicKey.toBytes(),
+      nonce.toArrayLike(Buffer, "le", 8),
+    ]);
+    let a: any = await program.account.oracleAttestation.fetch(attestPda);
+    assert.strictEqual(a.votes, 2);
+    assert.strictEqual(a.finalized, false, "threshold=3 must not finalize at 2 votes");
+
+    await vote(ora3, device.publicKey, nonce, hashA, configPda);
+    a = await program.account.oracleAttestation.fetch(attestPda);
+    assert.strictEqual(a.finalized, true, "3rd vote finalizes");
+  });
+
+  it("config: only the config authority can update it", async () => {
+    const configPda = find("oracle-quorum-config");
+    const stranger = Keypair.generate();
+    await ensureFunded(connection, stranger.publicKey);
+    await assert.rejects(
+      program.methods
+        .setOracleQuorum(true, 2, new BN(0))
+        .accounts({
+          oracleQuorumConfig: configPda,
+          authority: stranger.publicKey,
+        })
+        .signers([stranger])
+        .rpc(),
+      /AnchorError|custom program error/
+    );
+    await program.methods
+      .setOracleQuorum(true, 2, new BN(1_000_000_000))
+      .accounts({
+        oracleQuorumConfig: configPda,
+        authority: provider.wallet.publicKey,
+      })
+      .rpc();
+    const cfg: any = await program.account.oracleQuorumConfig.fetch(configPda);
+    assert.strictEqual(cfg.required, true);
+    assert.strictEqual(cfg.threshold, 2);
+  });
+
+  it("config: init rejects threshold < 2", async () => {
+    const stranger = Keypair.generate();
+    await ensureFunded(connection, stranger.publicKey);
+    const cfgPda = PublicKey.findProgramAddressSync(
+      [Buffer.from("oracle-quorum-config")],
+      PROGRAM_ID
+    )[0];
+    // PDA already exists → init_if_needed would collide; instead assert the
+    // constraint path via set (threshold validation) on the existing config.
+    await assert.rejects(
+      program.methods
+        .setOracleQuorum(true, 1, new BN(0))
+        .accounts({ oracleQuorumConfig: cfgPda, authority: provider.wallet.publicKey })
+        .rpc(),
+      /AnchorError|custom program error/
     );
   });
 });

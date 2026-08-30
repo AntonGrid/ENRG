@@ -477,4 +477,31 @@ pub mod enrg_mvp {
     pub fn slash_oracle(ctx: Context<SlashOracle>) -> Result<()> {
         instructions::oracle_quorum::slash_oracle(ctx)
     }
+
+    /// Initialize the oracle quorum config (PDA [b"oracle-quorum-config"]).
+    /// required=true makes mint_energy demand a finalized attestation.
+    pub fn init_oracle_quorum(
+        ctx: Context<InitOracleQuorum>,
+        required: bool,
+        threshold: u8,
+        reward_per_vote: u64,
+    ) -> Result<()> {
+        instructions::oracle_quorum::init_oracle_quorum(ctx, required, threshold, reward_per_vote)
+    }
+
+    /// Update the quorum config (required / threshold / reward_per_vote).
+    pub fn set_oracle_quorum(
+        ctx: Context<SetOracleQuorum>,
+        required: bool,
+        threshold: u8,
+        reward_per_vote: u64,
+    ) -> Result<()> {
+        instructions::oracle_quorum::set_oracle_quorum(ctx, required, threshold, reward_per_vote)
+    }
+
+    /// Claim the SRC reward for a vote in a finalized attestation (from the
+    /// staking fund).
+    pub fn claim_oracle_reward(ctx: Context<ClaimOracleReward>) -> Result<()> {
+        instructions::oracle_quorum::claim_oracle_reward(ctx)
+    }
 }

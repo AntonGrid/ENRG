@@ -45,6 +45,9 @@ pub struct OracleVote {
     pub proof_hash: [u8; 32],
     /// Vote timestamp.
     pub voted_at: i64,
+    /// Reward for a vote in a FINALIZED attestation was already claimed
+    /// (SRC minted from the staking fund).
+    pub reward_claimed: bool,
 }
 
 /// Oracle reputation deposit (lamports escrowed by the oracle on the PDA).
@@ -74,6 +77,27 @@ pub fn oracle_attest_message(device_id: &Pubkey, nonce: u64, proof_hash: &[u8; 3
 
 /// Minimum number of oracle votes to finalize an attestation.
 pub const ORACLE_ATTESTATION_THRESHOLD: u8 = 2;
+
+/// On-chain oracle quorum configuration (P3-6, phase 2).
+///
+/// PDA `[b"oracle-quorum-config"]`. When the PDA is NOT initialized the quorum
+/// is disabled and `mint_energy` behaves exactly like the single-oracle
+/// legacy flow (full backward compatibility). When initialized with
+/// `required = true`, every mint must present a FINALIZED attestation whose
+/// proof_hash equals SHA-256(oracle_message) of the report.
+#[account]
+#[derive(InitSpace)]
+pub struct OracleQuorumConfig {
+    /// Authority — must equal the OracleRegistry authority (protocol admin).
+    pub authority: Pubkey,
+    /// mint_energy requires a finalized attestation when true.
+    pub required: bool,
+    /// Votes needed to finalize an attestation (2..=MAX_ORACLES).
+    pub threshold: u8,
+    /// SRC reward (atomic units) paid to an oracle for a vote in a FINALIZED
+    /// attestation, sourced from the staking fund.
+    pub reward_per_vote: u64,
+}
 
 #[cfg(test)]
 mod tests {

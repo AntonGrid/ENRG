@@ -4,7 +4,9 @@
 //!   b"enrg:oracle:attest" || device_id(32) || nonce(8 LE) || proof_hash(32)
 //! The on-chain behavior is covered by `ENRG/tests/oracle-quorum.ts`.
 
-use enrg_mvp::state::{oracle_attest_message, OracleAttestation, OracleStake, OracleVote};
+use enrg_mvp::state::{
+    oracle_attest_message, OracleAttestation, OracleStake, OracleVote, OracleReport,
+};
 use anchor_lang::prelude::{Pubkey, Space};
 
 #[test]
@@ -22,6 +24,24 @@ fn attest_message_layout_is_stable() {
 #[test]
 fn quorum_account_sizes_are_sane() {
     assert_eq!(OracleAttestation::INIT_SPACE, 32 + 8 + 32 + 1 + 1 + 1 + 8);
-    assert_eq!(OracleVote::INIT_SPACE, 32 + 32 + 32 + 8);
+    assert_eq!(OracleVote::INIT_SPACE, 32 + 32 + 32 + 8 + 1);
     assert_eq!(OracleStake::INIT_SPACE, 32 + 8 + 8 + 1);
+}
+
+#[test]
+fn report_proof_hash_is_sha256_of_oracle_message() {
+    let report = OracleReport {
+        oracle: Pubkey::new_from_array([1u8; 32]),
+        device_id: Pubkey::new_from_array([2u8; 32]),
+        nonce: 7,
+        device_timestamp: 1_700_000_000,
+        verified_at: 1_700_000_050,
+        energy_wh: 1_250,
+        device_signature: [3u8; 64],
+        oracle_signature: [4u8; 64],
+    };
+    let msg = report.oracle_message_to_sign().unwrap();
+    let expected = solana_sha256_hasher::hash(&msg).to_bytes();
+    assert_eq!(report.proof_hash().unwrap(), expected);
+    assert_ne!(report.proof_hash().unwrap(), [0u8; 32]);
 }

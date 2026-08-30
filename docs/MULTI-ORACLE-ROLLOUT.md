@@ -68,13 +68,29 @@ On-chain attestation quorum is live in `enrg-mvp`:
   hash sets `conflict=true`.
 - **`slash_oracle`** — governance moves a slashed oracle's deposit to the
   vault (punishment for a contradictory report).
-- Verification: `cargo test` + `anchor test` (63 passing), incl.
-  `tests/oracle-quorum.ts` (5 cases: finalize, duplicate-vote PDA collision,
-  conflict, non-registered oracle rejection).
+- **`init_oracle_quorum` / `set_oracle_quorum`** — `OracleQuorumConfig`
+  (`[oracle-quorum-config]`): `required`, `threshold` (2..=100), and
+  `reward_per_vote` (SRC atomic units).
+- **Mint gate** — when `required=true`, `mint_energy` demands a FINALIZED
+  attestation for `(device_id, nonce)` whose `proof_hash` equals
+  `SHA-256(oracle_message)` of the report. Without the config the legacy
+  single-oracle flow works unchanged.
+- **`claim_oracle_reward`** — an oracle claims `reward_per_vote` SRC for a
+  vote in a finalized attestation; tokens are transferred from the staking
+  fund (Vault-owned) to the oracle's ATA.
+- Verification: `cargo test` + `anchor test` (66 passing), incl.
+  `tests/oracle-quorum.ts` (7 cases: finalize, duplicate-vote PDA collision,
+  conflict, non-registered oracle rejection, config threshold override,
+  config authority, threshold validation).
 
-Next phase: reward distribution from the staking fund (40% of mint
-commission) proportional to confirmed attestations, and wiring
-`mint_energy` to a finalized attestation.
+### Voting for the canonical proof hash
+
+An oracle must vote on the hash it actually verified: `proof_hash =
+SHA-256(device_id ‖ nonce ‖ device_timestamp ‖ verified_at ‖ energy_wh)`.
+Client-side this is exactly the SHA-256 of the `oracle_message` the report
+signs. Voting for any other hash is legal but will produce an attestation
+that fails the mint gate (or, if the mismatch is deliberate, `conflict=true`
+and a potential slash).
 
 ## Related
 

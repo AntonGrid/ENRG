@@ -29,6 +29,8 @@ anchor-lang = { version = "0.32.1", features = ["init-if-needed"] }
 # spl-token-2022 -> solana-zk-sdk -> crypto-common 0.1.7 with huge arrays
 # ([u16; 2048], [u32; 2048], etc.) that break the 4096-byte stack limit.
 anchor-spl = { version = "0.32.1", default-features = false, features = ["token"] }
+# SHA-256 for the quorum proof_hash (solana-program 2.x split the hashers out).
+solana-sha256-hasher = "=2.3.0"
 
 hex = "0.4"
 
