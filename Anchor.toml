@@ -49,6 +49,12 @@ bind_address = "127.0.0.1"
 # См. docs/STATE.md, раздел 4. Smoke: tests/zz-e2e-smoke.ts.
 account = [
   { address = "B5uSLeaX2keRGbkxZA1Tyb7dFwNpY7DUbVu8TgvdiMAh", filename = "tests/genesis/founder-vesting.json" },
+  # H-2 / audit 2026-08-30: the founder wallet (EXPECTED_DEPLOYER) must be
+  # funded in the local validator. `solana-test-validator` credits airdrops only
+  # to --mint (the operator), so the bootstrap tests (governance.ts, the
+  # zz-e2e-smoke FRESH path) can never fund the founder key via requestAirdrop.
+  # Injecting 10 SOL at genesis makes the anchor suite deterministic.
+  { address = "6gM2eEALvTD8ByMkAtawW8tfS5LEn7yFEcMh2Ly3nUN8", filename = "tests/genesis/founder-wallet.json" },
 ]
 
 [hooks]

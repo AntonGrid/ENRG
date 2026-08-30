@@ -70,6 +70,16 @@ test-ledger/
 *-keypair.json
 admin-keypair.json
 oracle-keypair.json
+# P0-1 (audit 2026-08-30): the founder private key was committed at d3664c1.
+# Removed from the index; never re-add ANY founder wallet file. Mainnet MUST
+# use a rotated key (see MAINNET-CHECKLIST.md).
+founder-wallet.json
+founder-wallet*.json
+# The localnet genesis fixture is NOT a secret (public key + lamports only) —
+# it must stay tracked for the deterministic anchor test bootstrap.
+!tests/genesis/founder-wallet.json
+# Pre-existing: other operator wallets must not be tracked either.
+enrg-wallet.json
 validator.log
 test-ledger/
 solana-release/

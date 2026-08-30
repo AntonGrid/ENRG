@@ -249,16 +249,24 @@ describe("ENRG — E2E full-lifecycle smoke (pre-devnet)", () => {
 
   it("5. initialize_governance: authority + 3..=5 members", async () => {
     if (!(await connection.getAccountInfo(governancePda))) {
-      // FRESH: создаём governance с нашим authority и 5 членами.
+      // FRESH: initialize_governance разрешена только EXPECTED_DEPLOYER
+      // (= FOUNDER_WALLET, governance.rs:33 — H-2 anti-front-running).
+      // Операторский authority не может её инициализировать; подписываем
+      // founder-ключом (как tests/governance.ts). Полный цикл
+      // proposal/vote/mint покрыт tests/governance.ts; здесь — REUSE-верификация.
+      const founder = loadKeypair(FOUNDER_KEYPAIR_PATH, "founder");
+      assert.strictEqual(founder.publicKey.toBase58(), FOUNDER_WALLET.toBase58(), "ключ != FOUNDER_WALLET");
+      if (IS_LOCAL) await ensureFunded(connection, founder.publicKey);
       await program.methods
         .initializeGovernance(members.map((m) => m.publicKey))
         .accounts({
           governance: governancePda,
-          authority: authority.publicKey,
+          authority: founder.publicKey,
           systemProgram: SystemProgram.programId,
         })
+        .signers([founder])
         .rpc();
-      governanceOwned = true;
+      console.log("[smoke] governance создан founder-ключом (H-2: EXPECTED_DEPLOYER) — создание/голосование в режиме верификации.");
     }
 
     const gov = await program.account.governanceState.fetch(governancePda);
