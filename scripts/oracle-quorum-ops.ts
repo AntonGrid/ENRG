@@ -51,7 +51,10 @@ function loadKeypair(p: string, label: string): Keypair {
 }
 
 const find = (seed: string, extra: Buffer[] = []): PublicKey =>
-  PublicKey.findProgramAddressSync([Buffer.from(seed), ...extra], IDL.address)[0];
+  PublicKey.findProgramAddressSync(
+    [Buffer.from(seed), ...extra],
+    new PublicKey("HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb")
+  )[0];
 
 const attestPda = (device: PublicKey, nonce: anchor.BN) =>
   find("oracle-attest", [device.toBytes(), nonce.toArrayLike(Buffer, "le", 8)]);
@@ -66,7 +69,7 @@ async function main() {
     console.error("usage: oracle-quorum-ops.ts <stake|attest|claim|status|config> ...");
     process.exit(1);
   }
-  const oracle = cmd === "config" ? null : loadKeypair(ORACLE_KEY_PATH, "oracle");
+  const oracle = ["config", "init"].includes(cmd) ? null : loadKeypair(ORACLE_KEY_PATH, "oracle");
   const connection = new Connection(ENDPOINT, "confirmed");
   const provider = new anchor.AnchorProvider(
     connection,
@@ -91,6 +94,25 @@ async function main() {
         );
       }
       console.log("oracles:", reg.oracles.map((o: PublicKey) => o.toBase58()).join(", "));
+      return;
+    }
+
+    case "init": {
+      const [required, threshold, reward] = process.argv.slice(3);
+      await program.methods
+        .initOracleQuorum(
+          required === "true",
+          threshold ? Number(threshold) : 2,
+          new anchor.BN(reward || 0)
+        )
+        .accounts({
+          oracleQuorumConfig: configPda,
+          oracleRegistry: registry,
+          authority: provider.wallet.publicKey,
+          systemProgram: SystemProgram.programId,
+        })
+        .rpc();
+      console.log("✅ OracleQuorumConfig initialized:", required, "/ threshold", threshold || 2, "/ reward", reward || 0);
       return;
     }
 
