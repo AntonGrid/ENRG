@@ -34,6 +34,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import * as crypto from "crypto";
 
 import { AnchorProvider, BN, Program, Wallet } from "@coral-xyz/anchor";
 import {
@@ -41,6 +42,7 @@ import {
   AddressLookupTableProgram,
   Connection,
   Ed25519Program,
+  Keypair,
   PublicKey,
   SYSVAR_INSTRUCTIONS_PUBKEY,
   SystemProgram,
@@ -198,6 +200,25 @@ const deviceId = new PublicKey(device.publicKey);
 
 const oracle = nacl.sign.keyPair(); // Ed25519-ключ ОРАКУЛА (подписывает OracleReport)
 
+// P3-6 quorum: when ORACLE_KEY_PATH / ORACLE_TX_KEY_PATH point to real
+// staked registry oracles, the script also submits the on-chain attestation
+// votes (required by the mint gate when OracleQuorumConfig.required=true).
+function loadOracleKeypair(envKey: string): Keypair | null {
+  const p = process.env[envKey] || "";
+  if (p && fs.existsSync(p)) {
+    return Keypair.fromSecretKey(
+      Uint8Array.from(JSON.parse(fs.readFileSync(p, "utf8")))
+    );
+  }
+  return null;
+}
+// Real registry oracle (report signer) — overrides the random `oracle` above.
+const realOracle = loadOracleKeypair("ORACLE_KEY_PATH");
+// Second registry oracle — votes to finalize the attestation.
+const oracle2 = loadOracleKeypair("ORACLE_TX_KEY_PATH");
+// Keypair used to SIGN the OracleReport (real staked oracle or a random one).
+const reportOracle: any = realOracle ?? oracle;
+
 
 /**
  * Аирдроп доступен только на local; на devnet/mainnet — только проверка баланса.
@@ -305,14 +326,77 @@ function oracleProofMessage(
   ]);
 }
 
-function ed25519Ix(message: Buffer, signer: nacl.SignKeyPair): TransactionInstruction {
+function ed25519Ix(message: Buffer, signer: any): TransactionInstruction {
   const signature = nacl.sign.detached(message, signer.secretKey);
   // web3.js 1.98.x: publicKey ожидается как Uint8Array (32 байта).
+  const pub = signer.publicKey instanceof PublicKey
+    ? signer.publicKey.toBytes()
+    : signer.publicKey;
   return Ed25519Program.createInstructionWithPublicKey({
-    publicKey: signer.publicKey,
+    publicKey: pub,
     message,
     signature,
   });
+}
+
+// ── P3-6 quorum helpers (mirror state/oracle_attestation.rs + policy.js) ──
+
+/** Canonical proof hash of an oracle report: SHA-256(oracle_message). */
+function proofHashOf(m: Buffer): Buffer {
+  return crypto.createHash("sha256").update(m).digest();
+}
+
+/** Canonical vote message: b"enrg:oracle:attest" || device(32) || nonce(8 LE) || hash(32). */
+function attestMsg(deviceId: PublicKey, nonce: BN, proofHash: Buffer): Buffer {
+  return Buffer.concat([
+    Buffer.from("enrg:oracle:attest"),
+    deviceId.toBytes(),
+    nonce.toArrayLike(Buffer, "le", 8),
+    proofHash,
+  ]);
+}
+
+/** Submit one on-chain attestation vote (requires a staked registry oracle). */
+async function submitAttestation(
+  voter: Keypair,
+  deviceId: PublicKey,
+  nonce: BN,
+  oraMsg: Buffer,
+  attestationPda: PublicKey,
+  label: string
+) {
+  const proofHash = proofHashOf(oraMsg);
+  const msg = attestMsg(deviceId, nonce, proofHash);
+  const sig = nacl.sign.detached(msg, voter.secretKey);
+  const [vote] = PublicKey.findProgramAddressSync(
+    [Buffer.from("oracle-vote"), attestationPda.toBytes(), voter.publicKey.toBytes()],
+    PROGRAM_ID
+  );
+  const [oracleStake] = PublicKey.findProgramAddressSync(
+    [Buffer.from("oracle-stake"), voter.publicKey.toBytes()],
+    PROGRAM_ID
+  );
+  const [configPda] = PublicKey.findProgramAddressSync(
+    [Buffer.from("oracle-quorum-config")], PROGRAM_ID
+  );
+  await program.methods
+    .submitOracleAttestation(nonce, Array.from(proofHash), Array.from(sig))
+    .accounts({
+      attestation: attestationPda,
+      vote,
+      deviceId,
+      oracle: voter.publicKey,
+      oracleRegistry: P.oracleRegistry,
+      oracleStake,
+      oracleQuorumConfig: configPda,
+      payer: voter.publicKey,
+      instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+      systemProgram: SystemProgram.programId,
+    })
+    .preInstructions([ed25519Ix(msg, voter)])
+    .signers([voter])
+    .rpc();
+  stepLog(`oracle vote: ${label}`, true, voter.publicKey.toBase58());
 }
 
 // ── Address Lookup Table: mint-транзакция с 2× ed25519 + 16 аккаунтами
@@ -665,7 +749,7 @@ async function bootstrap() {
 //  DEVICE LIFECYCLE (ADR-0005)
 // ════════════════════════════════════════════════════════════════
 
-const oracleId = new PublicKey(oracle.publicKey);
+const oracleId = new PublicKey(reportOracle.publicKey);
 const producerPda = P.producer(deviceId);
 const profilePda = P.profile(operator.publicKey);
 
@@ -849,7 +933,20 @@ async function oracleMint() {
   const devMsg = deviceProofMessage(deviceId, nonce, now, ENERGY_WH);
   const oraMsg = oracleProofMessage(deviceId, nonce, now, now, ENERGY_WH);
   const devSig = nacl.sign.detached(devMsg, device.secretKey);
-  const oraSig = nacl.sign.detached(oraMsg, oracle.secretKey);
+  const oraSig = nacl.sign.detached(oraMsg, reportOracle.secretKey);
+
+  // ── P3-6 quorum: votes from BOTH staked registry oracles (before mint) ──
+  const configPda = PublicKey.findProgramAddressSync(
+    [Buffer.from("oracle-quorum-config")], PROGRAM_ID
+  )[0];
+  const attestationPda = PublicKey.findProgramAddressSync(
+    [Buffer.from("oracle-attest"), deviceId.toBytes(), nonce.toArrayLike(Buffer, "le", 8)],
+    PROGRAM_ID
+  )[0];
+  if (oracle2 && realOracle) {
+    await submitAttestation(realOracle, deviceId, nonce, oraMsg, attestationPda, "oracle-1");
+    await submitAttestation(oracle2, deviceId, nonce, oraMsg, attestationPda, "oracle-2");
+  }
 
   const report = {
     oracle: oracleId,
@@ -894,6 +991,9 @@ async function oracleMint() {
       poolShare: null,
       // ADR-0003: Policy Registry — опционален (null = дефолтные политики).
       policyRegistry: null,
+      // P3-6 quorum: config PDA + finalized attestation (required=true on devnet).
+      oracleQuorumConfig: oracle2 && realOracle ? configPda : null,
+      attestation: oracle2 && realOracle ? attestationPda : null,
     })
     .instruction();
 
@@ -918,9 +1018,11 @@ async function oracleMint() {
     operator.publicKey,
     profilePda,
     Ed25519Program.programId,
+    // P3-6 quorum accounts for the mint gate.
+    ...(oracle2 && realOracle ? [configPda, attestationPda] : []),
   ]);
   const sig = await sendVersioned(
-    [ed25519Ix(devMsg, device), ed25519Ix(oraMsg, oracle), mintIx],
+    [ed25519Ix(devMsg, device), ed25519Ix(oraMsg, reportOracle), mintIx],
     lut
   );
   stepLog("mint_energy (v0+LUT)", true, `sig=${sig}`);
