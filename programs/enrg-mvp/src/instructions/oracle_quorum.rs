@@ -350,6 +350,7 @@ pub fn set_oracle_quorum(
 pub struct ClaimOracleReward<'info> {
     /// The vote PDA [b"oracle-vote", attestation, oracle].
     #[account(
+        mut,
         seeds = [b"oracle-vote", attestation.key().as_ref(), oracle_signer.key().as_ref()],
         bump
     )]
@@ -394,9 +395,11 @@ pub struct ClaimOracleReward<'info> {
     )]
     pub mint: Box<Account<'info, Mint>>,
 
-    /// CHECK: Vault PDA — signs the staking-fund transfer via its seeds.
-    #[account(seeds = [b"vault"], bump)]
-    pub vault_authority: UncheckedAccount<'info>,
+    /// CHECK: the staking-fund PDA is the OWNER of the staking token account
+    /// (it is created as the ATA of [b"fund-staking"]) and signs the reward
+    /// transfer via its seeds.
+    #[account(seeds = [b"fund-staking"], bump)]
+    pub staking_authority: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token>,
 }
@@ -410,16 +413,16 @@ pub fn claim_oracle_reward(ctx: Context<ClaimOracleReward>) -> Result<()> {
     let reward = ctx.accounts.oracle_quorum_config.reward_per_vote;
     require!(reward > 0, ErrorCode::NothingToClaim);
 
-    let vault_seeds: &[&[u8]] = &[b"vault".as_ref(), &[ctx.bumps.vault_authority]];
+    let staking_seeds: &[&[u8]] = &[b"fund-staking".as_ref(), &[ctx.bumps.staking_authority]];
     token::transfer(
         CpiContext::new_with_signer(
             ctx.accounts.token_program.to_account_info(),
             token::Transfer {
                 from: ctx.accounts.staking_account.to_account_info(),
                 to: ctx.accounts.oracle_ata.to_account_info(),
-                authority: ctx.accounts.vault_authority.to_account_info(),
+                authority: ctx.accounts.staking_authority.to_account_info(),
             },
-            &[vault_seeds],
+            &[staking_seeds],
         ),
         reward,
     )?;

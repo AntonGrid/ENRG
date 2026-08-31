@@ -35,9 +35,14 @@ import {
 } from "@solana/web3.js";
 import nacl from "tweetnacl";
 import fs from "fs";
-import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import {
+  createAssociatedTokenAccountInstruction,
+  getAssociatedTokenAddressSync,
+} from "@solana/spl-token";
 import type { EnrgMvp } from "../target/types/enrg_mvp";
 import * as policy from "../policy";
+
+const PROGRAM_ID = new PublicKey("HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb");
 
 type OracleAttestation = IdlAccounts<EnrgMvp>["oracleAttestation"];
 type OracleQuorumConfig = IdlAccounts<EnrgMvp>["oracleQuorumConfig"];
@@ -71,11 +76,48 @@ const votePda = (attestation: PublicKey, oracle: PublicKey) =>
   find("oracle-vote", [Buffer.from(attestation.toBytes()), Buffer.from(oracle.toBytes())]);
 const stakePda = (oracle: PublicKey) => find("oracle-stake", [Buffer.from(oracle.toBytes())]);
 
+/** OracleVote account layout (8 discriminator + 32+32+32+8+1). */
+const ORACLE_VOTE_SIZE = 8 + 32 + 32 + 32 + 8 + 1;
+
+/** Claim the SRC reward for one finalized attestation (creates the ATA if needed). */
+async function claimReward(
+  program: anchor.Program,
+  connection: Connection,
+  oracle: Keypair,
+  attestation: PublicKey
+) {
+  const mintPk = find("src-mint");
+  const oracleAta = getAssociatedTokenAddressSync(mintPk, oracle.publicKey);
+  // The staking fund is the VAULT-owned ATA of the [b"fund-staking"] PDA.
+  const stakingAta = getAssociatedTokenAddressSync(mintPk, find("fund-staking"), true);
+  if (!(await connection.getAccountInfo(oracleAta))) {
+    const ix = createAssociatedTokenAccountInstruction(oracle.publicKey, oracleAta, oracle.publicKey, mintPk);
+    await anchor.web3.sendAndConfirmTransaction(connection, new anchor.web3.Transaction().add(ix), [oracle]);
+  }
+  await program.methods
+    .claimOracleReward()
+    .accounts({
+      oracleVote: votePda(attestation, oracle.publicKey),
+      attestation,
+      oracleQuorumConfig: find("oracle-quorum-config"),
+      oracleSigner: oracle.publicKey,
+      tokenMint: find("token-mint"),
+      stakingAccount: stakingAta,
+      oracleAta,
+      mint: mintPk,
+      stakingAuthority: find("fund-staking"),
+      tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
+    })
+    .signers([oracle])
+    .rpc();
+}
+
+
 
 async function main() {
   const cmd = process.argv[2];
   if (!cmd) {
-    console.error("usage: oracle-quorum-ops.ts <stake|attest|claim|status|config|init|set-required> ...");
+    console.error("usage: oracle-quorum-ops.ts <stake|attest|claim|claim-all|status|config|init|set-required> ...");
     process.exit(1);
   }
   const oracle = ["config", "init", "set-required"].includes(cmd)
@@ -221,25 +263,42 @@ async function main() {
         console.error("usage: claim <attestation_pubkey>");
         process.exit(1);
       }
-      const mintPk = find("src-mint");
-      const oracleAta = getAssociatedTokenAddressSync(mintPk, oracle!.publicKey);
-      await program.methods
-        .claimOracleReward()
-        .accounts({
-          oracleVote: votePda(attestation, oracle!.publicKey),
-          attestation,
-          oracleQuorumConfig: configPda,
-          oracleSigner: oracle!.publicKey,
-          tokenMint: find("token-mint"),
-          stakingAccount: find("fund-staking"),
-          oracleAta,
-          mint: mintPk,
-          vaultAuthority: find("vault"),
-          tokenProgram: new PublicKey("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"),
-        })
-        .signers([oracle!])
-        .rpc();
+      await claimReward(program, connection, oracle!, attestation);
       console.log("✅ claimed reward for", attestation.toBase58());
+      return;
+    }
+
+    case "claim-all": {
+      // Batch reward claim: find every OracleVote of this oracle via GPA
+      // (memcmp on the first account field, offset 8 past the discriminator),
+      // and claim the ones whose attestation is FINALIZED and not yet claimed.
+      const votes = await connection.getProgramAccounts(PROGRAM_ID, {
+        filters: [
+          { dataSize: ORACLE_VOTE_SIZE },
+          { memcmp: { offset: 8, bytes: oracle!.publicKey.toBase58() } },
+        ],
+      });
+      let claimed = 0;
+      let skipped = 0;
+      let failed = 0;
+      for (const { pubkey } of votes) {
+        const vote = await accounts.oracleVote.fetch(pubkey).catch(() => null);
+        if (!vote) { skipped++; continue; }
+        if (vote.rewardClaimed) { skipped++; continue; }
+        const att = await accounts.oracleAttestation
+          .fetch(vote.attestation)
+          .catch(() => null);
+        if (!att || !att.finalized) { skipped++; continue; }
+        try {
+          await claimReward(program, connection, oracle!, vote.attestation);
+          claimed++;
+          console.log("  ✅ claimed", vote.attestation.toBase58());
+        } catch (e: any) {
+          failed++;
+          console.warn("  ⚠️ claim failed:", vote.attestation.toBase58(), "-", e.message);
+        }
+      }
+      console.log(`✅ claim-all: claimed=${claimed} skipped=${skipped} failed=${failed}`);
       return;
     }
 
