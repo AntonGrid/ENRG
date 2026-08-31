@@ -50,6 +50,15 @@ Before the mainnet launch, follow in order:
 5. **`scripts/transfer-authorities-to-squads.ts`** — transfer vault / policy /
    oracle-registry / governance members to the multisig.
 
+## Positioning & funding
+
+- **[`docs/POSITIONING.md`](./docs/POSITIONING.md)** — how we describe ENRG:
+   *cryptographic trust between the physical and digital worlds* (audit,
+   certificates, ESG, DePIN) — use for any pitch/deck/application.
+- **[`docs/ONEPAGER.md`](./docs/ONEPAGER.md)** — one-page handout for people.
+- **[`docs/GRANTS.md`](./docs/GRANTS.md)** — funding plan (Solana, peaq, Filecoin,
+   Gitcoin, IoTeX) + copy-paste application template.
+
 ---
 
 ## Repository Structure
