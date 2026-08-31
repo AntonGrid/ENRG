@@ -548,6 +548,40 @@ async function mintEnergy(proof, producerOverride = null) {
         const policyRegistryExists = await accountExists(connection, policyRegistryPda);
         const policyRegistry = policyRegistryExists ? policyRegistryPda : null;
 
+        // ── P3-6 oracle quorum gate ──
+        // When ENRG_QUORUM_ATTEST=1 the oracle votes on the canonical proof
+        // hash BEFORE the mint, then mints WITH the attestation account.
+        // If OracleQuorumConfig.required=true the attestation must be
+        // FINALIZED (both oracles voted): we wait up to ~20 s for the second
+        // instance, otherwise return a retryable error so the queue worker
+        // retries once the second oracle votes. Legacy (no flag/config):
+        // mint works exactly as before.
+        let quorumConfigPda = null;
+        let quorumAttestationPda = null;
+        if (process.env.ENRG_QUORUM_ATTEST === '1') {
+            quorumConfigPda = find('oracle-quorum-config');
+            quorumAttestationPda = PublicKey.findProgramAddressSync(
+                [Buffer.from('oracle-attest'), deviceIdPubkey.toBuffer(), nonce.toArrayLike(Buffer, 'le', 8)],
+                PROGRAM_ID
+            )[0];
+            await submitQuorumAttestation(proof, nowSec, oracleMsg); // idempotent vote
+            const cfg = await program.account.oracleQuorumConfig.fetch(quorumConfigPda).catch(() => null);
+            if (cfg && cfg.required) {
+                let finalized = false;
+                for (let i = 0; i < 20 && !finalized; i++) {
+                    const att = await program.account.oracleAttestation
+                        .fetch(quorumAttestationPda)
+                        .catch(() => null);
+                    if (att && att.finalized) finalized = true;
+                    else await sleep(1000);
+                }
+                if (!finalized) {
+                    logger.info('[quorum] attestation pending (second oracle) — retry later');
+                    return { success: false, error: 'attestation_pending_retry' };
+                }
+            }
+        }
+
         // ── mint_energy via the Anchor client ──
         const mintIx = await program.methods.mintEnergy(report).accounts({
             producer: producerPda,
@@ -576,6 +610,9 @@ async function mintEnergy(proof, producerOverride = null) {
             pool: null,
             poolShare: null,
             policyRegistry,
+            // P3-6 quorum accounts (null when quorum is disabled).
+            oracleQuorumConfig: quorumConfigPda,
+            attestation: quorumAttestationPda,
         }).instruction();
 
         logger.info('[mintEnergy-ix] profile=' + (mintIx.keys.find(k => k.pubkey.equals(profilePda) || k.pubkey.equals(PublicKey.default))?.pubkey.toBase58()) +
@@ -601,6 +638,8 @@ async function mintEnergy(proof, producerOverride = null) {
             oracleKeypair.publicKey, profilePda, Ed25519Program.programId,
             // Policy Registry — only if initialized (ADR-0003).
             ...(policyRegistry ? [policyRegistry] : []),
+            // P3-6 quorum accounts — only when the quorum is enabled.
+            ...(quorumConfigPda ? [quorumConfigPda, quorumAttestationPda] : []),
         ];
         // Reuse the Address Lookup Table across mint_energy calls: creating one
         // costs 2 extra transactions (~5-8 s) and pushed the response past the
@@ -616,9 +655,8 @@ async function mintEnergy(proof, producerOverride = null) {
         }
         const sig = await sendVersioned(connection, founderKeypair, [edDeviceIx, edOracleIx, mintIx], lut);
         logger.info('🎉 Mint successful! TX:', sig);
-        // P3-6: after a successful mint the oracle votes on the canonical
-        // proof hash (fire-and-forget; enabled via ENRG_QUORUM_ATTEST=1).
-        queueMicrotask(() => submitQuorumAttestation(proof, nowSec, oracleMsg));
+        // Note: the oracle quorum vote now happens BEFORE the mint (above),
+        // so the attestation is in place when required=true.
         return { success: true, tx: sig };
     } catch (e) {
         logger.error('❌ mintEnergy error:', e);
@@ -629,11 +667,12 @@ async function mintEnergy(proof, producerOverride = null) {
 }
 
 /**
- * Oracle quorum vote (P3-6): after a successful mint, the oracle attests the
- * report on-chain via `submit_oracle_attestation` with the canonical
- * SHA-256 proof hash. Fire-and-forget: a failed vote must never break the
- * mint response. Enabled with `ENRG_QUORUM_ATTEST=1` (off by default — the
- * legacy single-oracle flow keeps working unchanged).
+ * Oracle quorum vote (P3-6): the oracle attests the report on-chain via
+ * `submit_oracle_attestation` with the canonical SHA-256 proof hash. Called
+ * BEFORE the mint (see mintEnergy) so the attestation exists when
+ * required=true. Idempotent: an oracle votes once per proof (per-oracle vote
+ * PDA), so an existing vote is skipped. A failed vote must never break the
+ * mint path. Enabled with `ENRG_QUORUM_ATTEST=1` (off by default).
  */
 async function submitQuorumAttestation(proof, verifiedAt, oracleMsg) {
     if (process.env.ENRG_QUORUM_ATTEST !== '1') return;
@@ -665,6 +704,10 @@ async function submitQuorumAttestation(proof, verifiedAt, oracleMsg) {
         );
         if (!(await accountExists(connection, oracleStake))) {
             logger.warn('[quorum] no OracleStake yet — run oracle-quorum-ops.ts stake');
+            return;
+        }
+        if (await accountExists(connection, vote)) {
+            logger.info(`[quorum] already voted: device=${deviceId.toBase58()} nonce=${proof.nonce}`);
             return;
         }
         await program.methods

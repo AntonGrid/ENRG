@@ -121,9 +121,13 @@ Client-side helpers (mirror of `state/oracle.rs` + `state/oracle_attestation.rs`
 
 ### Automatic voting in the server
 
-Set `ENRG_QUORUM_ATTEST=1` and the server votes after every successful mint
-(`submitQuorumAttestation`, fire-and-forget — a failed vote never breaks the
-mint response). Each instance must also run once:
+Set `ENRG_QUORUM_ATTEST=1` and the server **votes BEFORE every mint** and
+then mints **with** the attestation account (`submitQuorumAttestation`,
+idempotent — one vote per oracle per proof). When the quorum config has
+`required=true` the server waits up to ~20 s for the second oracle's vote to
+finalize the attestation; if it is still pending the mint is queued for retry
+(`attestation_pending_retry`, the mint-queue worker retries with backoff).
+A failed vote never blocks the mint path. Each instance must also run once:
 
 ```bash
 # 1. deposit the reputation stake (needs the oracle key, ≥ 0.001 SOL)
