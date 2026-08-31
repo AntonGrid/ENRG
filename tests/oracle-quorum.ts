@@ -9,6 +9,7 @@
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Program, BN, AnchorProvider, Wallet } from "@coral-xyz/anchor";
+import type { AccountClient, IdlAccounts } from "@coral-xyz/anchor";
 import {
   Connection,
   PublicKey,
@@ -24,6 +25,7 @@ import * as os from "os";
 import * as path from "path";
 import nacl from "tweetnacl";
 import rawIdl from "../target/idl/enrg_mvp.json";
+import type { EnrgMvp } from "../target/types/enrg_mvp";
 import { patchIdl } from "./helpers/patch-idl";
 import { ensureFunded } from "./helpers/accounts";
 
@@ -65,6 +67,13 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
     preflightCommitment: "confirmed",
   });
   const program = new Program(patchIdl(rawIdl), provider);
+
+  // Typed account clients (from the generated IDL types) — the `methods`
+  // namespace stays loose, account fetches get real generated types.
+  type AccountNamespace = {
+    [K in keyof IdlAccounts<EnrgMvp>]: AccountClient<EnrgMvp, K>;
+  };
+  const accounts = program.account as unknown as AccountNamespace;
 
   const ora1 = Keypair.generate();
   const ora2 = Keypair.generate();
@@ -142,7 +151,7 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
         .accounts({ authority: provider.wallet.publicKey })
         .rpc();
     }
-    const reg = await program.account.oracleRegistry.fetch(registryPda);
+    const reg = await accounts.oracleRegistry.fetch(registryPda);
     for (const ora of [ora1, ora2, ora3]) {
       if (!reg.oracles.some((o: PublicKey) => o.equals(ora.publicKey))) {
         await program.methods
@@ -159,13 +168,13 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
   it("2 votes from distinct oracles finalize the attestation", async () => {
     const nonce = new BN(1);
     const { attestPda } = await vote(ora1, device.publicKey, nonce, hashA);
-    let a: any = await program.account.oracleAttestation.fetch(attestPda);
+    let a: any = await accounts.oracleAttestation.fetch(attestPda);
     assert.strictEqual(a.votes, 1);
     assert.strictEqual(a.finalized, false);
     assert.deepStrictEqual(Array.from(a.proofHash), Array.from(hashA));
 
     await vote(ora2, device.publicKey, nonce, hashA);
-    a = await program.account.oracleAttestation.fetch(attestPda);
+    a = await accounts.oracleAttestation.fetch(attestPda);
     assert.strictEqual(a.votes, 2);
     assert.strictEqual(a.finalized, true);
     assert.strictEqual(a.conflict, false);
@@ -190,7 +199,7 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
       device.publicKey.toBytes(),
       nonce.toArrayLike(Buffer, "le", 8),
     ]);
-    const a: any = await program.account.oracleAttestation.fetch(attestPda);
+    const a: any = await accounts.oracleAttestation.fetch(attestPda);
     assert.strictEqual(a.conflict, true);
     assert.strictEqual(a.finalized, true);
     // canonical hash stays the first one.
@@ -249,7 +258,7 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
         })
         .rpc();
     }
-    let cfg: any = await program.account.oracleQuorumConfig.fetch(configPda);
+    let cfg: any = await accounts.oracleQuorumConfig.fetch(configPda);
     assert.strictEqual(cfg.required, false);
     assert.strictEqual(cfg.threshold, 3);
     assert.strictEqual(cfg.rewardPerVote.toNumber(), 1_000_000_000);
@@ -263,12 +272,12 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
       device.publicKey.toBytes(),
       nonce.toArrayLike(Buffer, "le", 8),
     ]);
-    let a: any = await program.account.oracleAttestation.fetch(attestPda);
+    let a: any = await accounts.oracleAttestation.fetch(attestPda);
     assert.strictEqual(a.votes, 2);
     assert.strictEqual(a.finalized, false, "threshold=3 must not finalize at 2 votes");
 
     await vote(ora3, device.publicKey, nonce, hashA, configPda);
-    a = await program.account.oracleAttestation.fetch(attestPda);
+    a = await accounts.oracleAttestation.fetch(attestPda);
     assert.strictEqual(a.finalized, true, "3rd vote finalizes");
   });
 
@@ -294,7 +303,7 @@ describe("ENRG — Oracle Quorum (P3-6)", () => {
         authority: provider.wallet.publicKey,
       })
       .rpc();
-    const cfg: any = await program.account.oracleQuorumConfig.fetch(configPda);
+    const cfg: any = await accounts.oracleQuorumConfig.fetch(configPda);
     assert.strictEqual(cfg.required, true);
     assert.strictEqual(cfg.threshold, 2);
   });

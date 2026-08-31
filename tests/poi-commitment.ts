@@ -91,7 +91,7 @@ describe("ENRG — Proof-of-Intelligence commitment (ADR-0010)", () => {
       .preInstructions([ed25519Ix(msg, device)])
       .rpc();
 
-    const c: any = await program.account.poiCommitment.fetch(pda);
+    const c: any = await (program.account as any).poiCommitment.fetch(pda);
     assert.strictEqual(c.deviceId.toBase58(), device.publicKey.toBase58());
     assert.ok(c.round.eq(round));
     assert.deepStrictEqual(Array.from(c.digest), Array.from(digest));

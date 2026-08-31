@@ -14,6 +14,9 @@
  *   claim  <attestation>                    — claim SRC reward for this oracle's vote
  *   status <device> <nonce>                 — show the attestation state
  *   config                                  — show the OracleQuorumConfig
+ *   init <true|false> [threshold] [reward]  — init the quorum config (registry authority)
+ *   set-required <true|false> [threshold] [reward]
+ *                                          — flip mint gate / reward (config authority)
  *
  * Env:
  *   ORACLE_KEY_PATH      oracle keypair (REQUIRED for stake/attest/claim)
@@ -21,6 +24,7 @@
  *   ANCHOR_PROVIDER_URL  default https://api.devnet.solana.com
  */
 import * as anchor from "@coral-xyz/anchor";
+import type { AccountClient, IdlAccounts } from "@coral-xyz/anchor";
 import {
   Connection,
   Keypair,
@@ -32,7 +36,12 @@ import {
 import nacl from "tweetnacl";
 import fs from "fs";
 import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import type { EnrgMvp } from "../target/types/enrg_mvp";
 import * as policy from "../policy";
+
+type OracleAttestation = IdlAccounts<EnrgMvp>["oracleAttestation"];
+type OracleQuorumConfig = IdlAccounts<EnrgMvp>["oracleQuorumConfig"];
+type OracleRegistry = IdlAccounts<EnrgMvp>["oracleRegistry"];
 
 const ENDPOINT = process.env.ANCHOR_PROVIDER_URL || "https://api.devnet.solana.com";
 const ORACLE_KEY_PATH = process.env.ORACLE_KEY_PATH || "";
@@ -57,16 +66,16 @@ const find = (seed: string, extra: Buffer[] = []): PublicKey =>
   )[0];
 
 const attestPda = (device: PublicKey, nonce: anchor.BN) =>
-  find("oracle-attest", [device.toBytes(), nonce.toArrayLike(Buffer, "le", 8)]);
+  find("oracle-attest", [Buffer.from(device.toBytes()), nonce.toArrayLike(Buffer, "le", 8)]);
 const votePda = (attestation: PublicKey, oracle: PublicKey) =>
-  find("oracle-vote", [attestation.toBytes(), oracle.toBytes()]);
-const stakePda = (oracle: PublicKey) => find("oracle-stake", [oracle.toBytes()]);
+  find("oracle-vote", [Buffer.from(attestation.toBytes()), Buffer.from(oracle.toBytes())]);
+const stakePda = (oracle: PublicKey) => find("oracle-stake", [Buffer.from(oracle.toBytes())]);
 
 
 async function main() {
   const cmd = process.argv[2];
   if (!cmd) {
-    console.error("usage: oracle-quorum-ops.ts <stake|attest|claim|status|config> ...");
+    console.error("usage: oracle-quorum-ops.ts <stake|attest|claim|status|config|init|set-required> ...");
     process.exit(1);
   }
   const oracle = ["config", "init"].includes(cmd) ? null : loadKeypair(ORACLE_KEY_PATH, "oracle");
@@ -78,13 +87,21 @@ async function main() {
   );
   const program = new anchor.Program(IDL, provider);
 
+  // Typed account clients bound to the generated IDL (target/types/enrg_mvp.ts).
+  // The `methods` namespace stays untyped (loose) to match the dynamic IDL
+  // load; the account fetches below get the real generated types.
+  type AccountNamespace = {
+    [K in keyof IdlAccounts<EnrgMvp>]: AccountClient<EnrgMvp, K>;
+  };
+  const accounts = program.account as unknown as AccountNamespace;
+
   const registry = find("oracle-registry");
   const configPda = find("oracle-quorum-config");
 
   switch (cmd) {
     case "config": {
-      const cfg = await program.account.oracleQuorumConfig.fetch(configPda).catch(() => null);
-      const reg = await program.account.oracleRegistry.fetch(registry);
+      const cfg = await accounts.oracleQuorumConfig.fetch(configPda).catch(() => null);
+      const reg = await accounts.oracleRegistry.fetch(registry);
       if (!cfg) {
         console.log("OracleQuorumConfig: NOT INITIALIZED (legacy single-oracle flow).");
       } else {
@@ -113,6 +130,23 @@ async function main() {
         })
         .rpc();
       console.log("✅ OracleQuorumConfig initialized:", required, "/ threshold", threshold || 2, "/ reward", reward || 0);
+      return;
+    }
+
+    case "set-required": {
+      const [required, threshold, reward] = process.argv.slice(3);
+      await program.methods
+        .setOracleQuorum(
+          required === "true",
+          threshold ? Number(threshold) : 2,
+          new anchor.BN(reward || 0)
+        )
+        .accounts({
+          oracleQuorumConfig: configPda,
+          authority: provider.wallet.publicKey,
+        })
+        .rpc();
+      console.log("✅ set_oracle_quorum: required =", required, "| threshold =", threshold || 2, "| reward =", reward || 0);
       return;
     }
 
@@ -171,7 +205,7 @@ async function main() {
         ])
         .signers([oracle!])
         .rpc();
-      const att = await program.account.oracleAttestation.fetch(a);
+      const att = await accounts.oracleAttestation.fetch(a);
       console.log(
         "✅ attestation", a.toBase58(), "| votes:", att.votes,
         "| finalized:", att.finalized, "| conflict:", att.conflict
@@ -214,7 +248,7 @@ async function main() {
         process.exit(1);
       }
       const a = attestPda(new PublicKey(device), new anchor.BN(nonce));
-      const att = await program.account.oracleAttestation.fetch(a).catch(() => null);
+      const att = await accounts.oracleAttestation.fetch(a).catch(() => null);
       if (!att) {
         console.log("attestation", a.toBase58(), "— not found");
         return;
