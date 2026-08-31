@@ -68,8 +68,23 @@ authority is `SQUADS_PUBKEY`).
 4. Update the IDL the same way (`anchor idl upgrade` with the multisig, or
    `solana program invoke` on the `Upgrade` instruction carrying the IDL).
 
-> On devnet the upgrade authority is `H3tXm4Z…` (Squads); verify with
-> `solana program show HkuC3FT… -u devnet`.
+> On devnet the upgrade authority is `H3tXm4Z…` (a standalone deployer key,
+> NOT a Squads account). The script `scripts/devnet-upgrade.sh` automates the
+> operator side (buffer upload + authority handover) and prints the two
+> commands the deployer must sign with their `H3tXm4Z` keypair:
+>
+> ```bash
+> # once: fund the operator from the deployer key
+> solana -u devnet transfer <H3tXm4Z-keypair.json> \
+>   GkdhQQgUBi2Q422nTBP27LADkejijRwJEAnfhPYsUJSV 6.6 --allow-unfunded-recipient
+> # then: buffer upload + authority handover (operator)
+> ./scripts/devnet-upgrade.sh
+> # then: program upgrade + IDL (deployer, with their H3tXm4Z keypair)
+> solana program deploy --upgrade-authority <H3tXm4Z-keypair.json> \
+>   -u devnet <BUFFER> HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb
+> ANCHOR_WALLET=<H3tXm4Z-keypair.json> anchor idl upgrade \
+>   --provider.cluster devnet HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb idls/enrg_mvp.json
+> ```
 
 ## Emergency
 
