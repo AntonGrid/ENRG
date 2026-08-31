@@ -78,7 +78,9 @@ async function main() {
     console.error("usage: oracle-quorum-ops.ts <stake|attest|claim|status|config|init|set-required> ...");
     process.exit(1);
   }
-  const oracle = ["config", "init"].includes(cmd) ? null : loadKeypair(ORACLE_KEY_PATH, "oracle");
+  const oracle = ["config", "init", "set-required"].includes(cmd)
+    ? null
+    : loadKeypair(ORACLE_KEY_PATH, "oracle");
   const connection = new Connection(ENDPOINT, "confirmed");
   const provider = new anchor.AnchorProvider(
     connection,
