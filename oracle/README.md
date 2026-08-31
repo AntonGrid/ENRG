@@ -94,6 +94,77 @@ network state verifiable. See `docs/MAINNET-GOVERNANCE.md` and
     `mint_energy`. When the threshold is reached an honest response is returned:
     `pool_threshold_reached_offchain_distribution_not_implemented`.
 
+## Oracle quorum (P3-6, implemented)
+
+A proof is confirmed on-chain when **`threshold` DISTINCT trusted oracles**
+vote for the same canonical proof hash. Participation is economic: each oracle
+must hold a SOL **stake** (`OracleStake`), gets **slashed** for a
+contradictory report, and earns **SRC rewards** (`claim_oracle_reward`) for
+votes in finalized attestations.
+
+### Canonical proof hash
+
+The hash an oracle votes on is **deterministic** from the report it verified:
+
+```text
+proof_hash = SHA-256( oracle_message )
+oracle_message = device_id(32) ‖ nonce(8 LE) ‖ device_timestamp(8 LE)
+                 ‖ verified_at(8 LE) ‖ energy_wh(8 LE)
+```
+
+Client-side helpers (mirror of `state/oracle.rs` + `state/oracle_attestation.rs`):
+
+- `policy.buildOracleMessage(device, nonce, devTs, verifiedAt, energyWh)`
+- `policy.proofHashOf(oracleMsg)` → SHA-256
+- `policy.buildAttestMessage(device, nonce, proofHash)` → the signed vote message
+  `b"enrg:oracle:attest" ‖ device(32) ‖ nonce(8 LE) ‖ hash(32)`
+
+### Automatic voting in the server
+
+Set `ENRG_QUORUM_ATTEST=1` and the server votes after every successful mint
+(`submitQuorumAttestation`, fire-and-forget — a failed vote never breaks the
+mint response). Each instance must also run once:
+
+```bash
+# 1. deposit the reputation stake (needs the oracle key, ≥ 0.001 SOL)
+ORACLE_KEY_PATH=/secure/oracle-keypair.json \
+  npx ts-node scripts/oracle-quorum-ops.ts stake 1
+
+# 2. optional: inspect the config and the oracle set
+ORACLE_KEY_PATH=/secure/oracle-keypair.json \
+  npx ts-node scripts/oracle-quorum-ops.ts config
+```
+
+### Manual operations (operator CLI)
+
+```bash
+# vote on a specific report (canonical hash computed automatically)
+ORACLE_KEY_PATH=/secure/oracle-keypair.json \
+  npx ts-node scripts/oracle-quorum-ops.ts attest <device> <nonce> <dev_ts> <verified_at> <energy_wh>
+
+# claim SRC rewards for votes in finalized attestations
+ORACLE_KEY_PATH=/secure/oracle-keypair.json \
+  npx ts-node scripts/oracle-quorum-ops.ts claim <attestation_pubkey>
+
+# check an attestation state
+ORACLE_KEY_PATH=/secure/oracle-keypair.json \
+  npx ts-node scripts/oracle-quorum-ops.ts status <device> <nonce>
+```
+
+### Protocol rules
+
+- The first vote fixes the canonical `proof_hash`; a later vote with a
+  different hash sets `conflict=true` (slash basis).
+- `finalized` at `votes >= threshold` (config `[oracle-quorum-config]`,
+  default 2).
+- Only staked, non-slashed registry oracles can vote; each oracle votes once
+  per proof (per-oracle vote PDA).
+- When the config has `required=true`, `mint_energy` REJECTS reports without a
+  finalized matching attestation. Operators should enable `ENRG_QUORUM_ATTEST=1`
+  first, let attestations accumulate, and only then flip `required=true`
+  (`set_oracle_quorum`, authority = registry authority).
+
+
 ## Policy Engine (ADR-0003)
 
 All inbound-data validation is extracted from `server.js` into a separate module

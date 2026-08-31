@@ -616,12 +616,84 @@ async function mintEnergy(proof, producerOverride = null) {
         }
         const sig = await sendVersioned(connection, founderKeypair, [edDeviceIx, edOracleIx, mintIx], lut);
         logger.info('🎉 Mint successful! TX:', sig);
+        // P3-6: after a successful mint the oracle votes on the canonical
+        // proof hash (fire-and-forget; enabled via ENRG_QUORUM_ATTEST=1).
+        queueMicrotask(() => submitQuorumAttestation(proof, nowSec, oracleMsg));
         return { success: true, tx: sig };
     } catch (e) {
         logger.error('❌ mintEnergy error:', e);
         // P0-3: rotate RPC endpoint so the next worker retry uses a fresh node.
         failoverRpc();
         return { success: false, error: e.message };
+    }
+}
+
+/**
+ * Oracle quorum vote (P3-6): after a successful mint, the oracle attests the
+ * report on-chain via `submit_oracle_attestation` with the canonical
+ * SHA-256 proof hash. Fire-and-forget: a failed vote must never break the
+ * mint response. Enabled with `ENRG_QUORUM_ATTEST=1` (off by default — the
+ * legacy single-oracle flow keeps working unchanged).
+ */
+async function submitQuorumAttestation(proof, verifiedAt, oracleMsg) {
+    if (process.env.ENRG_QUORUM_ATTEST !== '1') return;
+    if (!oracleKeypair || !proof.device_id_pubkey) return;
+    try {
+        const connection = getConnection();
+        const provider = new anchor.AnchorProvider(connection, new anchor.Wallet(oracleKeypair), {
+            commitment: 'confirmed',
+        });
+        const program = new anchor.Program(IDL, provider);
+        const find = (seed, extra = []) =>
+            PublicKey.findProgramAddressSync([Buffer.from(seed), ...extra], PROGRAM_ID)[0];
+        const deviceId = new PublicKey(proof.device_id_pubkey);
+        const nonce = new anchor.BN(proof.nonce);
+        const proofHash = policy.proofHashOf(oracleMsg);
+        const msg = policy.buildAttestMessage(deviceId, Number(proof.nonce), proofHash);
+        const signature = nacl.sign.detached(new Uint8Array(msg), oracleKeypair.secretKey);
+
+        const attestation = find('oracle-attest', [deviceId.toBuffer(), nonce.toArrayLike(Buffer, 'le', 8)]);
+        const oracleRegistry = find('oracle-registry');
+        const configPda = find('oracle-quorum-config');
+        const [vote] = PublicKey.findProgramAddressSync(
+            [Buffer.from('oracle-vote'), attestation.toBuffer(), oracleKeypair.publicKey.toBuffer()],
+            PROGRAM_ID
+        );
+        const [oracleStake] = PublicKey.findProgramAddressSync(
+            [Buffer.from('oracle-stake'), oracleKeypair.publicKey.toBuffer()],
+            PROGRAM_ID
+        );
+        if (!(await accountExists(connection, oracleStake))) {
+            logger.warn('[quorum] no OracleStake yet — run oracle-quorum-ops.ts stake');
+            return;
+        }
+        await program.methods
+            .submitOracleAttestation(nonce, Array.from(proofHash), Array.from(signature))
+            .accounts({
+                attestation,
+                vote,
+                deviceId,
+                oracle: oracleKeypair.publicKey,
+                oracleRegistry,
+                oracleStake,
+                oracleQuorumConfig: configPda,
+                payer: oracleKeypair.publicKey,
+                instructions: SYSVAR_INSTRUCTIONS_PUBKEY,
+                systemProgram: SystemProgram.programId,
+            })
+            .preInstructions([
+                Ed25519Program.createInstructionWithPublicKey({
+                    publicKey: oracleKeypair.publicKey.toBytes(),
+                    message: msg,
+                    signature,
+                }),
+            ])
+            .signers([oracleKeypair])
+            .rpc();
+        logger.info(`[quorum] attestation submitted: device=${deviceId.toBase58()} nonce=${proof.nonce}`);
+    } catch (e) {
+        // never fail the mint path
+        logger.warn('[quorum] attestation skipped:', e.message);
     }
 }
 

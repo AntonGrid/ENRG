@@ -22,6 +22,7 @@
  *   See policy-config.json and the "Policy configuration" section in oracle/README.md.
  */
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const nacl = require('tweetnacl');
@@ -188,6 +189,33 @@ function buildDeviceMessage(deviceIdPubkey, nonce, timestamp, energyWh) {
 /** OracleReport::oracle_message_to_sign(): device_id || nonce || device_timestamp || verified_at || energy_wh */
 function buildOracleMessage(deviceIdPubkey, nonce, timestamp, verifiedAt, energyWh) {
     return Buffer.concat([deviceIdPubkey.toBuffer(), le8(nonce), le8(timestamp), le8(verifiedAt), le8(energyWh)]);
+}
+
+/** SHA-256 (used for the oracle quorum proof hash). */
+function sha256(buf) {
+    return crypto.createHash('sha256').update(buf).digest();
+}
+
+/**
+ * Canonical proof hash of an oracle report (P3-6):
+ *   SHA-256(oracle_message) = SHA-256(device_id ‖ nonce ‖ device_timestamp ‖ verified_at ‖ energy_wh)
+ */
+function proofHashOf(oracleMsg) {
+    return sha256(Buffer.isBuffer(oracleMsg) ? oracleMsg : Buffer.from(oracleMsg));
+}
+
+/**
+ * Canonical message an oracle signs for a quorum vote
+ * (mirror of state/oracle_attestation.rs::oracle_attest_message):
+ *   b"enrg:oracle:attest" || device_id(32) || nonce(8 LE) || proof_hash(32)
+ */
+function buildAttestMessage(deviceIdPubkey, nonce, proofHash) {
+    return Buffer.concat([
+        Buffer.from('enrg:oracle:attest', 'utf8'),
+        deviceIdPubkey.toBuffer(),
+        le8(nonce),
+        Buffer.isBuffer(proofHash) ? proofHash : Buffer.from(proofHash),
+    ]);
 }
 
 /** Prefix of the canonical key-rotation message (matches security/lifecycle.rs). */
@@ -867,6 +895,9 @@ module.exports = {
     le8,
     buildDeviceMessage,
     buildOracleMessage,
+    sha256,
+    proofHashOf,
+    buildAttestMessage,
     buildDeviceRotateMessage,
     parseDevicePubkey,
     // manifest (ADR-0004)
