@@ -361,11 +361,11 @@ async function submitAttestation(
   voter: Keypair,
   deviceId: PublicKey,
   nonce: BN,
-  oraMsg: Buffer,
+  msgForHash: Buffer,
   attestationPda: PublicKey,
   label: string
 ) {
-  const proofHash = proofHashOf(oraMsg);
+  const proofHash = proofHashOf(msgForHash);
   const msg = attestMsg(deviceId, nonce, proofHash);
   const sig = nacl.sign.detached(msg, voter.secretKey);
   const [vote] = PublicKey.findProgramAddressSync(
@@ -944,8 +944,8 @@ async function oracleMint() {
     PROGRAM_ID
   )[0];
   if (oracle2 && realOracle) {
-    await submitAttestation(realOracle, deviceId, nonce, oraMsg, attestationPda, "oracle-1");
-    await submitAttestation(oracle2, deviceId, nonce, oraMsg, attestationPda, "oracle-2");
+    await submitAttestation(realOracle, deviceId, nonce, devMsg, attestationPda, "oracle-1");
+    await submitAttestation(oracle2, deviceId, nonce, devMsg, attestationPda, "oracle-2");
   }
 
   const report = {

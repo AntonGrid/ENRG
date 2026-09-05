@@ -556,6 +556,12 @@ async function mintEnergy(proof, producerOverride = null) {
         // ~20 s for the second oracle, otherwise returns a retryable error.
         const quorumConfigPda = find('oracle-quorum-config');
         let quorumAttestationPda = null;
+        // Canonical proof hash MUST come from DEVICE data (identical across
+        // oracles) — NOT from the oracle message (verified_at differs by
+        // seconds between independent oracles → false conflicts).
+        const deviceMsgForHash = policy.buildDeviceMessage(
+            deviceIdPubkey, Number(proof.nonce), Number(proof.device_timestamp), Number(proof.energy_wh)
+        );
         const quorumCfg = await program.account.oracleQuorumConfig
             .fetch(quorumConfigPda)
             .catch(() => null);
@@ -573,7 +579,7 @@ async function mintEnergy(proof, producerOverride = null) {
                 [Buffer.from('oracle-attest'), deviceIdPubkey.toBuffer(), nonce.toArrayLike(Buffer, 'le', 8)],
                 PROGRAM_ID
             )[0];
-            await submitQuorumAttestation(proof, nowSec, oracleMsg); // idempotent vote
+            await submitQuorumAttestation(proof, nowSec, deviceMsgForHash); // idempotent vote
             let finalized = false;
             for (let i = 0; i < 20 && !finalized; i++) {
                 const att = await program.account.oracleAttestation
@@ -592,7 +598,7 @@ async function mintEnergy(proof, producerOverride = null) {
                 [Buffer.from('oracle-attest'), deviceIdPubkey.toBuffer(), nonce.toArrayLike(Buffer, 'le', 8)],
                 PROGRAM_ID
             )[0];
-            await submitQuorumAttestation(proof, nowSec, oracleMsg);
+            await submitQuorumAttestation(proof, nowSec, deviceMsgForHash);
         }
 
         // ── mint_energy via the Anchor client ──
@@ -687,7 +693,7 @@ async function mintEnergy(proof, producerOverride = null) {
  * PDA), so an existing vote is skipped. A failed vote must never break the
  * mint path. Enabled with `ENRG_QUORUM_ATTEST=1` (off by default).
  */
-async function submitQuorumAttestation(proof, verifiedAt, oracleMsg) {
+async function submitQuorumAttestation(proof, verifiedAt, msgForHash) {
     if (process.env.ENRG_QUORUM_ATTEST !== '1') return;
     if (!oracleKeypair || !proof.device_id_pubkey) return;
     try {
@@ -700,7 +706,7 @@ async function submitQuorumAttestation(proof, verifiedAt, oracleMsg) {
             PublicKey.findProgramAddressSync([Buffer.from(seed), ...extra], PROGRAM_ID)[0];
         const deviceId = new PublicKey(proof.device_id_pubkey);
         const nonce = new anchor.BN(proof.nonce);
-        const proofHash = policy.proofHashOf(oracleMsg);
+        const proofHash = policy.proofHashOf(msgForHash);
         const msg = policy.buildAttestMessage(deviceId, Number(proof.nonce), proofHash);
         const signature = nacl.sign.detached(new Uint8Array(msg), oracleKeypair.secretKey);
 

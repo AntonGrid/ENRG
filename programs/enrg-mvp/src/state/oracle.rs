@@ -64,13 +64,18 @@ impl OracleReport {
         Ok(buf)
     }
 
-    /// Canonical proof hash used by the oracle quorum (P3-6): SHA-256 of the
-    /// oracle message. Oracles sign `b"enrg:oracle:attest" || device || nonce
-    /// || proof_hash` in `submit_oracle_attestation`, and `mint_energy` (when
-    /// the quorum is required) demands a finalized attestation whose hash
-    /// equals this value.
+    /// Canonical proof hash used by the oracle quorum (P3-6).
+    ///
+    /// MUST be computed from the DEVICE-signed data only
+    /// (`device_message_to_sign`: device_id ‖ nonce ‖ device_timestamp ‖
+    /// energy_wh) — NOT from the oracle message, which includes `verified_at`
+    /// (each oracle verifies at a slightly different moment, so an oracle-based
+    /// hash would never match across independent oracles → false conflicts).
+    /// Oracles vote on `b"enrg:oracle:attest" || device || nonce || proof_hash`
+    /// in `submit_oracle_attestation`, and `mint_energy` (when the quorum is
+    /// required) demands a finalized attestation whose hash equals this value.
     pub fn proof_hash(&self) -> Result<[u8; 32]> {
-        let msg = self.oracle_message_to_sign()?;
+        let msg = self.device_message_to_sign()?;
         Ok(solana_sha256_hasher::hash(&msg).to_bytes())
     }
 }

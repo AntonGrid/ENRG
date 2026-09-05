@@ -85,12 +85,12 @@ On-chain attestation quorum is live in `enrg-mvp`:
 
 ### Voting for the canonical proof hash
 
-An oracle must vote on the hash it actually verified: `proof_hash =
-SHA-256(device_id ‖ nonce ‖ device_timestamp ‖ verified_at ‖ energy_wh)`.
-Client-side this is exactly the SHA-256 of the `oracle_message` the report
-signs. Voting for any other hash is legal but will produce an attestation
-that fails the mint gate (or, if the mismatch is deliberate, `conflict=true`
-and a potential slash).
+An oracle must vote on the hash derived from the DEVICE data:
+`proof_hash = SHA-256(device_id ‖ nonce ‖ device_timestamp ‖ energy_wh)`.
+It intentionally excludes `verified_at` — independent oracles verify seconds
+apart, so an oracle-based hash would never match (false conflicts). Voting
+for any other hash is legal but will produce an attestation that fails the
+mint gate (or a deliberate mismatch is `conflict=true` → potential slash).
 
 ## Related
 

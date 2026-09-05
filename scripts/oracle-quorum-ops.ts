@@ -218,10 +218,12 @@ async function main() {
       }
       const devicePk = new PublicKey(device);
       const nonceBN = new anchor.BN(nonce);
-      const oracleMsg = policy.buildOracleMessage(
-        devicePk, Number(nonce), Number(devTs), Number(verifiedAt), Number(energyWh)
+      // Canonical proof hash MUST come from DEVICE data (identical across
+      // oracles) — NOT from the oracle message (verified_at differs per oracle).
+      const deviceMsg = policy.buildDeviceMessage(
+        devicePk, Number(nonce), Number(devTs), Number(energyWh)
       );
-      const proofHash = policy.proofHashOf(oracleMsg); // canonical SHA-256
+      const proofHash = policy.proofHashOf(deviceMsg); // canonical SHA-256
       const msg = policy.buildAttestMessage(devicePk, Number(nonce), proofHash);
       const signature = nacl.sign.detached(msg, oracle!.secretKey);
 

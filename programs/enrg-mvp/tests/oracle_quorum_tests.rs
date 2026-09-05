@@ -29,19 +29,25 @@ fn quorum_account_sizes_are_sane() {
 }
 
 #[test]
-fn report_proof_hash_is_sha256_of_oracle_message() {
+fn report_proof_hash_is_sha256_of_device_message() {
     let report = OracleReport {
         oracle: Pubkey::new_from_array([1u8; 32]),
         device_id: Pubkey::new_from_array([2u8; 32]),
         nonce: 7,
         device_timestamp: 1_700_000_000,
-        verified_at: 1_700_000_050,
+        verified_at: 1_700_000_050, // differs from device_timestamp on purpose
         energy_wh: 1_250,
         device_signature: [3u8; 64],
         oracle_signature: [4u8; 64],
     };
-    let msg = report.oracle_message_to_sign().unwrap();
+    let msg = report.device_message_to_sign().unwrap();
     let expected = solana_sha256_hasher::hash(&msg).to_bytes();
     assert_eq!(report.proof_hash().unwrap(), expected);
-    assert_ne!(report.proof_hash().unwrap(), [0u8; 32]);
+    // The hash MUST be independent of verified_at (each oracle verifies at a
+    // slightly different moment; an oracle-based hash would never match across
+    // independent oracles → false conflicts).
+    let mut other = OracleReport { verified_at: 1_700_000_999, ..report };
+    assert_eq!(report.proof_hash().unwrap(), other.proof_hash().unwrap());
+    other.nonce = 8;
+    assert_ne!(report.proof_hash().unwrap(), other.proof_hash().unwrap());
 }

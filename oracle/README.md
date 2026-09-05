@@ -107,15 +107,20 @@ votes in finalized attestations.
 The hash an oracle votes on is **deterministic** from the report it verified:
 
 ```text
-proof_hash = SHA-256( oracle_message )
-oracle_message = device_id(32) ‖ nonce(8 LE) ‖ device_timestamp(8 LE)
-                 ‖ verified_at(8 LE) ‖ energy_wh(8 LE)
+proof_hash = SHA-256( device_message )
+device_message = device_id(32) ‖ nonce(8 LE) ‖ device_timestamp(8 LE)
+                 ‖ energy_wh(8 LE)
 ```
+
+> The hash is computed from the DEVICE-signed data only. It intentionally does
+> NOT include `verified_at` (the oracle's verification moment): independent
+> oracles verify seconds apart, so an oracle-based hash would never match and
+> would create false conflicts.
 
 Client-side helpers (mirror of `state/oracle.rs` + `state/oracle_attestation.rs`):
 
-- `policy.buildOracleMessage(device, nonce, devTs, verifiedAt, energyWh)`
-- `policy.proofHashOf(oracleMsg)` → SHA-256
+- `policy.buildDeviceMessage(device, nonce, devTs, energyWh)`
+- `policy.proofHashOf(deviceMsg)` → SHA-256
 - `policy.buildAttestMessage(device, nonce, proofHash)` → the signed vote message
   `b"enrg:oracle:attest" ‖ device(32) ‖ nonce(8 LE) ‖ hash(32)`
 
