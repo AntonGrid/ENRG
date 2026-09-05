@@ -548,38 +548,51 @@ async function mintEnergy(proof, producerOverride = null) {
         const policyRegistryExists = await accountExists(connection, policyRegistryPda);
         const policyRegistry = policyRegistryExists ? policyRegistryPda : null;
 
-        // ── P3-6 oracle quorum gate ──
-        // When ENRG_QUORUM_ATTEST=1 the oracle votes on the canonical proof
-        // hash BEFORE the mint, then mints WITH the attestation account.
-        // If OracleQuorumConfig.required=true the attestation must be
-        // FINALIZED (both oracles voted): we wait up to ~20 s for the second
-        // instance, otherwise return a retryable error so the queue worker
-        // retries once the second oracle votes. Legacy (no flag/config):
-        // mint works exactly as before.
-        let quorumConfigPda = null;
+        // ── P3-6 oracle quorum gate (UNAVOIDABLE) ──
+        // OracleQuorumConfig is a MANDATORY account of mint_energy, so we
+        // always resolve it (config is created at bootstrap). When
+        // required=true, minting without a FINALIZED attestation is rejected
+        // by the program — the server votes before the mint and waits up to
+        // ~20 s for the second oracle, otherwise returns a retryable error.
+        const quorumConfigPda = find('oracle-quorum-config');
         let quorumAttestationPda = null;
-        if (process.env.ENRG_QUORUM_ATTEST === '1') {
-            quorumConfigPda = find('oracle-quorum-config');
+        const quorumCfg = await program.account.oracleQuorumConfig
+            .fetch(quorumConfigPda)
+            .catch(() => null);
+        if (!quorumCfg) {
+            // Fail-closed: config account must exist (created at bootstrap).
+            logger.warn('[quorum] OracleQuorumConfig missing on-chain — run init_oracle_quorum');
+            return { success: false, error: 'quorum_config_missing' };
+        }
+        if (quorumCfg.required) {
+            if (process.env.ENRG_QUORUM_ATTEST !== '1') {
+                logger.warn('[quorum] required=true but ENRG_QUORUM_ATTEST is not 1 — cannot mint');
+                return { success: false, error: 'quorum_required_but_attest_disabled' };
+            }
             quorumAttestationPda = PublicKey.findProgramAddressSync(
                 [Buffer.from('oracle-attest'), deviceIdPubkey.toBuffer(), nonce.toArrayLike(Buffer, 'le', 8)],
                 PROGRAM_ID
             )[0];
             await submitQuorumAttestation(proof, nowSec, oracleMsg); // idempotent vote
-            const cfg = await program.account.oracleQuorumConfig.fetch(quorumConfigPda).catch(() => null);
-            if (cfg && cfg.required) {
-                let finalized = false;
-                for (let i = 0; i < 20 && !finalized; i++) {
-                    const att = await program.account.oracleAttestation
-                        .fetch(quorumAttestationPda)
-                        .catch(() => null);
-                    if (att && att.finalized) finalized = true;
-                    else await sleep(1000);
-                }
-                if (!finalized) {
-                    logger.info('[quorum] attestation pending (second oracle) — retry later');
-                    return { success: false, error: 'attestation_pending_retry' };
-                }
+            let finalized = false;
+            for (let i = 0; i < 20 && !finalized; i++) {
+                const att = await program.account.oracleAttestation
+                    .fetch(quorumAttestationPda)
+                    .catch(() => null);
+                if (att && att.finalized) finalized = true;
+                else await sleep(1000);
             }
+            if (!finalized) {
+                logger.info('[quorum] attestation pending (second oracle) — retry later');
+                return { success: false, error: 'attestation_pending_retry' };
+            }
+        } else if (process.env.ENRG_QUORUM_ATTEST === '1') {
+            // required=false but quorum on: still vote so attestations exist.
+            quorumAttestationPda = PublicKey.findProgramAddressSync(
+                [Buffer.from('oracle-attest'), deviceIdPubkey.toBuffer(), nonce.toArrayLike(Buffer, 'le', 8)],
+                PROGRAM_ID
+            )[0];
+            await submitQuorumAttestation(proof, nowSec, oracleMsg);
         }
 
         // ── mint_energy via the Anchor client ──

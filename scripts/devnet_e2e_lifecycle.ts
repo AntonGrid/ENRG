@@ -992,7 +992,7 @@ async function oracleMint() {
       // ADR-0003: Policy Registry — опционален (null = дефолтные политики).
       policyRegistry: null,
       // P3-6 quorum: config PDA + finalized attestation (required=true on devnet).
-      oracleQuorumConfig: oracle2 && realOracle ? configPda : null,
+      oracleQuorumConfig: configPda,
       attestation: oracle2 && realOracle ? attestationPda : null,
     })
     .instruction();

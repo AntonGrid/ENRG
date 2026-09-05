@@ -125,6 +125,11 @@ async def main() -> None:
             "profile": acc.profile,
             # ADR-0003: Policy Registry — optional (None = default policies).
             "policy_registry": None,
+            # P3-6: OracleQuorumConfig is a MANDATORY account (unavoidable gate).
+            "oracle_quorum_config": Pubkey.find_program_address(
+                [b"oracle-quorum-config"], acc.program.program_id
+            )[0],
+            "attestation": None,
         },
     ).to_solders()
 

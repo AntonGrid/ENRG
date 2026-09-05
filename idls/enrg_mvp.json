@@ -2805,11 +2805,11 @@
         {
           "name": "oracle_quorum_config",
           "docs": [
-            "Oracle quorum config (P3-6) — optional. When initialized with",
-            "required=true, the report must carry a FINALIZED attestation with a",
-            "matching proof hash. Not initialized → the legacy single-oracle flow."
+            "Oracle quorum config (P3-6) — MANDATORY account of mint_energy.",
+            "The gate is unavoidable: a caller cannot omit this PDA to bypass",
+            "`required=true`. Created at bootstrap (init_oracle_quorum) with",
+            "required=false for the legacy single-oracle flow."
           ],
-          "optional": true,
           "pda": {
             "seeds": [
               {
