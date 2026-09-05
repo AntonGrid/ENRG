@@ -521,6 +521,9 @@ async function mintEnergy(proof, producerOverride = null) {
         const [reputationPda] = PublicKey.findProgramAddressSync(
             [Buffer.from('reputation'), ownerPubkey.toBuffer()], PROGRAM_ID
         );
+        // ERS (v7.0 §16) is optional: pass null when the account does not exist
+        // (Anchor would reject an uninitialized Option account otherwise).
+        const reputation = (await accountExists(connection, reputationPda)) ? reputationPda : null;
         logger.info('[mintEnergy] producerPda=' + producerPda.toBase58() +
             ' producer.authority=' + producer.authority.toBase58() +
             ' oracle=' + oracleKeypair.publicKey.toBase58() +
@@ -625,7 +628,7 @@ async function mintEnergy(proof, producerOverride = null) {
             // report (ed25519 precompile) — it just does not sign the tx.
             authority: founderKeypair.publicKey,
             profile: profilePda,
-            reputation: reputationPda,
+            reputation,
             pool: null,
             poolShare: null,
             policyRegistry,

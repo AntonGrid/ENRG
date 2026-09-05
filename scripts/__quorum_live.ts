@@ -46,10 +46,20 @@ async function main() {
   await program.methods.activateDevice().accounts({ authority: FOUNDER.publicKey, producer, ownerDevices: ownerDev }).signers([FOUNDER]).rpc();
   console.log("✅ provision + activate");
 
+  const profIdl = JSON.parse(fs.readFileSync("idls/enrg_profile.json","utf8")); profIdl.address = PROFILE.toBase58();
+  const profProg = new Program(profIdl, provider);
   if (!(await conn.getAccountInfo(profile))) {
     await program.methods.initEnergyProfile().accounts({ authority: FOUNDER.publicKey, producer, profileProgram: PROFILE, profile, systemProgram: SystemProgram.programId }).signers([FOUNDER]).rpc();
     console.log("✅ profile created");
   }
+  // rated_power must be > 0 for mint (immutable after set)
+  try {
+    const pr: any = await (profProg.account as any).energyProfile.fetch(profile);
+    if (!pr.ratedPower || pr.ratedPower.isZero()) {
+      await profProg.methods.updateMetadata(new BN(1_000_000), "e2e-solar-panel", "devnet-e2e").accounts({ authority: FOUNDER.publicKey, profile }).signers([FOUNDER]).rpc();
+      console.log("✅ rated_power=1_000_000 set");
+    } else { console.log("rated_power already", pr.ratedPower.toString()); }
+  } catch(e:any) { console.log("profile fetch skipped:", e.message.slice(0,60)); }
 
   const energyWh = 5000; const nonce = 1;
   const dmsg = Buffer.concat([did.toBytes(), le8(nonce), le8(ts), le8(energyWh)]);
