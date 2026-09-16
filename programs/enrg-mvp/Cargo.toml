@@ -43,6 +43,8 @@ solana-instructions-sysvar = "2.2.2"
 anchor-lang = "0.32.1"
 # BorrowedInstruction types for host-side sysvar unit tests.
 solana-instruction = "2.3.3"
+# Conformance vectors (tests/conformance/policy_vectors.json) are JSON.
+serde_json = "1"
 
 [features]
 idl-build = ["anchor-lang/idl-build", "anchor-spl/idl-build"]

@@ -109,6 +109,19 @@ updated as the fixes land. The canonical audit report is
 - [x] **P1-6 EVM bridge hardening** — `onchain/src/EnrgOracleAttestation.sol`
       rewritten: k-of-n multi-oracle quorum, timelocked oracle/threshold
       changes, 2-step ownership transfer. 12 Foundry tests cover it.
+- [x] **P1-7 Shared policy conformance vectors** — the same policy semantics are
+      implemented three times (Rust on-chain, JS `policy.js`, Python
+      `axis_core.policy`) and nothing forced them to agree. Added
+      `tests/conformance/policy_vectors.json` (18 vectors: preamble gates, reward
+      rules, boundary cases such as a clock skew of exactly `max_clock_skew_sec`
+      and a proof age of exactly 900 s) plus runners on both sides:
+      `programs/enrg-mvp/tests/policy_conformance.rs` (runs in CI via
+      `cargo test -p enrg-mvp`) and `Axis-core/tests/test_policy_conformance.py`
+      (Axis-core CI checks this repository out with sparse `tests/conformance` and
+      points `AXIS_CONFORMANCE_VECTORS` at the file). Both engines match all 18
+      vectors today — a drift in either direction now fails CI.
+      See `tests/conformance/README.md`. _JS participates only for the subset
+      `policy.js` implements (transport gate) — extending it is a follow-up._
 
 ## 🟡 Nice-to-have
 

@@ -1,0 +1,398 @@
+{
+  "schema_version": "1.0",
+  "normative_source": "Axis-protocol (L0): spec/protocol/validation.md §2.3-2.4, ADR-0003, ADR-0005",
+  "scope": "The DECISION of the on-chain Policy Engine (ENRG, Rust) vs its declared mirror in the reference implementation (Axis-core, Python). Only (allowed, reason) is compared — never internals.",
+  "how_to_run": "ENRG: cargo test -p enrg-mvp policy_conformance | Axis-core: AXIS_CONFORMANCE_VECTORS=<path> pytest -q tests/test_policy_conformance.py",
+  "defaults": {
+    "now": 1700000000,
+    "note": "month_start_ts is always inside the 30-day window (now - 60 s), so month_energy_wh is effective."
+  },
+  "reason_codes": {
+    "mint_paused": "global mint switch off (policy.mint_enabled = false)",
+    "untrusted_oracle": "policy.enforce_oracle_whitelist = true and oracle_trusted = false",
+    "invalid_device_state": "device not Active (ADR-0005) or revoked",
+    "stale_timestamp": "now - verified_at > 900 s (MAX_PROOF_AGE)",
+    "future_timestamp": "verified_at > now + max_clock_skew_sec",
+    "tier_limit_exceeded": "month_energy + report.energy_wh > tier monthly limit (v7.0 §15)",
+    "excessive_energy": "report.energy_wh > rated_power_wh * max_energy_bps / 10_000",
+    "zero_amount_mint": "computed reward = 0",
+    "supply_limit_exceeded": "total_supply + reward > max_supply"
+  },
+  "vectors": [
+    {
+      "id": "preamble_ok",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "id": "preamble_mint_paused",
+      "kind": "preamble",
+      "policy": {
+        "mint_enabled": false
+      },
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": false,
+        "reason": "mint_paused"
+      }
+    },
+    {
+      "id": "preamble_untrusted_oracle",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000
+      },
+      "now": 1700000000,
+      "oracle_trusted": false,
+      "expected": {
+        "allowed": false,
+        "reason": "untrusted_oracle"
+      }
+    },
+    {
+      "id": "preamble_whitelist_disabled",
+      "kind": "preamble",
+      "policy": {
+        "enforce_oracle_whitelist": false
+      },
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000
+      },
+      "now": 1700000000,
+      "oracle_trusted": false,
+      "expected": {
+        "allowed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "id": "preamble_device_not_active",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "provisioned",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": false,
+        "reason": "invalid_device_state"
+      }
+    },
+    {
+      "id": "preamble_device_revoked",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": true,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": false,
+        "reason": "invalid_device_state"
+      }
+    },
+    {
+      "id": "preamble_stale_timestamp",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1699999099
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": false,
+        "reason": "stale_timestamp"
+      }
+    },
+    {
+      "id": "preamble_future_timestamp",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000301
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": false,
+        "reason": "future_timestamp"
+      }
+    },
+    {
+      "id": "preamble_clock_skew_boundary_is_allowed",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000300
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "id": "preamble_proof_age_boundary_is_allowed",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1699999100
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "id": "preamble_tier_limit_exceeded",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 99500,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": false,
+        "reason": "tier_limit_exceeded"
+      }
+    },
+    {
+      "id": "preamble_tier_limit_industrial_is_unlimited",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "industrial",
+        "month_energy_wh": 900000000,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "id": "preamble_excessive_energy",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "industrial",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 6000,
+        "verified_at": 1700000000
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": false,
+        "reason": "excessive_energy"
+      }
+    },
+    {
+      "id": "preamble_energy_cap_disabled",
+      "kind": "preamble",
+      "policy": {
+        "enforce_energy_caps": false
+      },
+      "producer": {
+        "state": "active",
+        "tier": "industrial",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 6000,
+        "verified_at": 1700000000
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "id": "reward_ok",
+      "kind": "reward",
+      "reward": 1000,
+      "vault_total_supply": 0,
+      "vault_max_supply": 1000000000000000000,
+      "expected": {
+        "allowed": true,
+        "reason": "ok"
+      }
+    },
+    {
+      "id": "reward_zero_amount",
+      "kind": "reward",
+      "reward": 0,
+      "vault_total_supply": 0,
+      "vault_max_supply": 1000000000000000000,
+      "expected": {
+        "allowed": false,
+        "reason": "zero_amount_mint"
+      }
+    },
+    {
+      "id": "reward_supply_limit_exceeded",
+      "kind": "reward",
+      "reward": 1000,
+      "vault_total_supply": 999999999999999500,
+      "vault_max_supply": 1000000000000000000,
+      "expected": {
+        "allowed": false,
+        "reason": "supply_limit_exceeded"
+      }
+    },
+    {
+      "id": "reward_supply_cap_disabled",
+      "kind": "reward",
+      "policy": {
+        "enforce_supply_cap": false
+      },
+      "reward": 1000,
+      "vault_total_supply": 999999999999999500,
+      "vault_max_supply": 1000000000000000000,
+      "expected": {
+        "allowed": true,
+        "reason": "ok"
+      }
+    }
+  ]
+}
