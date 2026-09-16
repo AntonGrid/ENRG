@@ -17,6 +17,24 @@ updated as the fixes land. The canonical audit report is
       generated (`~/keys/enrg-mainnet`, 0600); program constants, oracle,
       firmware and local key files updated. Program still needs a mainnet
       deploy at a NEW program id (operator step).
+      **Update (2026-09-16): the ON-CHAIN rotation is now complete on devnet.**
+      The 2026-08-30 pass could not move three roles (no instruction existed):
+      `6gM2…` still held `oracle-registry.authority`, `oracle_admin`,
+      `policy-registry.authority`, `oracle-quorum-config.authority` and a
+      governance seat. Fixed — see `docs/AUTHORITY-ROTATION-2026-09-16.md`.
+      `scripts/verify-authorities.ts` now exits 0 (no leaked key holds a role);
+      `founder-wallet.json` was retired to `~/keys/retired/` (mode 600).
+      Cleanup of the leaked blob in git history (`git filter-repo`) is still
+      pending and stays an owner-approved operation.
+- [x] **P0-1b Unrotatable authority roles (code)** — the protocol had three roles
+      with **no transfer instruction** (`OracleRegistry.authority`,
+      `OracleQuorumConfig.authority`, `GovernanceState.authority`), which made any
+      key ceremony — and any incident response — impossible. Added
+      `set_oracle_registry_authority`, `set_quorum_authority` and
+      `set_governance_authority` (gated by the CURRENT holder, event-emitting,
+      layout-neutral), registered in `lib.rs` and executed on devnet
+      (`docs/AUTHORITY-ROTATION-2026-09-16.md`). _Two-step (pending + accept)
+      needs an account-layout migration — still open._
 - [x] **P0-2 Sequential mint** — mint queue implemented in `server.js`
       (`MINT_QUEUE_MAX` / `MINT_MAX_ATTEMPTS` / `MINT_RETRY_BASE_MS`), proofs
       persist with `proof_json` + `mint_status='accepted'`, queue drains after

@@ -3769,6 +3769,61 @@
       ]
     },
     {
+      "name": "set_governance_authority",
+      "docs": [
+        "Transfer the governance authority (key rotation, ADR-0007 / ADR-0009).",
+        "The CURRENT `governance.authority` must sign."
+      ],
+      "discriminator": [
+        0,
+        113,
+        148,
+        253,
+        151,
+        181,
+        148,
+        42
+      ],
+      "accounts": [
+        {
+          "name": "governance",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  111,
+                  118,
+                  101,
+                  114,
+                  110,
+                  97,
+                  110,
+                  99,
+                  101
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true,
+          "relations": [
+            "governance"
+          ]
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "set_oracle_admin",
       "docs": [
         "Change oracle_admin (manage the oracle list). Protocol admin only."
@@ -3952,6 +4007,66 @@
       ]
     },
     {
+      "name": "set_oracle_registry_authority",
+      "docs": [
+        "Transfer the OracleRegistry ROOT authority (key rotation, ADR-0007).",
+        "",
+        "The CURRENT `registry.authority` must sign. Added 2026-09-16 because the",
+        "role had no setter: a leaked root authority could not be evicted and could",
+        "always re-take `oracle_admin` (audit finding)."
+      ],
+      "discriminator": [
+        75,
+        45,
+        75,
+        101,
+        44,
+        93,
+        180,
+        107
+      ],
+      "accounts": [
+        {
+          "name": "registry",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  114,
+                  101,
+                  103,
+                  105,
+                  115,
+                  116,
+                  114,
+                  121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
       "name": "set_policy_authority",
       "docs": [
         "Change the policy administrator (role may later go to Governance ADR-0009)."
@@ -3990,6 +4105,71 @@
                   116,
                   114,
                   121
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "authority",
+          "signer": true
+        }
+      ],
+      "args": [
+        {
+          "name": "new_authority",
+          "type": "pubkey"
+        }
+      ]
+    },
+    {
+      "name": "set_quorum_authority",
+      "docs": [
+        "Transfer the oracle quorum authority (key rotation, ADR-0007).",
+        "",
+        "The quorum authority controls `required` / `threshold` / `reward_per_vote`",
+        "(i.e. it can disable the mint gate). The role had no setter, so it was",
+        "frozen at init — see `SetQuorumAuthority` (audit 2026-09-16)."
+      ],
+      "discriminator": [
+        166,
+        46,
+        150,
+        92,
+        165,
+        151,
+        207,
+        227
+      ],
+      "accounts": [
+        {
+          "name": "oracle_quorum_config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  97,
+                  99,
+                  108,
+                  101,
+                  45,
+                  113,
+                  117,
+                  111,
+                  114,
+                  117,
+                  109,
+                  45,
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
                 ]
               }
             ]
@@ -5549,6 +5729,19 @@
       ]
     },
     {
+      "name": "GovernanceAuthorityChanged",
+      "discriminator": [
+        92,
+        188,
+        188,
+        99,
+        166,
+        80,
+        99,
+        50
+      ]
+    },
+    {
       "name": "ManifestRegistryInitialized",
       "discriminator": [
         10,
@@ -5637,6 +5830,19 @@
         74,
         214,
         220
+      ]
+    },
+    {
+      "name": "OracleRegistryAuthorityChanged",
+      "discriminator": [
+        75,
+        106,
+        83,
+        123,
+        252,
+        162,
+        112,
+        166
       ]
     },
     {
@@ -5767,6 +5973,19 @@
         170,
         164,
         51
+      ]
+    },
+    {
+      "name": "QuorumAuthorityChanged",
+      "discriminator": [
+        70,
+        159,
+        69,
+        200,
+        240,
+        146,
+        34,
+        253
       ]
     },
     {
@@ -6865,6 +7084,29 @@
       }
     },
     {
+      "name": "GovernanceAuthorityChanged",
+      "docs": [
+        "Emitted when the governance authority changes (ADR-0009)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "old_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "changed_by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
       "name": "GovernanceState",
       "docs": [
         "Single governance account (PDA [b\"governance\"]).",
@@ -7500,6 +7742,33 @@
             "type": {
               "vec": "pubkey"
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleRegistryAuthorityChanged",
+      "docs": [
+        "Emitted when the OracleRegistry ROOT authority changes.",
+        "",
+        "The root authority is the role that can change `oracle_admin`; before the",
+        "rotation instructions existed it was assigned once at initialization and could",
+        "never be transferred (incident-response blocker, audit 2026-09-16)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "old_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "changed_by",
+            "type": "pubkey"
           }
         ]
       }
@@ -8429,6 +8698,33 @@
           },
           {
             "name": "Executed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "QuorumAuthorityChanged",
+      "docs": [
+        "Emitted when the oracle quorum authority changes.",
+        "",
+        "The quorum authority controls `required` / `threshold` / `reward_per_vote` —",
+        "i.e. it can switch the mint gate off. It must be rotatable: see",
+        "`set_quorum_authority`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "old_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "new_authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "changed_by",
+            "type": "pubkey"
           }
         ]
       }

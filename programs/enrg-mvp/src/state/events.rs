@@ -275,3 +275,35 @@ pub struct PolicyAuthorityChanged {
     pub changed_by: Pubkey,
 }
 
+/// Emitted when the OracleRegistry ROOT authority changes.
+///
+/// The root authority is the role that can change `oracle_admin`; before the
+/// rotation instructions existed it was assigned once at initialization and could
+/// never be transferred (incident-response blocker, audit 2026-09-16).
+#[event]
+pub struct OracleRegistryAuthorityChanged {
+    pub old_authority: Pubkey,
+    pub new_authority: Pubkey,
+    pub changed_by: Pubkey,
+}
+
+/// Emitted when the oracle quorum authority changes.
+///
+/// The quorum authority controls `required` / `threshold` / `reward_per_vote` —
+/// i.e. it can switch the mint gate off. It must be rotatable: see
+/// `set_quorum_authority`.
+#[event]
+pub struct QuorumAuthorityChanged {
+    pub old_authority: Pubkey,
+    pub new_authority: Pubkey,
+    pub changed_by: Pubkey,
+}
+
+/// Emitted when the governance authority changes (ADR-0009).
+#[event]
+pub struct GovernanceAuthorityChanged {
+    pub old_authority: Pubkey,
+    pub new_authority: Pubkey,
+    pub changed_by: Pubkey,
+}
+

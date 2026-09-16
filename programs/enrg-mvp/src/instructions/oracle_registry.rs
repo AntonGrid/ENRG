@@ -65,6 +65,36 @@ pub struct SetOracleAdmin<'info> {
     pub authority: Signer<'info>,
 }
 
+/// Rotate the OracleRegistry ROOT authority — the role that can appoint a new
+/// `oracle_admin` (and therefore the whole trusted-oracle set).
+///
+/// WHY THIS INSTRUCTION EXISTS (audit 2026-09-16): the role used to be assigned
+/// once in `initialize_oracle_registry` (= `EXPECTED_DEPLOYER`) with **no way to
+/// transfer it**. A leaked or compromised root authority could neither be evicted
+/// nor replaced, and it can always re-take `oracle_admin` via `set_oracle_admin`
+/// — so rotating `oracle_admin` alone is cosmetic. Key rotation is a hard
+/// requirement of ADR-0007 and of the mainnet key ceremony.
+///
+/// Authorization: the CURRENT `registry.authority` must sign (the outgoing key
+/// approves its own replacement), so nobody can self-appoint.
+///
+/// Single-step with an event, consistent with `set_vault_authority` /
+/// `set_policy_authority`. A two-step (pending + accept) flow needs an extra
+/// account field and therefore an account migration — tracked in
+/// MAINNET-CHECKLIST.md.
+#[derive(Accounts)]
+pub struct SetOracleRegistryAuthority<'info> {
+    #[account(
+        mut,
+        seeds = [b"oracle-registry"],
+        bump,
+        constraint = registry.authority == authority.key() @ ErrorCode::NotOracleAuthority
+    )]
+    pub registry: Account<'info, OracleRegistry>,
+
+    pub authority: Signer<'info>,
+}
+
 pub fn initialize_oracle_registry(
     ctx: Context<InitializeOracleRegistry>,
 ) -> Result<()> {
@@ -105,6 +135,36 @@ pub fn set_oracle_admin(
         new_oracle_admin,
         changed_by: ctx.accounts.authority.key(),
     });
+
+    Ok(())
+}
+
+/// Transfer the OracleRegistry root authority to `new_authority`
+/// (see `SetOracleRegistryAuthority` for the rationale).
+pub fn set_oracle_registry_authority(
+    ctx: Context<SetOracleRegistryAuthority>,
+    new_authority: Pubkey,
+) -> Result<()> {
+    require!(
+        new_authority != Pubkey::default(),
+        ErrorCode::InvalidParameter
+    );
+
+    let registry = &mut ctx.accounts.registry;
+    let old_authority = registry.authority;
+    registry.authority = new_authority;
+
+    emit!(OracleRegistryAuthorityChanged {
+        old_authority,
+        new_authority,
+        changed_by: ctx.accounts.authority.key(),
+    });
+
+    msg!(
+        "Oracle registry authority changed: {} -> {}",
+        old_authority,
+        new_authority
+    );
 
     Ok(())
 }

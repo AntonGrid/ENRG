@@ -137,3 +137,29 @@ jobs:
       - name: Run tests
         run: cd onchain && forge test
 
+  authorities:
+    name: Protocol authority guard (read-only)
+    # P0-1b guard: fails when a key that leaked in the public git history still
+    # holds an on-chain role. Runs on pushes to main only — the cluster state is
+    # an external dependency and must not block pull requests.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify no forbidden key holds a protocol role
+        # Read-only: no keypair, no transactions. Exit 1 = a banned key holds a
+        # role; exit 2 = the program is not deployed at this endpoint.
+        env:
+          ANCHOR_PROVIDER_URL: https://api.devnet.solana.com
+          TS_NODE_TRANSPILE_ONLY: "1"
+        run: npx ts-node scripts/verify-authorities.ts
+

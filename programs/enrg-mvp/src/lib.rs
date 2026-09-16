@@ -146,6 +146,18 @@ pub mod enrg_mvp {
         instructions::oracle_registry::set_oracle_admin(ctx, new_oracle_admin)
     }
 
+    /// Transfer the OracleRegistry ROOT authority (key rotation, ADR-0007).
+    ///
+    /// The CURRENT `registry.authority` must sign. Added 2026-09-16 because the
+    /// role had no setter: a leaked root authority could not be evicted and could
+    /// always re-take `oracle_admin` (audit finding).
+    pub fn set_oracle_registry_authority(
+        ctx: Context<SetOracleRegistryAuthority>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::oracle_registry::set_oracle_registry_authority(ctx, new_authority)
+    }
+
     // ═══════════════════════════════════════════
     //  PHASE 3 — Policy Engine (ADR-0003)
     // ═══════════════════════════════════════════
@@ -412,6 +424,15 @@ pub mod enrg_mvp {
         instructions::governance::update_members(ctx, members)
     }
 
+    /// Transfer the governance authority (key rotation, ADR-0007 / ADR-0009).
+    /// The CURRENT `governance.authority` must sign.
+    pub fn set_governance_authority(
+        ctx: Context<SetGovernanceAuthority>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::governance::set_governance_authority(ctx, new_authority)
+    }
+
     pub fn create_proposal(
         ctx: Context<CreateProposal>,
         id: u64,
@@ -497,6 +518,18 @@ pub mod enrg_mvp {
         reward_per_vote: u64,
     ) -> Result<()> {
         instructions::oracle_quorum::set_oracle_quorum(ctx, required, threshold, reward_per_vote)
+    }
+
+    /// Transfer the oracle quorum authority (key rotation, ADR-0007).
+    ///
+    /// The quorum authority controls `required` / `threshold` / `reward_per_vote`
+    /// (i.e. it can disable the mint gate). The role had no setter, so it was
+    /// frozen at init — see `SetQuorumAuthority` (audit 2026-09-16).
+    pub fn set_quorum_authority(
+        ctx: Context<SetQuorumAuthority>,
+        new_authority: Pubkey,
+    ) -> Result<()> {
+        instructions::oracle_quorum::set_quorum_authority(ctx, new_authority)
     }
 
     /// Claim the SRC reward for a vote in a finalized attestation (from the

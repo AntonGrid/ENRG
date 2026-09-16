@@ -74,6 +74,58 @@ pub fn update_members(
     Ok(())
 }
 
+/// Rotate the governance authority (the role that creates proposals, manages the
+/// member list and executes the timelocked emission).
+///
+/// WHY THIS INSTRUCTION EXISTS (audit 2026-09-16): `GovernanceState.authority`
+/// was written once by `initialize_governance` and had no setter, so the role
+/// could not be handed over — the key ceremony required by ADR-0009 / ADR-0007
+/// was impossible for this role.
+///
+/// Authorization: the CURRENT `governance.authority` must sign. Single-step with
+/// an event; the two-step (pending + accept) flow requires an extra account field
+/// (layout migration) and is tracked in MAINNET-CHECKLIST.md.
+#[derive(Accounts)]
+pub struct SetGovernanceAuthority<'info> {
+    #[account(
+        mut,
+        seeds = [b"governance"],
+        bump,
+        has_one = authority @ ErrorCode::NotGovernanceAuthority
+    )]
+    pub governance: Account<'info, GovernanceState>,
+
+    pub authority: Signer<'info>,
+}
+
+pub fn set_governance_authority(
+    ctx: Context<SetGovernanceAuthority>,
+    new_authority: Pubkey,
+) -> Result<()> {
+    require!(
+        new_authority != Pubkey::default(),
+        ErrorCode::InvalidParameter
+    );
+
+    let governance = &mut ctx.accounts.governance;
+    let old_authority = governance.authority;
+    governance.authority = new_authority;
+
+    emit!(GovernanceAuthorityChanged {
+        old_authority,
+        new_authority,
+        changed_by: ctx.accounts.authority.key(),
+    });
+
+    msg!(
+        "Governance authority changed: {} -> {}",
+        old_authority,
+        new_authority
+    );
+
+    Ok(())
+}
+
 /// Create a proposal (PDA [b"proposal", id]). Authority only.
 ///
 /// One active proposal at a time: if active_proposal_id != 0, the client

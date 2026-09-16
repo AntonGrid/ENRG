@@ -5,7 +5,7 @@ use crate::error::ErrorCode;
 use crate::security::verify_ed25519_signature;
 use crate::state::{
     oracle_attest_message, OracleAttestation, OracleQuorumConfig, OracleRegistry, OracleStake,
-    OracleVote, TokenMint, ORACLE_ATTESTATION_THRESHOLD,
+    OracleVote, QuorumAuthorityChanged, TokenMint, ORACLE_ATTESTATION_THRESHOLD,
 };
 
 /// Submit one oracle vote on a proof attestation (P3-6).
@@ -340,6 +340,58 @@ pub fn set_oracle_quorum(
     cfg.required = required;
     cfg.threshold = threshold;
     cfg.reward_per_vote = reward_per_vote;
+    Ok(())
+}
+
+/// Rotate the oracle quorum authority.
+///
+/// WHY THIS INSTRUCTION EXISTS (audit 2026-09-16): `OracleQuorumConfig.authority`
+/// was written once by `init_oracle_quorum` and could never be changed — the PDA
+/// is created with `init` (not `init_if_needed`) and has no close instruction, so
+/// the role was frozen forever. This is the most sensitive role in the protocol:
+/// it controls `required` / `threshold` / `reward_per_vote`, i.e. it can turn the
+/// mint gate OFF. A frozen (or leaked) quorum authority therefore made the k-of-n
+/// guarantee permanent-but-unrotatable — unacceptable for mainnet operations.
+///
+/// Authorization: the CURRENT `config.authority` must sign.
+#[derive(Accounts)]
+pub struct SetQuorumAuthority<'info> {
+    #[account(
+        mut,
+        seeds = [b"oracle-quorum-config"],
+        bump,
+        constraint = oracle_quorum_config.authority == authority.key() @ ErrorCode::NotQuorumAuthority
+    )]
+    pub oracle_quorum_config: Account<'info, OracleQuorumConfig>,
+
+    pub authority: Signer<'info>,
+}
+
+pub fn set_quorum_authority(
+    ctx: Context<SetQuorumAuthority>,
+    new_authority: Pubkey,
+) -> Result<()> {
+    require!(
+        new_authority != Pubkey::default(),
+        ErrorCode::InvalidParameter
+    );
+
+    let cfg = &mut ctx.accounts.oracle_quorum_config;
+    let old_authority = cfg.authority;
+    cfg.authority = new_authority;
+
+    emit!(QuorumAuthorityChanged {
+        old_authority,
+        new_authority,
+        changed_by: ctx.accounts.authority.key(),
+    });
+
+    msg!(
+        "Quorum authority changed: {} -> {}",
+        old_authority,
+        new_authority
+    );
+
     Ok(())
 }
 
