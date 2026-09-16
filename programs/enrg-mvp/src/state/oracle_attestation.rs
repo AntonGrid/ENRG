@@ -13,7 +13,9 @@ use anchor_lang::prelude::*;
 ///
 /// The first vote fixes the canonical `proof_hash`; a later vote carrying a
 /// different hash sets `conflict = true` (a contradictory report — the
-/// economic basis for `slash_oracle`).
+/// economic basis for `slash_oracle`) and does **NOT** count toward the
+/// threshold (audit 2026-09-16: previously every vote incremented `votes`, so one
+/// honest plus one contradicting oracle could finalize a k=2 attestation).
 #[account]
 #[derive(InitSpace)]
 pub struct OracleAttestation {
@@ -23,7 +25,7 @@ pub struct OracleAttestation {
     pub nonce: u64,
     /// Canonical proof hash fixed by the first oracle vote.
     pub proof_hash: [u8; 32],
-    /// Number of distinct oracle votes received.
+    /// Number of **agreeing** oracle votes (contradictory votes are not counted).
     pub votes: u8,
     /// votes >= threshold → the attestation is finalized.
     pub finalized: bool,
@@ -31,6 +33,60 @@ pub struct OracleAttestation {
     pub conflict: bool,
     /// First vote timestamp.
     pub created_at: i64,
+}
+
+/// Outcome of applying one oracle vote (see `apply_vote`).
+#[derive(Debug, PartialEq, Eq)]
+pub enum VoteOutcome {
+    /// The very first vote — it fixes the canonical hash.
+    Canonical,
+    /// The vote agrees with the canonical hash and advances the quorum.
+    Agreed,
+    /// The vote contradicts the canonical hash: recorded, never counted.
+    Conflict,
+}
+
+/// Apply one oracle vote to an attestation.
+///
+/// `attestation.votes` counts **agreeing** votes only, so a contradictory report
+/// can neither reach the threshold nor help someone else reach it. The
+/// contradictory vote is still persisted in its own `OracleVote` PDA (with its
+/// own signed `proof_hash`), which makes the offence verifiable on-chain and is
+/// the basis for `slash_oracle`.
+///
+/// Deliberately pure: the handler (which needs the Ed25519 check and the clock)
+/// stays a thin wrapper, and the quorum arithmetic is unit-tested.
+pub fn apply_vote(
+    attestation: &mut OracleAttestation,
+    device_id: Pubkey,
+    nonce: u64,
+    proof_hash: &[u8; 32],
+    now: i64,
+) -> VoteOutcome {
+    // `votes == 0` is exactly "the canonical hash is not set yet": the first vote
+    // always establishes it and is counted as agreeing.
+    if attestation.votes == 0 {
+        attestation.device_id = device_id;
+        attestation.nonce = nonce;
+        attestation.proof_hash = *proof_hash;
+        attestation.created_at = now;
+        attestation.votes = 1;
+        return VoteOutcome::Canonical;
+    }
+
+    if attestation.proof_hash == *proof_hash {
+        attestation.votes = attestation.votes.saturating_add(1);
+        VoteOutcome::Agreed
+    } else {
+        attestation.conflict = true;
+        VoteOutcome::Conflict
+    }
+}
+
+/// Whether the attestation reached the quorum (used by the handler and by
+/// `mint_energy`'s gate test suite).
+pub fn is_finalized(attestation: &OracleAttestation, threshold: u8) -> bool {
+    attestation.votes >= threshold
 }
 
 /// One oracle's vote on an attestation (dedupe via PDA seeds).

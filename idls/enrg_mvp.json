@@ -5847,6 +5847,19 @@
       ]
     },
     {
+      "name": "OracleConflictDetected",
+      "discriminator": [
+        58,
+        228,
+        9,
+        214,
+        30,
+        211,
+        25,
+        79
+      ]
+    },
+    {
       "name": "OracleRegistryAuthorityChanged",
       "discriminator": [
         75,
@@ -7588,7 +7601,9 @@
         "",
         "The first vote fixes the canonical `proof_hash`; a later vote carrying a",
         "different hash sets `conflict = true` (a contradictory report — the",
-        "economic basis for `slash_oracle`)."
+        "economic basis for `slash_oracle`) and does **NOT** count toward the",
+        "threshold (audit 2026-09-16: previously every vote incremented `votes`, so one",
+        "honest plus one contradicting oracle could finalize a k=2 attestation)."
       ],
       "type": {
         "kind": "struct",
@@ -7622,7 +7637,7 @@
           {
             "name": "votes",
             "docs": [
-              "Number of distinct oracle votes received."
+              "Number of **agreeing** oracle votes (contradictory votes are not counted)."
             ],
             "type": "u8"
           },
@@ -7670,6 +7685,49 @@
           {
             "name": "changed_by",
             "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OracleConflictDetected",
+      "docs": [
+        "Emitted when an oracle votes for a proof hash that contradicts the canonical",
+        "hash of the attestation (audit 2026-09-16).",
+        "",
+        "The contradictory vote does NOT count toward the quorum threshold; this event",
+        "is the on-chain-verifiable evidence of the contradiction (both hashes, signed",
+        "by the offending oracle in its own `OracleVote` PDA) and is the basis for",
+        "`slash_oracle`."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "attestation",
+            "type": "pubkey"
+          },
+          {
+            "name": "oracle",
+            "type": "pubkey"
+          },
+          {
+            "name": "canonical_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "conflicting_hash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
           }
         ]
       }

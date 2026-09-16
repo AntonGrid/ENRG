@@ -47,6 +47,23 @@ updated as the fixes land. The canonical audit report is
       (owner ≠ mint signer, SRC arrive on the owner's ATA) —
       `docs/OWNERSHIP-FIX-2026-09-16.md`. _Breaking change: clients must pass
       `producerOwner` to `mint_energy`._
+- [x] **P0-1d Quorum semantics — a contradiction must not finalize** — every vote
+      incremented `OracleAttestation.votes` and finalization used
+      `votes >= threshold`, so with the shipped `threshold = 2` **one honest plus one
+      contradicting oracle finalized the attestation**. Fixed: `votes` counts
+      AGREEING votes only (pure, unit-tested `apply_vote` /
+      `state/oracle_attestation.rs`), a contradicting vote is recorded
+      (`conflict = true`) and emits `OracleConflictDetected {canonical_hash,
+      conflicting_hash}` as on-chain-verifiable evidence for `slash_oracle`, and
+      finalization is monotonic (a late conflict cannot revert it). Proven by 5 new
+      unit tests (`programs/enrg-mvp/tests/oracle_quorum_tests.rs`, incl. the
+      regression `conflicting_vote_never_counts_toward_the_threshold`) and on
+      devnet (`scripts/devnet_quorum_conflict.ts`: `votes=1, conflict=true,
+      finalized=false`), while two agreeing oracles still finalize
+      (`demo/demo-recording.sh`: `votes=2, finalized=true`). _Not retroactive:
+      attestations finalized before the fix keep their flag — harmless, because
+      `mint_energy` additionally requires the report hash to equal the canonical
+      hash._
 - [x] **P0-2 Sequential mint** — mint queue implemented in `server.js`
       (`MINT_QUEUE_MAX` / `MINT_MAX_ATTEMPTS` / `MINT_RETRY_BASE_MS`), proofs
       persist with `proof_json` + `mint_status='accepted'`, queue drains after

@@ -307,3 +307,18 @@ pub struct GovernanceAuthorityChanged {
     pub changed_by: Pubkey,
 }
 
+/// Emitted when an oracle votes for a proof hash that contradicts the canonical
+/// hash of the attestation (audit 2026-09-16).
+///
+/// The contradictory vote does NOT count toward the quorum threshold; this event
+/// is the on-chain-verifiable evidence of the contradiction (both hashes, signed
+/// by the offending oracle in its own `OracleVote` PDA) and is the basis for
+/// `slash_oracle`.
+#[event]
+pub struct OracleConflictDetected {
+    pub attestation: Pubkey,
+    pub oracle: Pubkey,
+    pub canonical_hash: [u8; 32],
+    pub conflicting_hash: [u8; 32],
+}
+

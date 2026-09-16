@@ -4,8 +4,9 @@ use anchor_spl::token::{self, Mint, Token, TokenAccount};
 use crate::error::ErrorCode;
 use crate::security::verify_ed25519_signature;
 use crate::state::{
-    oracle_attest_message, OracleAttestation, OracleQuorumConfig, OracleRegistry, OracleStake,
-    OracleVote, QuorumAuthorityChanged, TokenMint, ORACLE_ATTESTATION_THRESHOLD,
+    apply_vote, is_finalized, oracle_attest_message, OracleAttestation, OracleConflictDetected,
+    OracleQuorumConfig, OracleRegistry, OracleStake, OracleVote, QuorumAuthorityChanged, TokenMint,
+    VoteOutcome, ORACLE_ATTESTATION_THRESHOLD,
 };
 
 /// Submit one oracle vote on a proof attestation (P3-6).
@@ -101,41 +102,56 @@ pub fn submit_oracle_attestation(
 
     let clock = Clock::get()?;
     let attestation_key = ctx.accounts.attestation.key();
+    let oracle_key = ctx.accounts.oracle.key();
     let attestation = &mut ctx.accounts.attestation;
     let vote = &mut ctx.accounts.vote;
 
-    vote.oracle = ctx.accounts.oracle.key();
+    vote.oracle = oracle_key;
     vote.attestation = attestation_key;
     vote.proof_hash = proof_hash;
     vote.voted_at = clock.unix_timestamp;
 
-    if attestation.votes == 0 {
-        // First vote fixes the canonical proof hash.
-        attestation.device_id = device_id;
-        attestation.nonce = nonce;
-        attestation.proof_hash = proof_hash;
-        attestation.created_at = clock.unix_timestamp;
-    } else if attestation.proof_hash != proof_hash {
-        // Contradictory report — record the conflict (basis for slashing).
-        attestation.conflict = true;
-    }
+    // Quorum arithmetic lives in `state::oracle_attestation::apply_vote` (pure and
+    // unit-tested): only AGREEING votes count, so a contradictory report can never
+    // finalize an attestation (audit 2026-09-16).
+    let outcome = apply_vote(
+        attestation,
+        device_id,
+        nonce,
+        &proof_hash,
+        clock.unix_timestamp,
+    );
 
-    attestation.votes = attestation.votes.saturating_add(1);
     let threshold = ctx
         .accounts
         .oracle_quorum_config
         .as_ref()
         .map(|c| c.threshold)
         .unwrap_or(ORACLE_ATTESTATION_THRESHOLD);
-    if attestation.votes >= threshold {
+    if is_finalized(attestation, threshold) {
         attestation.finalized = true;
     }
 
+    if outcome == VoteOutcome::Conflict {
+        // On-chain-verifiable evidence: this oracle signed a hash that differs from
+        // the canonical one. The event carries BOTH hashes so the contradiction can
+        // be arbitrated (or slashed, see `slash_oracle`) without an off-chain
+        // database.
+        emit!(OracleConflictDetected {
+            attestation: attestation_key,
+            oracle: oracle_key,
+            canonical_hash: attestation.proof_hash,
+            conflicting_hash: proof_hash,
+        });
+    }
+
     msg!(
-        "Oracle attestation: device={} nonce={} votes={} conflict={}",
+        "Oracle attestation: device={} nonce={} agreeing_votes={} threshold={} finalized={} conflict={}",
         device_id,
         nonce,
         attestation.votes,
+        threshold,
+        attestation.finalized,
         attestation.conflict
     );
     Ok(())
