@@ -805,16 +805,17 @@ async function mintQueueWorker() {
                     if (entry.attempts < MINT_MAX_ATTEMPTS) {
                         const delay = MINT_RETRY_BASE_MS * entry.attempts;
                         logger.warn(`⏳ [queue] mint_energy retry ${entry.attempts}/${MINT_MAX_ATTEMPTS} for ${entry.device_id}: ${mintRes.error} (retry in ${delay}ms)`);
-                        await storage.updateProofStatus(entry.device_id, entry.proof.nonce, null, 'accepted');
+                        // P1-10: persist why, so the state survives the log buffer.
+                        await storage.updateProofStatus(entry.device_id, entry.proof.nonce, null, 'accepted', mintRes.error, entry.attempts);
                         setTimeout(() => { enqueueMint(entry, true); }, delay);
                     } else {
-                        await storage.updateProofStatus(entry.device_id, entry.proof.nonce, null, 'deferred');
+                        await storage.updateProofStatus(entry.device_id, entry.proof.nonce, null, 'deferred', mintRes.error, entry.attempts);
                         logger.warn(`⚠️ [queue] mint_energy gave up after ${MINT_MAX_ATTEMPTS} attempts for ${entry.device_id}: ${mintRes.error}`);
                     }
                 }
             } catch (e) {
                 logger.error('❌ [queue] worker entry error:', e && e.message);
-                await storage.updateProofStatus(entry.device_id, entry.proof.nonce, null, 'deferred').catch(() => {});
+                await storage.updateProofStatus(entry.device_id, entry.proof.nonce, null, 'deferred', (e && e.message) || 'worker_error', entry.attempts || null).catch(() => {});
             }
         }
     } finally {
@@ -830,7 +831,10 @@ async function mintQueueWorker() {
 async function drainPendingProofs() {
     try {
         const pending = await storage.loadPendingProofs();
+        const nowSec = Math.floor(Date.now() / 1000);
+        const maxAge = policy.config.maxProofAgeSec;
         let restored = 0;
+        let expired = 0;
         for (const row of pending) {
             if (!row.proof_json) {
                 // Pre-queue rows carry no signatures — cannot be minted;
@@ -840,10 +844,27 @@ async function drainPendingProofs() {
             let proof;
             try { proof = JSON.parse(row.proof_json); } catch { continue; }
             if (!proof || !proof.device_id_pubkey || !proof.device_signature) continue;
+            // The on-chain gate requires the oracle's `verified_at` to be fresh AT MINT
+            // TIME (MAX_PROOF_AGE, 900 s), so a proof drained from storage later than
+            // that can never mint. Record WHY (keeping its status) instead of spending
+            // another round of attempts and RPC on it (P1-10, audit 2026-09-16); the
+            // verified energy stays in energy_store.
+            const ageSec = nowSec - (Number(row.ts) || 0);
+            if (ageSec > maxAge) {
+                await storage.updateProofStatus(
+                    row.device_id, row.nonce, null, row.mint_status,
+                    `expired_unmintable: verified ${ageSec}s ago (> ${maxAge}s)`, null,
+                ).catch(() => {});
+                expired++;
+                continue;
+            }
             if (enqueueMint({ device_id: row.device_id, proof })) restored++;
         }
         if (restored > 0) {
             logger.info(`🔁 [queue] restored ${restored} pending proof(s) from storage`);
+        }
+        if (expired > 0) {
+            logger.warn(`⏳ [queue] ${expired} stored proof(s) are past MAX_PROOF_AGE (${maxAge}s) and can no longer mint — marked in mint_error`);
         }
     } catch (e) {
         logger.error('❌ [queue] drainPendingProofs failed:', e && e.message);
@@ -1504,6 +1525,11 @@ app.get('/api/v1/stats', async (req, res) => {
             total_energy_wh: s.total_energy_wh,
             minted_energy_wh: s.minted_energy_wh,
             last_proof_ts: s.last_proof_ts,
+            // P1-11 (audit 2026-09-16): a proof attested by several oracles has one
+            // row per oracle, so the row count is higher than the proof count. It is
+            // exposed instead of being folded into the totals (which used to double
+            // them).
+            attestation_rows: s.attestation_rows,
         };
         res.json(stats);
     } catch (e) {

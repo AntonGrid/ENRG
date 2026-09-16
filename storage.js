@@ -16,6 +16,57 @@ function log(...a) { console.log('[storage]', ...a); }
 function warn(...a) { console.warn('[storage]', ...a); }
 function error(...a) { console.error('[storage]', ...a); }
 
+/**
+ * Fold one row per PROOF into the public stats (P1-11, audit 2026-09-16).
+ *
+ * A proof attested by several oracles is stored once per oracle — that is the
+ * attestation record and `loadOracleStats` reports it per oracle. The global stats
+ * used to aggregate over those rows, so every quorum proof was counted twice: the
+ * live pilot reported `total_energy_wh: 60015` for 21 distinct proofs carrying
+ * 30015 Wh, and the landing page showed the doubled figure.
+ *
+ * `rows` therefore has to be grouped by the proof identity `(device_id, nonce)` and
+ * carry `is_minted` / `is_accepted` flags. Status precedence is
+ * `minted` > `accepted` > `deferred` (a proof that actually minted is minted even if
+ * another oracle's row says otherwise). `attestation_rows` keeps the row count
+ * visible so the difference to `total_proofs` is explicit rather than hidden.
+ */
+function aggregateProofStats(rows) {
+    const stats = {
+        total_proofs: 0,
+        minted_proofs: 0,
+        deferred_proofs: 0,
+        accepted_proofs: 0,
+        total_energy_wh: 0,
+        minted_energy_wh: 0,
+        active_producers: 0,
+        attestation_rows: 0,
+        last_proof_ts: 0,
+    };
+    const producers = new Set();
+    for (const r of rows || []) {
+        const energy = Number(r.energy_wh) || 0;
+        const ts = Number(r.ts) || 0;
+        stats.total_proofs += 1;
+        stats.total_energy_wh += energy;
+        stats.attestation_rows += Number(r.rows) || 1;
+        producers.add(r.device_id);
+        if (ts > stats.last_proof_ts) stats.last_proof_ts = ts;
+        if (Number(r.is_minted)) {
+            stats.minted_proofs += 1;
+            stats.minted_energy_wh += energy;
+        } else if (Number(r.is_accepted)) {
+            stats.accepted_proofs += 1;
+        } else {
+            // The only remaining status in this codebase is 'deferred' (see
+            // updateProofStatus call sites in server.js).
+            stats.deferred_proofs += 1;
+        }
+    }
+    stats.active_producers = producers.size;
+    return stats;
+}
+
 class Storage {
     constructor() {
         this.backend = process.env.DATABASE_URL ? 'postgres' : 'sqlite';
@@ -41,7 +92,7 @@ class Storage {
                 'CREATE TABLE IF NOT EXISTS pools (pool_id TEXT PRIMARY KEY, threshold BIGINT, total_energy BIGINT, device_energy TEXT, created_at BIGINT)'
             );
             await this.pg.query(
-                'CREATE TABLE IF NOT EXISTS proofs (id BIGSERIAL PRIMARY KEY, device_id TEXT, ts BIGINT, energy_wh BIGINT, nonce BIGINT, mint_tx TEXT, mint_status TEXT, proof_json TEXT, oracle_id TEXT)'
+                'CREATE TABLE IF NOT EXISTS proofs (id BIGSERIAL PRIMARY KEY, device_id TEXT, ts BIGINT, energy_wh BIGINT, nonce BIGINT, mint_tx TEXT, mint_status TEXT, proof_json TEXT, oracle_id TEXT, mint_error TEXT, mint_attempts BIGINT)'
             );
             // P0-2 (audit 2026-08-30): migration for pre-existing deployments —
             // add proof_json for the mint queue recovery (drain after restart).
@@ -53,13 +104,23 @@ class Storage {
             await this.pg.query(
                 "ALTER TABLE proofs ADD COLUMN IF NOT EXISTS oracle_id TEXT"
             ).catch(() => {});
+            // P1-10 (audit 2026-09-16): why a mint did not happen. Without it a
+            // deferred proof is indistinguishable from a policy denial, a missing
+            // producer or a dead RPC — the live pilot sat at 12 deferred proofs for
+            // 11 days with no trace of the cause anywhere but the (ephemeral) logs.
+            await this.pg.query(
+                "ALTER TABLE proofs ADD COLUMN IF NOT EXISTS mint_error TEXT"
+            ).catch(() => {});
+            await this.pg.query(
+                "ALTER TABLE proofs ADD COLUMN IF NOT EXISTS mint_attempts BIGINT"
+            ).catch(() => {});
             log('Postgres storage ready (DATABASE_URL)');
         } else {
             this.db.exec(`
                 CREATE TABLE IF NOT EXISTS devices (device_id TEXT PRIMARY KEY, public_key TEXT);
                 CREATE TABLE IF NOT EXISTS energy_store (device_id TEXT PRIMARY KEY, energy_wh INTEGER, nonce INTEGER);
                 CREATE TABLE IF NOT EXISTS pools (pool_id TEXT PRIMARY KEY, threshold INTEGER, total_energy INTEGER, device_energy TEXT, created_at INTEGER);
-                CREATE TABLE IF NOT EXISTS proofs (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, ts INTEGER, energy_wh INTEGER, nonce INTEGER, mint_tx TEXT, mint_status TEXT, proof_json TEXT, oracle_id TEXT);
+                CREATE TABLE IF NOT EXISTS proofs (id INTEGER PRIMARY KEY AUTOINCREMENT, device_id TEXT, ts INTEGER, energy_wh INTEGER, nonce INTEGER, mint_tx TEXT, mint_status TEXT, proof_json TEXT, oracle_id TEXT, mint_error TEXT, mint_attempts INTEGER);
             `);
             // P0-2: SQLite migration for pre-existing databases.
             const cols = this.db.prepare("PRAGMA table_info(proofs)").all();
@@ -68,6 +129,13 @@ class Storage {
             }
             if (!cols.some((c) => c.name === 'oracle_id')) {
                 this.db.exec('ALTER TABLE proofs ADD COLUMN oracle_id TEXT');
+            }
+            // P1-10 (audit 2026-09-16): see the Postgres branch above.
+            if (!cols.some((c) => c.name === 'mint_error')) {
+                this.db.exec('ALTER TABLE proofs ADD COLUMN mint_error TEXT');
+            }
+            if (!cols.some((c) => c.name === 'mint_attempts')) {
+                this.db.exec('ALTER TABLE proofs ADD COLUMN mint_attempts INTEGER');
             }
             log(`SQLite storage ready (${this.sqlitePath})`);
         }
@@ -170,22 +238,31 @@ class Storage {
             .run(device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id);
     }
 
-    async updateProofStatus(device_id, nonce, mint_tx, mint_status) {
+    /**
+     * Move a proof to a new mint status.
+     *
+     * `mint_error` / `mint_attempts` (P1-10, audit 2026-09-16) record WHY the mint
+     * did not happen; passing `null` (the default) clears them, which is what a
+     * successful mint does. A proof attested by several oracles has one row per
+     * oracle and all of them are updated here.
+     */
+    async updateProofStatus(device_id, nonce, mint_tx, mint_status, mint_error = null, mint_attempts = null) {
         if (this.backend === 'postgres') {
             await this.pg.query(
-                'UPDATE proofs SET mint_tx = $3, mint_status = $4 WHERE device_id = $1 AND nonce = $2',
-                [device_id, nonce, mint_tx, mint_status]
+                'UPDATE proofs SET mint_tx = $3, mint_status = $4, mint_error = $5, mint_attempts = $6 WHERE device_id = $1 AND nonce = $2',
+                [device_id, nonce, mint_tx, mint_status, mint_error, mint_attempts]
             );
             return;
         }
-        this.db.prepare('UPDATE proofs SET mint_tx = ?, mint_status = ? WHERE device_id = ? AND nonce = ?')
-            .run(mint_tx, mint_status, device_id, nonce);
+        this.db.prepare('UPDATE proofs SET mint_tx = ?, mint_status = ?, mint_error = ?, mint_attempts = ? WHERE device_id = ? AND nonce = ?')
+            .run(mint_tx, mint_status, mint_error, mint_attempts, device_id, nonce);
     }
 
     async loadProofs(device_id = null, limit = 100) {
+        const cols = 'device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id, mint_error, mint_attempts';
         if (this.backend === 'postgres') {
             const params = [];
-            let sql = 'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id FROM proofs';
+            let sql = `SELECT ${cols} FROM proofs`;
             if (device_id) { sql += ' WHERE device_id = $1'; params.push(device_id); }
             sql += ' ORDER BY id DESC LIMIT ' + Math.min(limit, 1000);
             const { rows } = await this.pg.query(sql, params);
@@ -193,11 +270,11 @@ class Storage {
         }
         if (device_id) {
             return this.db.prepare(
-                'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id FROM proofs WHERE device_id = ? ORDER BY id DESC LIMIT ?'
+                `SELECT ${cols} FROM proofs WHERE device_id = ? ORDER BY id DESC LIMIT ?`
             ).all(device_id, Math.min(limit, 1000));
         }
         return this.db.prepare(
-            'SELECT device_id, ts, energy_wh, nonce, mint_tx, mint_status, proof_json, oracle_id FROM proofs ORDER BY id DESC LIMIT ?'
+            `SELECT ${cols} FROM proofs ORDER BY id DESC LIMIT ?`
         ).all(Math.min(limit, 1000));
     }
 
@@ -273,54 +350,27 @@ class Storage {
 
     // Ecosystem stats aggregated from the proofs table — the single source of
     // truth for verified energy (ADR-0010 data bridge). Used by /api/v1/stats.
+    /**
+     * Public protocol stats — one entry per PROOF, not per attestation row
+     * (P1-11, audit 2026-09-16; see `aggregateProofStats` for why).
+     */
     async loadStats() {
-        if (this.backend === 'postgres') {
-            const { rows } = await this.pg.query(`
-                SELECT
-                    COUNT(*) AS total_proofs,
-                    COUNT(*) FILTER (WHERE mint_status = 'minted') AS minted_proofs,
-                    COUNT(*) FILTER (WHERE mint_status = 'deferred') AS deferred_proofs,
-                    COUNT(*) FILTER (WHERE mint_status = 'accepted') AS accepted_proofs,
-                    COALESCE(SUM(energy_wh), 0) AS total_energy_wh,
-                    COALESCE(SUM(energy_wh) FILTER (WHERE mint_status = 'minted'), 0) AS minted_energy_wh,
-                    COUNT(DISTINCT device_id) AS active_producers,
-                    COALESCE(MAX(ts), 0) AS last_proof_ts
-                FROM proofs
-            `);
-            const r = rows[0] || {};
-            return {
-                total_proofs: Number(r.total_proofs) || 0,
-                minted_proofs: Number(r.minted_proofs) || 0,
-                deferred_proofs: Number(r.deferred_proofs) || 0,
-                accepted_proofs: Number(r.accepted_proofs) || 0,
-                total_energy_wh: Number(r.total_energy_wh) || 0,
-                minted_energy_wh: Number(r.minted_energy_wh) || 0,
-                active_producers: Number(r.active_producers) || 0,
-                last_proof_ts: Number(r.last_proof_ts) || 0,
-            };
-        }
-        const row = this.db.prepare(`
+        const sql = `
             SELECT
-                COUNT(*) AS total_proofs,
-                SUM(CASE WHEN mint_status = 'minted' THEN 1 ELSE 0 END) AS minted_proofs,
-                SUM(CASE WHEN mint_status = 'deferred' THEN 1 ELSE 0 END) AS deferred_proofs,
-                SUM(CASE WHEN mint_status = 'accepted' THEN 1 ELSE 0 END) AS accepted_proofs,
-                COALESCE(SUM(energy_wh), 0) AS total_energy_wh,
-                COALESCE(SUM(CASE WHEN mint_status = 'minted' THEN energy_wh ELSE 0 END), 0) AS minted_energy_wh,
-                COUNT(DISTINCT device_id) AS active_producers,
-                COALESCE(MAX(ts), 0) AS last_proof_ts
+                device_id,
+                nonce,
+                MAX(energy_wh) AS energy_wh,
+                MAX(ts) AS ts,
+                MAX(CASE WHEN mint_status = 'minted' THEN 1 ELSE 0 END) AS is_minted,
+                MAX(CASE WHEN mint_status = 'accepted' THEN 1 ELSE 0 END) AS is_accepted,
+                COUNT(*) AS rows
             FROM proofs
-        `).get();
-        return {
-            total_proofs: Number(row.total_proofs) || 0,
-            minted_proofs: Number(row.minted_proofs) || 0,
-            deferred_proofs: Number(row.deferred_proofs) || 0,
-            accepted_proofs: Number(row.accepted_proofs) || 0,
-            total_energy_wh: Number(row.total_energy_wh) || 0,
-            minted_energy_wh: Number(row.minted_energy_wh) || 0,
-            active_producers: Number(row.active_producers) || 0,
-            last_proof_ts: Number(row.last_proof_ts) || 0,
-        };
+            GROUP BY device_id, nonce
+        `;
+        const rows = this.backend === 'postgres'
+            ? (await this.pg.query(sql)).rows
+            : this.db.prepare(sql).all();
+        return aggregateProofStats(rows);
     }
 }
 

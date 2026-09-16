@@ -280,6 +280,30 @@
       }
     },
     {
+      "id": "preamble_queued_mint_keeps_device_clock_valid",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000,
+        "device_timestamp": 1699999995
+      },
+      "now": 1700000800,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": true,
+        "reason": "ok"
+      }
+    },
+    {
       "id": "preamble_clock_skew_boundary_is_allowed",
       "kind": "preamble",
       "policy": {},

@@ -2,7 +2,7 @@ use anchor_lang::prelude::*;
 
 use crate::constants::{DEFAULT_MAX_ENERGY_BPS, EXPECTED_DEPLOYER, MAX_CLOCK_SKEW};
 use crate::error::ErrorCode;
-use crate::security::validation::verify_timestamp_with_skew;
+use crate::security::validation::{verify_device_clock, verify_timestamp_with_skew};
 use crate::state::*;
 
 // ══════════════════════════════════════════════════════════════
@@ -253,21 +253,23 @@ impl PolicyEngine {
         // 3. verified_at freshness (the policy sets the allowed clock skew).
         verify_timestamp_with_skew(input.now, input.report.verified_at, max_clock_skew)?;
 
-        // 3b. device_timestamp freshness (audit 2026-09-16).
+        // 3b. device_timestamp ↔ verified_at consistency (audit 2026-09-16).
         //
-        // `verified_at` is the ORACLE's clock; `device_timestamp` is the DEVICE's
-        // clock and until now it was only bound by the device signature — never
-        // range-checked on-chain. A device could therefore anchor its proof to an
-        // arbitrary time (e.g. 1970 or 2035) and the mint would pass, even though the
-        // emission curve reads the 30-day energy window and every UI derives
-        // "production today" from this field.
+        // `verified_at` is the ORACLE's clock, `device_timestamp` is the DEVICE's.
+        // The device clock was previously bound only by the device signature and never
+        // range-checked, so a device could anchor its proof to an arbitrary time (1970,
+        // 2035, …) while the mint still passed — and every UI derives "production
+        // today" from this field.
         //
-        // The live pilot measures `verified_at - device_timestamp` = 1..3 s (the
-        // ESP32 is NTP-synced), so the same window that applies to `verified_at` is
-        // safe here. The off-chain oracle already rejected such reports
-        // (`policy.js::validateTimestamp`) — this closes the gap for the on-chain
-        // gate, which is the only one an attacker cannot bypass.
-        verify_timestamp_with_skew(input.now, input.report.device_timestamp, max_clock_skew)?;
+        // The bound is the ORACLE's own verification stamp, not the current mint time:
+
+        // `verified_at` is stamped when the oracle verifies the report, and the check
+        // above already requires it to be fresh at mint time (`MAX_PROOF_AGE`). Anchoring
+        // here instead would reject legitimate queued mints — a proof may sit in the
+        // retry queue or be drained after a restart — even though the oracle verified a
+        // perfectly fresh event. Measured on the live pilot:
+        // `verified_at - device_timestamp` = 1..3 s (the ESP32 is NTP-synced).
+        verify_device_clock(input.report.device_timestamp, input.report.verified_at, max_clock_skew)?;
 
         // 4. Monthly tier limit (v7.0 §15).
         if enforce_tier {
@@ -646,6 +648,40 @@ mod tests {
         assert!(
             eval(now + MAX_CLOCK_SKEW).is_ok(),
             "exactly MAX_CLOCK_SKEW ahead must be admissible"
+        );
+    }
+
+    /// The device clock is bound to `verified_at`, NOT to the mint time — so a proof
+    /// that waits in the retry queue (or is drained after a restart) still mints.
+    #[test]
+    fn queued_proof_keeps_a_valid_device_clock() {
+        let p = producer_with(DeviceState::Active, DeviceTier::Industrial, 0, 0);
+        let verified_at = 1_700_000_000i64;
+        let mut r = report_with(1_000, verified_at);
+        r.device_timestamp = verified_at - 5; // device clock 5 s behind the oracle
+        let res = PolicyEngine::evaluate_preamble(MintPreambleInput {
+            policy: None,
+            producer: &p,
+            report: &r,
+            oracle_trusted: true,
+            profile_rated_power: 1_000_000,
+            now: verified_at, // minted right away
+        });
+        assert!(res.is_ok(), "fresh proof must be admissible: {:?}", res);
+
+        // Same report, minted 800 s later (still inside MAX_PROOF_AGE of verified_at).
+        let res = PolicyEngine::evaluate_preamble(MintPreambleInput {
+            policy: None,
+            producer: &p,
+            report: &r,
+            oracle_trusted: true,
+            profile_rated_power: 1_000_000,
+            now: verified_at + 800,
+        });
+        assert!(
+            res.is_ok(),
+            "a queued proof must stay admissible while verified_at is fresh: {:?}",
+            res
         );
     }
 }

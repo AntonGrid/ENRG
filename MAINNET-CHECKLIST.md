@@ -112,7 +112,7 @@ updated as the fixes land. The canonical audit report is
 - [x] **P1-7 Shared policy conformance vectors** — the same policy semantics are
       implemented three times (Rust on-chain, JS `policy.js`, Python
       `axis_core.policy`) and nothing forced them to agree. Added
-      `tests/conformance/policy_vectors.json` (18 vectors: preamble gates, reward
+      `tests/conformance/policy_vectors.json` (22 vectors: preamble gates, reward
       rules, boundary cases such as a clock skew of exactly `max_clock_skew_sec`
       and a proof age of exactly 900 s) plus runners on both sides:
       `programs/enrg-mvp/tests/policy_conformance.rs` (runs in CI via
@@ -125,16 +125,32 @@ updated as the fixes land. The canonical audit report is
       `npm run test:conformance` and enforced in the CI node job._
 - [x] **P1-8 Device clock is range-checked on-chain** — `device_timestamp` is the
       DEVICE's clock; it was bound only by the device Ed25519 signature and never
-      range-checked, so a device could anchor a proof to an arbitrary time (the mint
-      credits energy and the emission curve reads the 30-day window). The Policy
-      Engine now applies the same window as for `verified_at` (`MAX_PROOF_AGE` 900 s
-      / policy `max_clock_skew_sec`). Live pilot measurement: `verified_at −
-      device_timestamp` = 1..3 s, so the window is generous. Mirrored in
-      `axis_core.policy` and covered by 3 new conformance vectors (21 total) + a Rust
-      unit test. Proven on devnet with the only difference being the device clock:
-      `DEVICE_TS_OFFSET_SEC=0` mints (`fQX23Kum…`, SRC to the owner's ATA) while
-      `DEVICE_TS_OFFSET_SEC=-2000` is rejected with `custom program error: 0x1772`
-      (= 6002 StaleProof).
+      range-checked, so a device could anchor a proof to an arbitrary time (1970,
+      2035, …) while the mint passed — and every UI derives "production today" from
+      this field. The Policy Engine now binds it to the ORACLE's own `verified_at`
+      stamp (`device_timestamp ≤ verified_at + max_clock_skew` and
+      `verified_at − device_timestamp ≤ MAX_PROOF_AGE`), deliberately **not** to the
+      current mint time: a proof may legitimately be minted later (retry queue, drain
+      after a restart) and its freshness at mint time is already enforced through
+      `verified_at`. Live pilot measurement: `verified_at − device_timestamp` =
+      1..3 s. Mirrored in `axis_core.policy`, covered by 4 conformance vectors
+      (22 total, incl. a queued-mint case) and two Rust unit tests. Proven on devnet
+      with the device clock as the only difference: `DEVICE_TS_OFFSET_SEC=0` mints
+      (`2nnUvQ3L…`, SRC to the owner's ATA) while `DEVICE_TS_OFFSET_SEC=-2000` is
+      rejected with `custom program error: 0x1772` (= 6002 StaleProof).
+- [x] **P1-10 A deferred proof says why** — `mint_error` / `mint_attempts` are now
+      persisted on the proof row (both backends, with migrations) and exposed by
+      `/api/v1/proofs`. The reason used to live only in the log buffer: the live pilot
+      had 12 deferred proofs (60 kWh) whose cause was unrecoverable. `drainPendingProofs`
+      also marks proofs older than `MAX_PROOF_AGE` as `expired_unmintable` instead of
+      spending another round of attempts on proofs the on-chain gate must reject.
+- [x] **P1-11 Protocol stats count proofs, not attestation rows** — a proof attested
+      by several oracles is stored once per oracle (that is the attestation record,
+      and `/api/v1/oracles` legitimately reports it per oracle), but `/api/v1/stats`
+      aggregated over the rows: the live pilot served `total_energy_wh: 60015` for
+      21 distinct proofs carrying 30015 Wh — a 2× overstatement on every dashboard.
+      The stats now group by `(device_id, nonce)` with status precedence
+      `minted > accepted > deferred` and expose `attestation_rows` separately.
 
 ## 🟡 Nice-to-have
 
