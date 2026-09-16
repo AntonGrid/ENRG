@@ -292,10 +292,23 @@ npm run test:anchor        # anchor test --skip-build (on-chain, solana-test-val
 ```
 
 ## Configuration
-- `ENERGY_THRESHOLD` — Wh to accumulate before minting (default: 1,000,000 Wh = 1 MWh)
-- `PROGRAM_ID` — deployed Solana program address
-- `MINT_ADDRESS` — SRC token mint
-- `FOUNDER_KEY` / `FOUNDER_KEY_PATH` — the founder key (oracle), signs the OracleReport
-- `RPC_ENDPOINT` — the Solana RPC (default devnet)
-- `ENRG_SQLITE_PATH` / `DATABASE_URL` — the storage (SQLite / PostgreSQL)
+
+Every variable below is actually read by `server.js` (the list was corrected on
+2026-09-16 — `PROGRAM_ID`, `MINT_ADDRESS` and `ENERGY_THRESHOLD` were documented but
+are NOT configurable: the program id is baked into the binary and mirrored in
+`server.js`, the SRC mint is the PDA `[b"src-mint"]`, and the accumulation threshold
+is a constant).
+
+| Variable | Meaning |
+|---|---|
+| `PORT` | HTTP port (default 3000) |
+| `RPC_ENDPOINT` / `RPC_ENDPOINTS` | Solana RPC; a comma-separated list enables failover (default devnet) |
+| `FOUNDER_KEY` / `FOUNDER_KEY_PATH` | founder keypair: signs Device Manifests and the device revoke/rotate transactions |
+| `ENRG_IDL_PATH` | IDL path (default `idls/enrg_mvp.json`, kept in git) |
+| `ENRG_QUORUM_ATTEST` | `1` = also vote when the on-chain quorum config is `required = false` (observability). Voting is **mandatory** when `required = true` |
+| `MINT_QUEUE_MAX` / `MINT_MAX_ATTEMPTS` / `MINT_RETRY_BASE_MS` | mint queue: depth, retries, backoff base |
+| `MINT_MIN_ENERGY_WH` | mint only proofs with at least this energy (aggregation support) |
+| `DEVICE_MIN_INTERVAL_MS` | per-device proof rate gate (`0` = disabled) |
+| `FIRMWARE_ADMIN_KEY`, `FIRMWARE_SIGNING_KEY_PATH`, `FIRMWARE_UPDATES_DIR` | OTA publishing (ADR-0008) |
+| `DATABASE_URL` | PostgreSQL storage; SQLite is used otherwise (see `storage.js`) |
 

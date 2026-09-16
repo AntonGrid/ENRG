@@ -12,8 +12,9 @@ services:
       - "3000:3000"
     environment:
       PORT: 3000
-      PROGRAM_ID: ${PROGRAM_ID:-}
-      MINT_ADDRESS: ${MINT_ADDRESS:-}
+      # PROGRAM_ID / MINT_ADDRESS are deliberately absent: the program id is baked
+      # into the binary (`declare_id!`) and mirrored in server.js, and the SRC mint
+      # is the PDA [b"src-mint"]. They used to be passed here but were never read.
       # H-1: prefer passing the KEY PATH rather than the key itself in the env.
       FOUNDER_KEY_PATH: ${FOUNDER_KEY_PATH:-}
       FOUNDER_KEY: ${FOUNDER_KEY:-}

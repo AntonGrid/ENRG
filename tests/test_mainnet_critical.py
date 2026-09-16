@@ -42,19 +42,31 @@ def test_deploy_simulation():
         # All critical instructions must be present
         instruction_names = {ix["name"] for ix in idl.get("instructions", [])}
     else:
-        # Fallback: use snake_case names (matching the anchor IDL
-        # instruction names) so the test passes in CI without an anchor build.
+        # Fallback used when there is no `anchor build` in this CI job. It is a
+        # snapshot of the interface (58 instructions as of 2026-09-16) — refresh it
+        # when instructions are added or removed. `create_producer` was removed here
+        # because it never existed in the program.
         instruction_names = {
-            "initialize_token", "initialize_vault", "initialize_funds",
-            "init_config", "initialize_oracle_registry",
-            "initialize_manifest_registry", "add_oracle", "remove_oracle",
-            "create_producer", "mint_energy", "create_pool", "join_pool",
-            "stake", "unstake", "claim_rewards",
-            "initialize_founder_vesting", "claim_vested",
-            "buyback_and_burn", "register_device", "claim_device",
-            "provision_device", "activate_device",
-            "register_manifest_verification", "verify_merkle_proof",
-            "set_oracle_authority", "update_merkle_root",
+            "activate_device", "add_oracle", "allocate_founder",
+            "buyback_and_burn", "claim_device", "claim_oracle_reward",
+            "claim_rewards", "claim_vested", "commit_contribution",
+            "create_pool", "create_proposal", "distribute_pool",
+            "ers_premium_access", "governance_mint", "init_config",
+            "init_energy_profile", "init_oracle_quorum", "initialize_founder_vesting",
+            "initialize_funds", "initialize_governance", "initialize_manifest_registry",
+            "initialize_oracle_registry", "initialize_policy_registry", "initialize_reputation",
+            "initialize_token", "initialize_vault", "join_pool",
+            "maintenance_device", "mint_energy", "provision_device",
+            "quarantine_device", "register_device", "register_manifest_verification",
+            "release_from_quarantine", "remove_oracle", "report_anomaly",
+            "revoke_device", "rotate_device_key", "set_device_tier",
+            "set_governance_authority", "set_oracle_admin", "set_oracle_authority",
+            "set_oracle_quorum", "set_oracle_registry_authority", "set_policy_authority",
+            "set_quorum_authority", "set_vault_authority", "slash_oracle",
+            "stake", "stake_oracle", "submit_oracle_attestation",
+            "unstake", "update_members", "update_merkle_root",
+            "update_policy", "verify_merkle_proof", "vote",
+            "withdraw_fund",
         }
 
     required = {

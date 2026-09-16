@@ -34,8 +34,9 @@ const logger = winston.createLogger({
 // Tables are created in storage.init() at startup (bootstrap).
 
 const PROGRAM_ID = new PublicKey('HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb');
-const MINT_ADDRESS = '3PDsZUDQwgx1SV4dSTtyKDEoL9HYCdt4GN63UBYpLvwB';
-const FOUNDER_WALLET = 'FnqKH4bjMRM6hzrw6tjcpfyszovbRsvyNjuNwALmcZNC';
+// NOTE (audit 2026-09-16): `MINT_ADDRESS` and `FOUNDER_WALLET` were removed here —
+// both were declared but never read (the SRC mint is the program PDA
+// `[b"src-mint"]`, and the founder identity comes from FOUNDER_KEY/_PATH).
 
 // CR-3: RPC endpoint (env RPC_ENDPOINT, devnet by default) and enrg-profile program id
 // (see programs/enrg-profile/src/lib.rs, declare_id).
@@ -196,31 +197,12 @@ app.use(cors({
 
 const ENERGY_THRESHOLD = 1000000;
 
-const mint = new PublicKey(MINT_ADDRESS);
-let producerPda, vaultPda, buyback, staking, dao, emergency, destination;
-
-if (founderKeypair) {
-    [producerPda] = PublicKey.findProgramAddressSync(
-        [Buffer.from('producer'), founderKeypair.publicKey.toBuffer()],
-        PROGRAM_ID
-    );
-    [vaultPda] = PublicKey.findProgramAddressSync([Buffer.from('vault')], PROGRAM_ID);
-    [buyback] = PublicKey.findProgramAddressSync([Buffer.from('buyback'), mint.toBuffer()], PROGRAM_ID);
-    [staking] = PublicKey.findProgramAddressSync([Buffer.from('staking'), mint.toBuffer()], PROGRAM_ID);
-    [dao] = PublicKey.findProgramAddressSync([Buffer.from('dao'), mint.toBuffer()], PROGRAM_ID);
-    [emergency] = PublicKey.findProgramAddressSync([Buffer.from('emergency'), mint.toBuffer()], PROGRAM_ID);
-    destination = getAssociatedTokenAddressSync(mint, founderKeypair.publicKey, false);
-} else {
-    producerPda = PublicKey.default;
-    vaultPda = PublicKey.default;
-    buyback = PublicKey.default;
-    staking = PublicKey.default;
-    dao = PublicKey.default;
-    emergency = PublicKey.default;
-    destination = PublicKey.default;
-}
-
-const getDisc = (name) => crypto.createHash('sha256').update(`global:${name}`).digest().subarray(0, 8);
+// NOTE (audit 2026-09-16): the module-level PDA block that lived here
+// (`producerPda`, `vaultPda`, `buyback`, `staking`, `dao`, `emergency`,
+// `destination`) and the dead `createProducerIfNeeded()` helper were removed. They
+// derived the PDAs from the FOUNDER key and issued a `create_producer` instruction
+// that does not exist in the program (0 occurrences in the IDL) — dead, broken
+// code. `mintEnergy()` derives every address it needs locally from the device.
 
 // ════════════════════════════════════════════════════════════════
 //  CR-3: on-chain mint (Anchor client) — helpers
@@ -409,35 +391,10 @@ async function sendVersioned(connection, signer, instructions, lut) {
 
 
 
-async function createProducerIfNeeded() {
-    if (!founderKeypair) return false;
-    const connection = getConnection();
-    const accountInfo = await connection.getAccountInfo(producerPda);
-    if (accountInfo) {
-        logger.info('✅ Producer already exists:', producerPda.toBase58());
-        return true;
-    }
-    logger.info('🔄 Creating producer...');
-    const deviceIdPubkey = new PublicKey('11111111111111111111111111111111');
-    const maxPowerW = 600_000_000n;
-    const data = Buffer.alloc(48);
-    getDisc('create_producer').copy(data, 0);
-    deviceIdPubkey.toBuffer().copy(data, 8);
-    data.writeBigUInt64LE(maxPowerW, 40);
-    const instruction = new TransactionInstruction({
-        keys: [
-            { pubkey: producerPda, isWritable: true, isSigner: false },
-            { pubkey: founderKeypair.publicKey, isWritable: true, isSigner: true },
-            { pubkey: SystemProgram.programId, isWritable: false, isSigner: false }
-        ],
-        programId: PROGRAM_ID,
-        data
-    });
-    const tx = new Transaction().add(instruction);
-    const sig = await sendAndConfirmTransaction(connection, tx, [founderKeypair]);
-    logger.info('✅ Producer created. TX:', sig);
-    return true;
-}
+// NOTE (audit 2026-09-16): `createProducerIfNeeded()` was removed — it issued a
+// `create_producer` instruction that does not exist in the program and was never
+// called. On-chain producers are created by the device lifecycle
+// (register_device → claim_device → provision_device → activate_device).
 
 // CR-3: on-chain mint via the Anchor client.
 // Takes a proof (an already verified DEVICE signature in the on-chain binary

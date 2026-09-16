@@ -64,8 +64,8 @@ Before the mainnet launch, follow in order:
 ## Repository Structure
 
 - `programs/` — Solana smart contracts (Anchor).
-- `onchain/` — Foundry contracts (Ethereum-compatible).
-- `contracts/` — Solidity contracts.
+- `onchain/` — the EVM bridge (`EnrgOracleAttestation.sol`, Foundry) — **the only
+  Solidity source**; the stale `contracts/` copy was removed on 2026-09-16.
 - `oracle/` — Oracle service (verification, aggregation, minting).
 - `firmware/` — ESP32 firmware for energy measurement and signing.
 - `app/` — Backend services (FastAPI).
