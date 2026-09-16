@@ -126,12 +126,17 @@ Client-side helpers (mirror of `state/oracle.rs` + `state/oracle_attestation.rs`
 
 ### Automatic voting in the server
 
-Set `ENRG_QUORUM_ATTEST=1` and the server **votes BEFORE every mint** and
-then mints **with** the attestation account (`submitQuorumAttestation`,
-idempotent — one vote per oracle per proof). When the quorum config has
-`required=true` the server waits up to ~20 s for the second oracle's vote to
-finalize the attestation; if it is still pending the mint is queued for retry
-(`attestation_pending_retry`, the mint-queue worker retries with backoff).
+The **on-chain config is the source of truth** (audit 2026-09-16):
+
+- `required = true` → the server **votes BEFORE every mint** (mandatory) and mints
+  **with** the attestation account (`submitQuorumAttestation`, idempotent — one vote
+  per oracle per proof), waiting up to ~20 s for the second oracle. If the
+  attestation is still pending the mint is queued for retry
+  (`attestation_pending_retry`; the mint-queue worker retries with backoff).
+- `required = false` → voting is **opt-in** with `ENRG_QUORUM_ATTEST=1` (useful for
+  observability on a legacy single-oracle chain); the mint does not need an
+  attestation.
+
 A failed vote never blocks the mint path. Each instance must also run once:
 
 ```bash
@@ -163,15 +168,22 @@ ORACLE_KEY_PATH=/secure/oracle-keypair.json \
 ### Protocol rules
 
 - The first vote fixes the canonical `proof_hash`; a later vote with a
-  different hash sets `conflict=true` (slash basis).
+  different hash sets `conflict=true` (slash basis). A contradictory vote is
+  **not counted** toward the threshold (audit 2026-09-16) and emits
+  `OracleConflictDetected {canonical_hash, conflicting_hash}` — on-chain evidence
+  for `slash_oracle`.
 - `finalized` at `votes >= threshold` (config `[oracle-quorum-config]`,
-  default 2).
+  default 2), where `votes` counts **agreeing** votes only.
 - Only staked, non-slashed registry oracles can vote; each oracle votes once
   per proof (per-oracle vote PDA).
 - When the config has `required=true`, `mint_energy` REJECTS reports without a
-  finalized matching attestation. Operators should enable `ENRG_QUORUM_ATTEST=1`
-  first, let attestations accumulate, and only then flip `required=true`
-  (`set_oracle_quorum`, authority = registry authority).
+  finalized matching attestation. Operators should let attestations accumulate
+  (at least two independent oracles) and only then flip `required=true`
+  (`set_oracle_quorum`, authority = the quorum authority).
+- `mint_energy` also takes the device owner as a NON-signer account
+  (`producerOwner`, = `producer.authority`) since audit 2026-09-16: it lets an
+  oracle mint for a device owned by any wallet while the SRC still go to the
+  owner (see `docs/OWNERSHIP-FIX-2026-09-16.md`).
 
 
 ## Policy Engine (ADR-0003)

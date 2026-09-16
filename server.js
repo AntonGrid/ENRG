@@ -574,15 +574,16 @@ async function mintEnergy(proof, producerOverride = null) {
             return { success: false, error: 'quorum_config_missing' };
         }
         if (quorumCfg.required) {
-            if (process.env.ENRG_QUORUM_ATTEST !== '1') {
-                logger.warn('[quorum] required=true but ENRG_QUORUM_ATTEST is not 1 — cannot mint');
-                return { success: false, error: 'quorum_required_but_attest_disabled' };
-            }
+            // MANDATORY (audit 2026-09-16): the on-chain gate requires a finalized
+            // attestation, so the oracle must vote — there is no opt-out here anymore.
+            // The old check `ENRG_QUORUM_ATTEST !== '1' -> cannot mint` turned a fresh
+            // deployment into a silent mint outage (the compose file never set the
+            // variable while the chain said required=true).
             quorumAttestationPda = PublicKey.findProgramAddressSync(
                 [Buffer.from('oracle-attest'), deviceIdPubkey.toBuffer(), nonce.toArrayLike(Buffer, 'le', 8)],
                 PROGRAM_ID
             )[0];
-            await submitQuorumAttestation(proof, nowSec, deviceMsgForHash); // idempotent vote
+            await submitQuorumAttestation(proof, nowSec, deviceMsgForHash, { mandatory: true });
             let finalized = false;
             for (let i = 0; i < 20 && !finalized; i++) {
                 const att = await program.account.oracleAttestation
@@ -595,8 +596,8 @@ async function mintEnergy(proof, producerOverride = null) {
                 logger.info('[quorum] attestation pending (second oracle) — retry later');
                 return { success: false, error: 'attestation_pending_retry' };
             }
-        } else if (process.env.ENRG_QUORUM_ATTEST === '1') {
-            // required=false but quorum on: still vote so attestations exist.
+        } else if (QUORUM_ATTEST_OPT_IN) {
+            // required=false: voting is optional and only for observability.
             quorumAttestationPda = PublicKey.findProgramAddressSync(
                 [Buffer.from('oracle-attest'), deviceIdPubkey.toBuffer(), nonce.toArrayLike(Buffer, 'le', 8)],
                 PROGRAM_ID
@@ -697,13 +698,16 @@ async function mintEnergy(proof, producerOverride = null) {
 /**
  * Oracle quorum vote (P3-6): the oracle attests the report on-chain via
  * `submit_oracle_attestation` with the canonical SHA-256 proof hash. Called
- * BEFORE the mint (see mintEnergy) so the attestation exists when
- * required=true. Idempotent: an oracle votes once per proof (per-oracle vote
- * PDA), so an existing vote is skipped. A failed vote must never break the
- * mint path. Enabled with `ENRG_QUORUM_ATTEST=1` (off by default).
+ * BEFORE the mint (see mintEnergy) so the attestation exists when required=true.
+ * Idempotent: an oracle votes once per proof (per-oracle vote PDA), so an existing
+ * vote is skipped. A failed vote must never break the mint path.
+ *
+ * When the on-chain config has `required = true` the caller passes
+ * `{ mandatory: true }` — voting is then not optional. Otherwise voting happens
+ * only when `ENRG_QUORUM_ATTEST=1` (observability on a legacy single-oracle chain).
  */
-async function submitQuorumAttestation(proof, verifiedAt, msgForHash) {
-    if (process.env.ENRG_QUORUM_ATTEST !== '1') return;
+async function submitQuorumAttestation(proof, verifiedAt, msgForHash, { mandatory = false } = {}) {
+    if (!mandatory && !QUORUM_ATTEST_OPT_IN) return;
     if (!oracleKeypair || !proof.device_id_pubkey) return;
     try {
         const connection = getConnection();
@@ -767,6 +771,19 @@ async function submitQuorumAttestation(proof, verifiedAt, msgForHash) {
         logger.warn('[quorum] attestation skipped:', e.message);
     }
 }
+
+// ════════════════════════════════════════════════════════════════
+//  ORACLE QUORUM (P3-6) — the ON-CHAIN config is the source of truth
+//
+//  audit 2026-09-16: previously voting was opt-in via ENRG_QUORUM_ATTEST=1 and,
+//  when the on-chain config said `required = true`, a server without the variable
+//  refused to mint (`quorum_required_but_attest_disabled`) — a silent mint outage
+//  on a fresh deployment (docker-compose.yml never set it). Now:
+//    * required = true  -> voting is MANDATORY (see mintEnergy / submitQuorumAttestation);
+//    * required = false -> voting is OPT-IN with ENRG_QUORUM_ATTEST=1, for
+//                          observability on a legacy single-oracle chain only.
+// ════════════════════════════════════════════════════════════════
+const QUORUM_ATTEST_OPT_IN = process.env.ENRG_QUORUM_ATTEST === '1';
 
 // ════════════════════════════════════════════════════════════════
 //  MINT QUEUE (P0-2, audit 2026-08-30)
