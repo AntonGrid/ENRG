@@ -208,6 +208,78 @@
       }
     },
     {
+      "id": "preamble_device_timestamp_stale",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000,
+        "device_timestamp": 1699999099
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": false,
+        "reason": "stale_timestamp"
+      }
+    },
+    {
+      "id": "preamble_device_timestamp_future",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000,
+        "device_timestamp": 1700000301
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": false,
+        "reason": "future_timestamp"
+      }
+    },
+    {
+      "id": "preamble_device_timestamp_skew_boundary_is_allowed",
+      "kind": "preamble",
+      "policy": {},
+      "producer": {
+        "state": "active",
+        "tier": "basic",
+        "month_energy_wh": 0,
+        "month_start_ts": 1699999940,
+        "revoked": false,
+        "rated_power_wh": 5000
+      },
+      "report": {
+        "energy_wh": 1000,
+        "verified_at": 1700000000,
+        "device_timestamp": 1700000300
+      },
+      "now": 1700000000,
+      "oracle_trusted": true,
+      "expected": {
+        "allowed": true,
+        "reason": "ok"
+      }
+    },
+    {
       "id": "preamble_clock_skew_boundary_is_allowed",
       "kind": "preamble",
       "policy": {},

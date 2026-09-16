@@ -67,6 +67,14 @@ const OWNER_KEY_PATH = process.env.OWNER_KEY_PATH || "";
 const DEVICE_KEY_PATH = process.env.DEVICE_KEY_PATH || "";
 const ENERGY_WH = Number(process.env.ENERGY_WH || 1000);
 const RATED_POWER_W = Number(process.env.RATED_POWER_W || 5000);
+/**
+ * Shift the DEVICE clock relative to the oracle clock (seconds). Used to prove the
+ * 2026-09-16 hardening: `device_timestamp` is now range-checked on-chain, so
+ * `DEVICE_TS_OFFSET_SEC=-2000 EXPECT_REJECTION=1` must FAIL to mint.
+ */
+const DEVICE_TS_OFFSET_SEC = Number(process.env.DEVICE_TS_OFFSET_SEC || 0);
+/** When set, the script asserts that the mint is REJECTED (negative proof). */
+const EXPECT_REJECTION = process.env.EXPECT_REJECTION === '1';
 
 const connection = new Connection(RPC_ENDPOINT, "confirmed");
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -431,9 +439,17 @@ async function main(): Promise<void> {
 
   step("STEP 3. Quorum attestation — two DISTINCT oracles attest the same canonical hash");
   const nonce = new BN(1);
-  const deviceTs = new BN(nowSec());
+  // The DEVICE clock (shifted by DEVICE_TS_OFFSET_SEC) vs the ORACLE clock: the mint
+  // must be rejected when the two disagree beyond MAX_PROOF_AGE / MAX_CLOCK_SKEW.
+  const deviceTs = new BN(nowSec() + DEVICE_TS_OFFSET_SEC);
   const verifiedAt = new BN(nowSec());
   const energyWh = new BN(ENERGY_WH);
+  if (DEVICE_TS_OFFSET_SEC !== 0) {
+    console.log(
+      `  device clock shifted by ${DEVICE_TS_OFFSET_SEC}s ` +
+        `(device=${deviceTs.toString()} oracle=${verifiedAt.toString()})`,
+    );
+  }
   const devMsg = deviceMessage(nonce, deviceTs, energyWh);
   const proofHash = sha256(devMsg);
   const attestation = attestationPda(nonce);
@@ -544,11 +560,36 @@ async function main(): Promise<void> {
     attestation,
   ]);
 
-  const sig = await sendVersioned(
-    [ed25519Ix(devMsg, device), ed25519Ix(oraMsg, oracle), mintIx],
-    lut,
-    oracle,
-  );
+  let sig = "";
+  let mintError = "";
+  try {
+    sig = await sendVersioned(
+      [ed25519Ix(devMsg, device), ed25519Ix(oraMsg, oracle), mintIx],
+      lut,
+      oracle,
+    );
+  } catch (e: any) {
+    mintError = String(e?.message ?? e) + (e?.logs ? ` | ${e.logs.join(" ")}` : "");
+  }
+
+  if (EXPECT_REJECTION) {
+    // Negative proof: the ONLY difference from the passing run is the device clock,
+    // so a rejection here isolates the 2026-09-16 device_timestamp rule.
+    if (!mintError) {
+      throw new Error("expected the on-chain gate to REJECT this mint, but it succeeded");
+    }
+    console.log(`  mint REJECTED as expected:\n    ${mintError.slice(0, 260)}`);
+    console.log(
+      "\nPASS — the on-chain gate rejected the proof: the device clock is outside the " +
+        "allowed window (device_timestamp is now range-checked in the Policy Engine).",
+    );
+    console.log(
+      "Run the same script with DEVICE_TS_OFFSET_SEC=0 to see the identical flow mint.",
+    );
+    return;
+  }
+
+  if (mintError) throw new Error(`mint_energy failed: ${mintError}`);
   console.log(`  mint_energy            OK (tx ${sig})`);
 
   step("STEP 5. Result — the SRC must have arrived on the OWNER's ATA");

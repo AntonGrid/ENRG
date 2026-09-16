@@ -253,6 +253,22 @@ impl PolicyEngine {
         // 3. verified_at freshness (the policy sets the allowed clock skew).
         verify_timestamp_with_skew(input.now, input.report.verified_at, max_clock_skew)?;
 
+        // 3b. device_timestamp freshness (audit 2026-09-16).
+        //
+        // `verified_at` is the ORACLE's clock; `device_timestamp` is the DEVICE's
+        // clock and until now it was only bound by the device signature — never
+        // range-checked on-chain. A device could therefore anchor its proof to an
+        // arbitrary time (e.g. 1970 or 2035) and the mint would pass, even though the
+        // emission curve reads the 30-day energy window and every UI derives
+        // "production today" from this field.
+        //
+        // The live pilot measures `verified_at - device_timestamp` = 1..3 s (the
+        // ESP32 is NTP-synced), so the same window that applies to `verified_at` is
+        // safe here. The off-chain oracle already rejected such reports
+        // (`policy.js::validateTimestamp`) — this closes the gap for the on-chain
+        // gate, which is the only one an attacker cannot bypass.
+        verify_timestamp_with_skew(input.now, input.report.device_timestamp, max_clock_skew)?;
+
         // 4. Monthly tier limit (v7.0 §15).
         if enforce_tier {
             require!(
@@ -581,6 +597,56 @@ mod tests {
             vault_max_supply: u64::MAX,
         });
         assert_eq!(err_code(res), code(ErrorCode::ZeroAmountMint));
+    }
+
+    /// Audit 2026-09-16: the DEVICE clock is range-checked too.
+    ///
+    /// `device_timestamp` was bound only by the device signature — a device could
+    /// anchor its proof to an arbitrary time while the mint still passed.
+    #[test]
+    fn device_timestamp_is_range_checked() {
+        use crate::security::validation::MAX_PROOF_AGE;
+
+        let p = producer_with(DeviceState::Active, DeviceTier::Industrial, 0, 0);
+        let now = 1_700_000_000i64;
+
+        let eval = |device_ts: i64| {
+            let mut r = report_with(1_000, now);
+            r.device_timestamp = device_ts;
+            PolicyEngine::evaluate_preamble(MintPreambleInput {
+                policy: None,
+                producer: &p,
+                report: &r,
+                oracle_trusted: true,
+                profile_rated_power: 1_000_000,
+                now,
+            })
+        };
+
+        assert!(
+            eval(now).is_ok(),
+            "a synchronized device clock must be admissible"
+        );
+
+        // Older than MAX_PROOF_AGE -> StaleProof.
+        assert_eq!(
+            err_code(eval(now - (MAX_PROOF_AGE + 1))),
+            code(ErrorCode::StaleProof)
+        );
+        // Further into the future than the allowed skew -> FutureTimestamp.
+        assert_eq!(
+            err_code(eval(now + MAX_CLOCK_SKEW + 1)),
+            code(ErrorCode::FutureTimestamp)
+        );
+        // The exact boundaries stay admissible.
+        assert!(
+            eval(now - MAX_PROOF_AGE).is_ok(),
+            "exactly MAX_PROOF_AGE old must be admissible"
+        );
+        assert!(
+            eval(now + MAX_CLOCK_SKEW).is_ok(),
+            "exactly MAX_CLOCK_SKEW ahead must be admissible"
+        );
     }
 }
 

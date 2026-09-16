@@ -117,7 +117,9 @@ fn report_from(v: &Value) -> OracleReport {
         oracle: Pubkey::new_from_array([7u8; 32]),
         device_id: Pubkey::new_from_array([2u8; 32]),
         nonce: 1,
-        device_timestamp: verified_at,
+        // The device clock is a separate input since the 2026-09-16 hardening; a
+        // vector that omits it means "the device clock agrees with the oracle".
+        device_timestamp: v["device_timestamp"].as_i64().unwrap_or(verified_at),
         verified_at,
         energy_wh: v["energy_wh"].as_u64().expect("report.energy_wh"),
         device_signature: [0u8; 64],

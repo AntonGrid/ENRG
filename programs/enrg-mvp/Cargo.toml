@@ -7,7 +7,12 @@ rust-version = "1.75.0"
 
 [lib]
 crate-type = ["cdylib", "lib"]
-test = false
+# `test = false` used to hide the whole inline unit-test suite (95 tests in
+# producer.rs / policy.rs / policy_engine.rs / math.rs / security / mint.rs …) from
+# `cargo test -p enrg-mvp`, so CI silently ran only the integration files. The lib
+# test target links fine (audit 2026-09-16: `cargo test -p enrg-mvp --lib` → 95
+# passed), so the tests are enabled and therefore enforced by CI.
+test = true
 
 [lints.rust]
 # The cfg values (no-entrypoint, custom-heap, custom-panic, anchor-debug,

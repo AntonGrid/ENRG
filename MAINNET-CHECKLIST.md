@@ -122,6 +122,18 @@ updated as the fixes land. The canonical audit report is
       vectors today — a drift in either direction now fails CI.
       See `tests/conformance/README.md`. _JS participates only for the subset
       `policy.js` implements (transport gate) — extending it is a follow-up._
+- [x] **P1-8 Device clock is range-checked on-chain** — `device_timestamp` is the
+      DEVICE's clock; it was bound only by the device Ed25519 signature and never
+      range-checked, so a device could anchor a proof to an arbitrary time (the mint
+      credits energy and the emission curve reads the 30-day window). The Policy
+      Engine now applies the same window as for `verified_at` (`MAX_PROOF_AGE` 900 s
+      / policy `max_clock_skew_sec`). Live pilot measurement: `verified_at −
+      device_timestamp` = 1..3 s, so the window is generous. Mirrored in
+      `axis_core.policy` and covered by 3 new conformance vectors (21 total) + a Rust
+      unit test. Proven on devnet with the only difference being the device clock:
+      `DEVICE_TS_OFFSET_SEC=0` mints (`fQX23Kum…`, SRC to the owner's ATA) while
+      `DEVICE_TS_OFFSET_SEC=-2000` is rejected with `custom program error: 0x1772`
+      (= 6002 StaleProof).
 
 ## 🟡 Nice-to-have
 
@@ -140,6 +152,13 @@ updated as the fixes land. The canonical audit report is
       Tests: 64 vitest passing (+2 Settings injected cases).
 - [x] **P2-4 Mainnet runbook** — `docs/MAINNET-RUNBOOK.md` (key ceremony,
       deploy, bootstrap, oracle, firmware, AI, go/no-go).
+- [x] **P2-5 The Rust unit suite actually runs in CI** — `[lib] test = false` in
+      `programs/enrg-mvp/Cargo.toml` silently excluded the whole inline unit-test
+      suite (95 tests in `producer.rs`, `policy.rs`, `policy_engine.rs`, `math.rs`,
+      `security/`, `mint.rs`) from `cargo test -p enrg-mvp`, so CI enforced only the
+      six integration files (29 tests). The lib test target links fine, so the tests
+      are enabled: `cargo test -p enrg-mvp` now runs **124** tests and CI enforces
+      all of them.
 
 ## P3 — Proof aggregation (roadmap)
 
