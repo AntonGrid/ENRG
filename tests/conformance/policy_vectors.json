@@ -466,5 +466,175 @@
         "reason": "ok"
       }
     }
+  ],
+  "transport_scope": "Operations the off-chain transport gate (policy.js) implements: device_id format, energyWh range/cap, timestamp freshness, nonce monotonicity. The on-chain POLICY semantics are the `vectors` section above; the JS layer is a Verifier-side gate and intentionally does NOT re-implement them.",
+  "transport_vectors": [
+    {
+      "id": "transport_device_id_base58_ok",
+      "check": "device_id",
+      "input": {
+        "device_id": "Ej2oCfDkNFeFY7hcKHFRxtyHkmYUukbcWZXCqxKvih9b"
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "transport_device_id_hex_ok",
+      "check": "device_id",
+      "input": {
+        "device_id": "0xdeadbeef"
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "transport_device_id_rejects_spaces",
+      "check": "device_id",
+      "input": {
+        "device_id": "dev 0123"
+      },
+      "expected": {
+        "ok": false,
+        "status": 400,
+        "error": "invalid device_id format (base58 or hex only)"
+      }
+    },
+    {
+      "id": "transport_energy_wh_ok",
+      "check": "energy_wh",
+      "input": {
+        "energyWh": 1000
+      },
+      "expected": {
+        "ok": true,
+        "field": "energyWhInt",
+        "value": 1000
+      }
+    },
+    {
+      "id": "transport_energy_wh_rounds_to_int",
+      "check": "energy_wh",
+      "input": {
+        "energyWh": 12.6
+      },
+      "expected": {
+        "ok": true,
+        "field": "energyWhInt",
+        "value": 13
+      }
+    },
+    {
+      "id": "transport_energy_wh_zero",
+      "check": "energy_wh",
+      "input": {
+        "energyWh": 0
+      },
+      "expected": {
+        "ok": false,
+        "status": 400,
+        "error": "invalid energyWh (must be positive)"
+      }
+    },
+    {
+      "id": "transport_energy_wh_over_cap",
+      "check": "energy_wh",
+      "input": {
+        "energyWh": 1000000001
+      },
+      "expected": {
+        "ok": false,
+        "status": 400,
+        "error": "energyWh exceeds maximum allowed per report (1000000000 Wh)"
+      }
+    },
+    {
+      "id": "transport_timestamp_future",
+      "check": "timestamp",
+      "input": {
+        "timestamp": 1700000301,
+        "nowSec": 1700000000
+      },
+      "expected": {
+        "ok": false,
+        "status": 400,
+        "error": "FutureTimestamp"
+      }
+    },
+    {
+      "id": "transport_timestamp_stale",
+      "check": "timestamp",
+      "input": {
+        "timestamp": 1699999099,
+        "nowSec": 1700000000
+      },
+      "expected": {
+        "ok": false,
+        "status": 400,
+        "error": "StaleProof"
+      }
+    },
+    {
+      "id": "transport_timestamp_skew_boundary_ok",
+      "check": "timestamp",
+      "input": {
+        "timestamp": 1700000300,
+        "nowSec": 1700000000
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "transport_timestamp_age_boundary_ok",
+      "check": "timestamp",
+      "input": {
+        "timestamp": 1699999100,
+        "nowSec": 1700000000
+      },
+      "expected": {
+        "ok": true
+      }
+    },
+    {
+      "id": "transport_nonce_replay",
+      "check": "nonce",
+      "input": {
+        "nonce": 5,
+        "lastNonce": 5
+      },
+      "expected": {
+        "ok": false,
+        "status": 400,
+        "error": "InvalidNonce"
+      }
+    },
+    {
+      "id": "transport_nonce_increasing_ok",
+      "check": "nonce",
+      "input": {
+        "nonce": 6,
+        "lastNonce": 5
+      },
+      "expected": {
+        "ok": true,
+        "field": "nonce",
+        "value": 6
+      }
+    },
+    {
+      "id": "transport_nonce_zero",
+      "check": "nonce",
+      "input": {
+        "nonce": 0,
+        "lastNonce": 0
+      },
+      "expected": {
+        "ok": false,
+        "status": 400,
+        "error": "invalid nonce (must be a positive integer)"
+      }
+    }
   ]
 }

@@ -77,11 +77,10 @@ jobs:
         # and keyrotation (6) spawn the oracle server and exercise the signed
         # manifest, OTA and key-rotation flows end-to-end.
         run: |
-          npm run test:policy
-          npm run test:mint
-          npm run test:manifest
-          npm run test:firmware
-          npm run test:keyrotation
+          # All hermetic Node suites (policy, conformance, mint, manifest, firmware,
+          # key rotation, oracle quorum, webcrypto, storage queue). The validator-backed
+          # TypeScript suite is a separate script: `npm run test:integration`.
+          npm test
 
   anchor:
     name: Anchor program tests (anchor test, local validator)

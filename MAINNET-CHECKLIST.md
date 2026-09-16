@@ -120,8 +120,9 @@ updated as the fixes land. The canonical audit report is
       (Axis-core CI checks this repository out with sparse `tests/conformance` and
       points `AXIS_CONFORMANCE_VECTORS` at the file). Both engines match all 18
       vectors today — a drift in either direction now fails CI.
-      See `tests/conformance/README.md`. _JS participates only for the subset
-      `policy.js` implements (transport gate) — extending it is a follow-up._
+      See `tests/conformance/README.md`. _JS participates with the subset
+      `policy.js` implements (transport gate): 14 vectors in the same file, run by
+      `npm run test:conformance` and enforced in the CI node job._
 - [x] **P1-8 Device clock is range-checked on-chain** — `device_timestamp` is the
       DEVICE's clock; it was bound only by the device Ed25519 signature and never
       range-checked, so a device could anchor a proof to an arbitrary time (the mint

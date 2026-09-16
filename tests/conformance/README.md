@@ -9,30 +9,34 @@ never internals, never error messages.
 
 | Implementation | Where | Role |
 |---|---|---|
-| Rust | `programs/enrg-mvp/src/instructions/policy_engine.rs` | the deployed on-chain gate |
-| Python | `Axis-core/axis_core/policy/engine.py` | the reference implementation's mirror |
-| JavaScript | `policy.js` | the off-chain transport gate (format/range/freshness/nonce only) |
+| Rust | `programs/enrg-mvp/src/instructions/policy_engine.rs` | the deployed on-chain gate (section `vectors`) |
+| Python | `Axis-core/axis_core/policy/engine.py` | the reference implementation's mirror (section `vectors`) |
+| JavaScript | `policy.js` | the off-chain transport gate (section `transport_vectors`) |
 
 Nothing forced them to agree: the test suites were hand-written mirrors. A silent
 divergence between the two full engines would mean the reference implementation
-accepts proofs the chain rejects (or vice versa). These vectors are the shared
-contract, so a drift in either direction fails CI.
+accepts proofs the chain rejects (or vice versa); a divergence in the JS gate would
+mean the oracle accepts or drops proofs differently from the contract. These vectors
+are the shared contract, so a drift in any of the three fails CI.
 
 **Who runs them.**
 
 ```bash
-# ENRG (the on-chain engine):
+# ENRG — the on-chain engine:
 cargo test -p enrg-mvp --test policy_conformance -- --nocapture
+
+# ENRG — the transport gate (policy.js):
+npm run test:conformance
 
 # Axis-core (the mirror) — path via env, or a sibling ENRG checkout:
 AXIS_CONFORMANCE_VECTORS=$PWD/../ENRG/tests/conformance/policy_vectors.json \
   pytest -q tests/test_policy_conformance.py
 ```
 
-CI: ENRG runs the Rust runner as part of `cargo test -p enrg-mvp`; Axis-core checks
-this repository out (sparse, `tests/conformance`) and points
-`AXIS_CONFORMANCE_VECTORS` at the file. If the file is absent the Python suite skips
-with an explicit message instead of failing.
+CI: ENRG runs the Rust runner inside `cargo test -p enrg-mvp` and the JS runner in the
+node job; Axis-core checks this repository out (sparse, `tests/conformance`) and
+points `AXIS_CONFORMANCE_VECTORS` at the file. If the file is absent the Python suite
+skips with an explicit message instead of failing.
 
 **Adding a vector.** Append an object to `vectors[]` with `id`, `kind`
 (`preamble` or `reward`), the inputs, and `expected`. Rules that keep it meaningful:

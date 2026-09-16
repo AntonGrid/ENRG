@@ -115,15 +115,28 @@ node server.js
 ### Run Tests
 
 ```bash
-# Python tests
-pytest
+# Node suites (hermetic, 107 tests, no validator): policy, conformance, mint,
+# manifest, firmware, key rotation, oracle quorum, webcrypto, storage queue
+npm test
 
-# Anchor tests
-anchor test
+# TypeScript suite that needs a live cluster (local validator or devnet)
+npm run test:integration
 
-# Foundry tests
+# Rust: program + integration tests (124 tests, incl. the policy conformance vectors)
+cargo test -p enrg-mvp
+
+# Python: tokenomics and mainnet-critical simulations
+pytest -q -p no:anchorpy
+
+# Foundry
 cd onchain && forge test
 ```
+
+The local-validator Python scripts (`integration_mint_energy.py`,
+`bootstrap_protocol.py` in the repository root) are run directly, not by pytest:
+`solana-test-validator` + `anchor deploy`, then `python integration_mint_energy.py`.
+The devnet end-to-end proofs are `npm run devnet:e2e` and
+`npx ts-node scripts/devnet_mint_third_party.ts`.
 
 ## Architecture
 

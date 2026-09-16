@@ -74,8 +74,18 @@ On success you'll see the newly deployed program ID. If the program has an IDL, 
 
 3.3 (Optional) one-shot build + deploy
 anchor build && anchor deploy
-4. First real integration test (Python + anchorpy)
-Create ENRG/tests/test_integration_mint_energy.py.
+4. Local end-to-end check (Python + anchorpy)
+`ENRG/integration_mint_energy.py` and `ENRG/bootstrap_protocol.py` (both in the
+repository root) already implement the flow below against a LOCAL validator: they
+bootstrap the whole protocol and call `mint_energy`. They are **scripts, not pytest
+modules** — run them directly:
+
+    python integration_mint_energy.py      # validator + `anchor deploy` first
+
+⚠️ The maintained end-to-end proofs are the TypeScript ones in `ENRG/scripts/`
+(`devnet_e2e_lifecycle.ts`, `devnet_mint_third_party.ts`): they run against devnet and
+are the ones quoted in `MAINNET-CHECKLIST.md`. Read the rest of this section as the
+recipe for writing your own Python client, not as a description of a CI job.
 
 4.1 What the test does
 Generates an Ed25519 keypair on the device side (representing the proving device).
@@ -161,7 +171,7 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-⚠️ Map the actual ENRG instruction args and account names to the real program — replace the placeholders above (amount, accounts, recipient) with fields from ENRG/contracts/enrg/src/lib.rs.
+⚠️ Map the actual ENRG instruction args and account names to the real program — replace the placeholders above (amount, accounts, recipient) with fields from `ENRG/programs/enrg-mvp/src/lib.rs`.
 
 4.5 Verify SRC tokens
 After mint_energy, query the recipient's token account balance and assert it is greater than 0:
@@ -179,12 +189,12 @@ Wrap the whole flow in a pytest test with pytest.mark.asyncio.
 cd ~/Axis-workspace/ENRG
 # 1) validator must be running (separate terminal)
 # 2) oracle must be running on :8000 (separate terminal / via uvicorn)
-pytest tests/test_integration_mint_energy.py -v
+python integration_mint_energy.py
 Troubleshooting
 Anchor error: AccountNotInitialized → the token/recipient account wasn't created before mint_energy; add an init step (create associated token account) first.
 Signature mismatch → the signed bytes differ from what axis_core canonicalizes; align the encoder.
 No program deployed on localnet → run anchor deploy after restarting the validator (state is ephemeral).
-IDL not found → run anchor idl init <PROGRAM_ID> -f target/idl/enrg.json.
+IDL not found → the clients read `target/idl/enrg_mvp.json`; regenerate it with `anchor build` (or, for an existing deployment, `anchor idl init --filepath target/idl/enrg_mvp.json <PROGRAM_ID>`).
 6. On the path to mainnet
 Once the integration test is green locally:
 

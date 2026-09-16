@@ -1,8 +1,20 @@
 """
-ENRG Protocol — End-to-end integration test: mint_energy.
+ENRG Protocol — local end-to-end check of `mint_energy` (NOT a pytest module).
+
+Run it against a freshly bootstrapped LOCAL validator:
+
+    # terminal 1:  solana-test-validator
+    # terminal 2:  anchor build && anchor deploy
+    python integration_mint_energy.py
+
+It used to be named `test_integration_mint_energy.py`, which made pytest import it and
+fail the whole CI run whenever the validator-only helpers were absent (audit
+2026-09-16). The maintained end-to-end proofs live in `scripts/` and are the ones CI
+exercises on devnet: `devnet_e2e_lifecycle.ts` (full lifecycle) and
+`devnet_mint_third_party.ts` (owner != signer mint + negative timestamp case).
 
 Flow:
-  1. Bootstrap protocol (via bootstrap_protocol.init)
+  1. Bootstrap protocol (via bootstrap_protocol.init, IDL: target/idl/enrg_mvp.json)
   2. Build OracleReport (valid nonce & fresh timestamp)
   3. Sign device message (Ed25519) via the Ed25519 precompile instruction
   4. Call mint_energy in the same transaction (sysvar picks up precompile)
@@ -12,6 +24,7 @@ Flow:
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 
 import nacl.signing
@@ -33,8 +46,13 @@ TOKEN_PROGRAM_ID = Pubkey.from_string(
 ED25519_PROGRAM_ID = Pubkey.from_string(
     "Ed25519SigVerify111111111111111111111111111"
 )
+# Whatever `anchor deploy` installed for enrg-profile on YOUR validator — the id is
+# per-cluster, so never assume this default: pass ENRG_PROFILE_PROGRAM_ID.
 ENRG_PROFILE_PROGRAM_ID = Pubkey.from_string(
-    "6q8dkGGaTq78oxEfPSgrynSG1D28W65oV667gTockLNH"
+    os.environ.get(
+        "ENRG_PROFILE_PROGRAM_ID",
+        "6q8dkGGaTq78oxEfPSgrynSG1D28W65oV667gTockLNH",
+    )
 )
 INSTRUCTIONS_SYSVAR = Pubkey.from_string(
     "Sysvar1nstructions1111111111111111111111111"

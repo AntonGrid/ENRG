@@ -3,8 +3,10 @@
   "version": "1.0.0",
   "scripts": {
     "start": "node server.js",
-    "test": "TS_NODE_TRANSPILE_ONLY=1 ts-mocha -p tsconfig.json \"tests/**/*.test.ts\"",
+    "test": "mocha \"tests/*.test.js\"",
+    "test:integration": "TS_NODE_TRANSPILE_ONLY=1 ts-mocha -p tsconfig.json --timeout 180000 \"tests/**/*.test.ts\"",
     "test:policy": "mocha tests/policy.test.js",
+    "test:conformance": "mocha tests/policy-conformance.test.js",
     "test:manifest": "mocha tests/manifest.test.js",
     "test:firmware": "mocha tests/firmware.test.js",
     "test:keyrotation": "mocha tests/keyrotation-api.test.js",
