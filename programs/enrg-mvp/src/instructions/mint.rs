@@ -144,14 +144,29 @@ pub fn mint_energy(ctx: Context<MintEnergy>, report: OracleReport) -> Result<()>
     vault.network_energy_updated_at = now_ts;
 
     // ── CPI: record_production into enrg-profile ──
-    let profile_ctx = CpiContext::new(
+    // Audit 2026-09-16 (P0 ownership): the AUTHORIZED entry point is used here.
+    // The legacy `record_production` requires the PROFILE OWNER's signature, which
+    // forced the whole mint transaction to be signed by `producer.authority` — so an
+    // oracle could only mint for devices it owned itself, and rewards could never
+    // reach another wallet. enrg-profile accepts this call only from the
+    // `mint-authority` PDA (which enrg-mvp signs for below); the device signature,
+    // oracle signature, nonce, freshness and every policy check were already
+    // validated above, and the profile PDA stays bound to `producer.authority`.
+    let cpi_mint_authority_seeds = &[
+        b"mint-authority".as_ref(),
+        &[ctx.accounts.token_mint.mint_authority_bump],
+    ];
+    let cpi_signer_seeds = &[&cpi_mint_authority_seeds[..]];
+    let profile_ctx = CpiContext::new_with_signer(
         ctx.accounts.profile_program.to_account_info(),
-        crate::enrg_profile::cpi::accounts::RecordProduction {
-            authority: ctx.accounts.authority.to_account_info(),
+        crate::enrg_profile::cpi::accounts::RecordProductionAuthorized {
+            caller: ctx.accounts.mint_authority.to_account_info(),
+            authority: ctx.accounts.producer_owner.to_account_info(),
             profile: ctx.accounts.profile.to_account_info(),
         },
+        cpi_signer_seeds,
     );
-    crate::enrg_profile::cpi::record_production(profile_ctx, report.energy_wh, now_ts)?;
+    crate::enrg_profile::cpi::record_production_authorized(profile_ctx, report.energy_wh, now_ts)?;
 
     // ── Update producer state ──
     producer.nonce = report.nonce;
@@ -504,9 +519,13 @@ pub struct MintEnergy<'info> {
     )]
     pub profile_program: UncheckedAccount<'info>,
 
-    /// Transaction signer: the device owner OR a trusted oracle from the
-    /// report (multi-owner mint). It does not receive the reward itself —
-    /// the reward goes to producer.authority (see user_token_account).
+    /// Transaction signer (SUBMITTER) — may be the device owner OR any trusted
+    /// oracle from the OracleRegistry that signed the report (C-2 accepts both).
+    ///
+    /// Audit 2026-09-16: this signer no longer has to be `producer.authority`
+    /// (the profile CPI is now `record_production_authorized`), so an oracle can
+    /// mint for a device owned by any wallet. It never receives the reward — the
+    /// reward goes to `producer.authority` (see `user_token_account`).
     pub authority: Signer<'info>,
 
     #[account(
@@ -516,6 +535,17 @@ pub struct MintEnergy<'info> {
         seeds::program = profile_program.key()
     )]
     pub profile: Account<'info, crate::enrg_profile::accounts::EnergyProfile>,
+
+    /// The device owner (`producer.authority`) — NOT a signer.
+    ///
+    /// Audit 2026-09-16: needed only to derive the `[b"profile", owner]` PDA in the
+    /// enrg-profile CPI. Because it is no longer a signer, the mint can be submitted
+    /// by a key that does not own the device, while the SRC still go to the owner.
+    /// CHECK: bound to `producer.authority` by the constraint below.
+    #[account(
+        constraint = producer_owner.key() == producer.authority @ ErrorCode::NotProducerOwner
+    )]
+    pub producer_owner: UncheckedAccount<'info>,
 
     /// ERS (v7.0 §16) — optional: if provided, updated after the mint.
     /// Bound to the device owner (producer.authority).

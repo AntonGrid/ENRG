@@ -985,6 +985,10 @@ async function oracleMint() {
       profileProgram: PROFILE_PROGRAM_ID,
       authority: operator.publicKey,
       profile: profilePda,
+      // P0 ownership (audit 2026-09-16): the device owner as a NON-signer account,
+      // needed by the `record_production_authorized` CPI. This is what allows an
+      // oracle to mint for a device owned by a different wallet.
+      producerOwner: operator.publicKey,
       // Опциональные аккаунты (Anchor 0.32 требует явный null).
       reputation: null,
       pool: null,

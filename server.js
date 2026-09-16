@@ -620,14 +620,17 @@ async function mintEnergy(proof, producerOverride = null) {
             oracleRegistry: oracleRegistryPda,
             tokenProgram: TOKEN_PROGRAM_ID,
             profileProgram: PROFILE_PROGRAM_ID,
-            // Root cause (0x7d6): enrg-profile RecordProduction derives the
-            // profile PDA from the mint SIGNER (authority), not from
-            // producer.authority. The E2E lifecycle always signed with the
-            // device owner, so sign mint_energy with the FOUNDER keypair
-            // (= producer.authority, see CgVK9). The oracle still signs the
-            // report (ed25519 precompile) — it just does not sign the tx.
-            authority: founderKeypair.publicKey,
+            // P0 ownership (audit 2026-09-16): the mint is signed by the ORACLE,
+            // not by the founder. `mint_energy` accepts either the device owner or
+            // the oracle that signed the report (C-2), and the profile CPI is now
+            // `record_production_authorized` (caller = the mint-authority PDA), so
+            // the submitter no longer has to be producer.authority. The reward still
+            // goes to the DEVICE OWNER (see userTokenAccount below), which is what
+            // makes a user-owned device (Axis-connect claim) earn for its owner.
+            authority: oracleKeypair.publicKey,
             profile: profilePda,
+            // The device owner, NOT a signer — only used to derive the profile PDA.
+            producerOwner: ownerPubkey,
             reputation,
             pool: null,
             poolShare: null,
@@ -658,6 +661,9 @@ async function mintEnergy(proof, producerOverride = null) {
             fundAtas.buyback, fundAtas.staking, fundAtas.dao, fundAtas.emergency,
             SYSVAR_INSTRUCTIONS_PUBKEY, oracleRegistryPda, TOKEN_PROGRAM_ID, PROFILE_PROGRAM_ID,
             oracleKeypair.publicKey, profilePda, Ed25519Program.programId,
+            // P0 ownership: the device owner account (not a signer) — new in the
+            // `record_production_authorized` flow.
+            ownerPubkey,
             // Policy Registry — only if initialized (ADR-0003).
             ...(policyRegistry ? [policyRegistry] : []),
             // P3-6 quorum accounts — only when the quorum is enabled.
@@ -675,7 +681,7 @@ async function mintEnergy(proof, producerOverride = null) {
             lut = await ensureLookupTable(connection, oracleKeypair, lutAddresses);
             mintLutCache = { key: lutKey, lut };
         }
-        const sig = await sendVersioned(connection, founderKeypair, [edDeviceIx, edOracleIx, mintIx], lut);
+        const sig = await sendVersioned(connection, oracleKeypair, [edDeviceIx, edOracleIx, mintIx], lut);
         logger.info('🎉 Mint successful! TX:', sig);
         // Note: the oracle quorum vote now happens BEFORE the mint (above),
         // so the attestation is in place when required=true.

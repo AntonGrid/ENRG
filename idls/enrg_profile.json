@@ -4,13 +4,13 @@
     "name": "enrg_profile",
     "version": "0.1.0",
     "spec": "0.1.0",
-    "description": "ENRG Energy Profile — device metadata and sliding energy window"
+    "description": "ENRG Energy Profile \u2014 device metadata and sliding energy window"
   },
   "instructions": [
     {
       "name": "initialize_profile",
       "docs": [
-        "Создаёт PDA EnergyProfile для указанного authority.",
+        "Creates the EnergyProfile PDA for the given authority.",
         "",
         "Seeds: [b\"profile\", authority.key().as_ref()]"
       ],
@@ -28,7 +28,7 @@
         {
           "name": "authority",
           "docs": [
-            "Владелец профиля (подписывает транзакцию)."
+            "Profile owner (signs the transaction)."
           ],
           "writable": true,
           "signer": true
@@ -36,7 +36,7 @@
         {
           "name": "profile",
           "docs": [
-            "PDA EnergyProfile, создаётся с seeds [b\"profile\", authority.key().as_ref()]."
+            "EnergyProfile PDA, created with seeds [b\"profile\", authority.key().as_ref()]."
           ],
           "writable": true,
           "pda": {
@@ -87,8 +87,8 @@
     {
       "name": "read_profile",
       "docs": [
-        "View-функция для чтения профиля.",
-        "Возвращает все поля EnergyProfile."
+        "View function to read the profile.",
+        "Returns all EnergyProfile fields."
       ],
       "discriminator": [
         221,
@@ -104,7 +104,7 @@
         {
           "name": "profile",
           "docs": [
-            "PDA EnergyProfile (только для чтения)."
+            "EnergyProfile PDA (read-only)."
           ],
           "pda": {
             "seeds": [
@@ -130,7 +130,7 @@
         {
           "name": "authority",
           "docs": [
-            "Authority, чей профиль читаем (не обязательно подписант)."
+            "Authority whose profile is read (not necessarily the signer)."
           ]
         }
       ],
@@ -144,8 +144,10 @@
     {
       "name": "record_production",
       "docs": [
-        "Записывает производство энергии в скользящее окно устройства.",
-        "Вызывается CPI из enrg-mvp при каждом минте."
+        "Records energy production into the device rolling window.",
+        "Called via CPI from enrg-mvp on every mint.",
+        "Requires the PROFILE OWNER's signature (legacy path, kept for",
+        "compatibility; `mint_energy` uses `record_production_authorized`)."
       ],
       "discriminator": [
         163,
@@ -161,14 +163,91 @@
         {
           "name": "authority",
           "docs": [
-            "Владелец профиля (authority) — подписывает CPI."
+            "Profile owner (authority) \u2014 signs the CPI."
           ],
           "signer": true
         },
         {
           "name": "profile",
           "docs": [
-            "PDA EnergyProfile (mut для обновления скользящего окна)."
+            "EnergyProfile PDA (mut for updating the rolling window)."
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  102,
+                  105,
+                  108,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "authority"
+              }
+            ]
+          }
+        }
+      ],
+      "args": [
+        {
+          "name": "energy_wh",
+          "type": "u64"
+        },
+        {
+          "name": "timestamp",
+          "type": "i64"
+        }
+      ]
+    },
+    {
+      "name": "record_production_authorized",
+      "docs": [
+        "Records production WITHOUT the profile owner's signature.",
+        "",
+        "Used by `enrg-mvp::mint_energy` so an oracle can mint for a device owned by",
+        "ANY wallet (the reward goes to `producer.authority`, not to the signer).",
+        "",
+        "Authorization: `caller` MUST be the enrg-mvp `mint-authority` PDA",
+        "(`mint_authority_pda()`). That PDA is owned by enrg-mvp, so only enrg-mvp",
+        "can sign for it \u2014 no third party can move a device's window. Everything",
+        "else (device Ed25519 signature, oracle signature, nonce, freshness, policy)",
+        "was already validated by `mint_energy` before this CPI."
+      ],
+      "discriminator": [
+        110,
+        173,
+        8,
+        156,
+        28,
+        119,
+        208,
+        43
+      ],
+      "accounts": [
+        {
+          "name": "caller",
+          "docs": [
+            "Must equal the enrg-mvp `mint-authority` PDA (checked in the handler)."
+          ],
+          "signer": true
+        },
+        {
+          "name": "authority",
+          "docs": [
+            "Profile owner (NOT a signer) \u2014 used only for the PDA seeds."
+          ]
+        },
+        {
+          "name": "profile",
+          "docs": [
+            "EnergyProfile PDA (mut for updating the rolling window)."
           ],
           "writable": true,
           "pda": {
@@ -207,8 +286,14 @@
     {
       "name": "update_metadata",
       "docs": [
-        "Обновляет метаданные устройства (rated_power, device_type, location).",
-        "Может вызывать только authority профиля."
+        "Updates device metadata (rated_power, device_type, location).",
+        "Only the profile authority can call it.",
+        "",
+        "M-4: rated_power is IMMUTABLE after the first assignment \u2014 the owner",
+        "cannot \"raise their own mint cap\". A change is only possible via a",
+        "verification/upgrade procedure (beyond the MVP scope; requires an",
+        "upgrade instruction with governance control). The change is recorded",
+        "by the RatedPowerChanged event."
       ],
       "discriminator": [
         170,
@@ -224,7 +309,7 @@
         {
           "name": "authority",
           "docs": [
-            "Владелец профиля (подписывает транзакцию)."
+            "Profile owner (signs the transaction)."
           ],
           "signer": true
         },
@@ -292,7 +377,7 @@
     {
       "name": "EnergyProfile",
       "docs": [
-        "EnergyProfile — хранит метаданные устройства и скользящее окно энергии.",
+        "EnergyProfile \u2014 stores device metadata and the rolling energy window.",
         "",
         "Seeds PDA: [b\"profile\", authority.key().as_ref()]"
       ],
@@ -302,56 +387,56 @@
           {
             "name": "authority",
             "docs": [
-              "Владелец профиля (authority)."
+              "Profile owner (authority)."
             ],
             "type": "pubkey"
           },
           {
             "name": "device_id",
             "docs": [
-              "ID устройства (из Device Registry)."
+              "Device ID (from the Device Registry)."
             ],
             "type": "pubkey"
           },
           {
             "name": "rated_power",
             "docs": [
-              "Номинальная мощность устройства (Вт)."
+              "Device rated power (W)."
             ],
             "type": "u64"
           },
           {
             "name": "device_type",
             "docs": [
-              "Тип устройства (строка до 32 байт)."
+              "Device type (string up to 32 bytes)."
             ],
             "type": "string"
           },
           {
             "name": "location",
             "docs": [
-              "Локация (строка до 64 байт)."
+              "Location (string up to 64 bytes)."
             ],
             "type": "string"
           },
           {
             "name": "device_energy_30d",
             "docs": [
-              "Скользящее окно энергии за 30 дней (Вт·ч)."
+              "Rolling energy window for 30 days (Wh)."
             ],
             "type": "u128"
           },
           {
             "name": "device_energy_updated_at",
             "docs": [
-              "Время последнего обновления окна."
+              "Time of the last window update."
             ],
             "type": "i64"
           },
           {
             "name": "bump",
             "docs": [
-              "Bump seed для PDA."
+              "Bump seed for the PDA."
             ],
             "type": "u8"
           }

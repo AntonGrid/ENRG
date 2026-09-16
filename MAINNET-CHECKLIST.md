@@ -35,6 +35,18 @@ updated as the fixes land. The canonical audit report is
       layout-neutral), registered in `lib.rs` and executed on devnet
       (`docs/AUTHORITY-ROTATION-2026-09-16.md`). _Two-step (pending + accept)
       needs an account-layout migration — still open._
+- [x] **P0-1c Mint ownership — the reward must reach the DEVICE OWNER** — the mint
+      transaction had to be signed by `producer.authority` (`enrg-profile`
+      `record_production` required the profile owner's signature), so the oracle
+      could mint only for devices it owned itself and every minted SRC landed on
+      the founder's ATA; a device claimed by a user wallet (Axis-connect) was
+      unmintable (`NotProducerOwner`). Fixed by `record_production_authorized`
+      (caller = the enrg-mvp `mint-authority` PDA), the new `producer_owner`
+      account of `mint_energy`, and oracle-signed mint transactions in
+      `server.js`. Proven on devnet by `scripts/devnet_mint_third_party.ts`
+      (owner ≠ mint signer, SRC arrive on the owner's ATA) —
+      `docs/OWNERSHIP-FIX-2026-09-16.md`. _Breaking change: clients must pass
+      `producerOwner` to `mint_energy`._
 - [x] **P0-2 Sequential mint** — mint queue implemented in `server.js`
       (`MINT_QUEUE_MAX` / `MINT_MAX_ATTEMPTS` / `MINT_RETRY_BASE_MS`), proofs
       persist with `proof_json` + `mint_status='accepted'`, queue drains after

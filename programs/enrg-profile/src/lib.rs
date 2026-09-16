@@ -20,6 +20,35 @@ pub use self::enrg_profile::*;
 /// require a separate verification/upgrade procedure.
 pub const MAX_RATED_POWER: u64 = 1_000_000; // 1 MW
 
+/// enrg-mvp program id — the only program allowed to write the rolling window
+/// WITHOUT the profile owner's signature (through its `mint-authority` PDA).
+///
+/// Audit 2026-09-16: `record_production` requires the profile owner to sign and
+/// `mint_energy` derives the profile PDA from `producer.authority`, so the mint
+/// transaction had to be signed by the device owner. The oracle could therefore
+/// mint only for devices owned by its own key and rewards could never reach a
+/// different owner wallet. This constant enables the authorized path.
+pub const ENRG_MVP_PROGRAM_ID: Pubkey = pubkey!("HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb");
+
+/// Seed of the enrg-mvp PDA that signs the authorized CPI.
+pub const MINT_AUTHORITY_SEED: &[u8] = b"mint-authority";
+
+/// The enrg-mvp `mint-authority` PDA (derived on the fly, never stored).
+pub fn mint_authority_pda() -> Pubkey {
+    Pubkey::find_program_address(&[MINT_AUTHORITY_SEED], &ENRG_MVP_PROGRAM_ID).0
+}
+
+/// Shared rolling-window update (both entry points must agree exactly).
+fn record_production_inner(profile: &mut EnergyProfile, energy_wh: u64, timestamp: i64) {
+    profile.device_energy_30d = update_energy_window_u128(
+        profile.device_energy_30d,
+        profile.device_energy_updated_at,
+        timestamp,
+        energy_wh as u128,
+    );
+    profile.device_energy_updated_at = timestamp;
+}
+
 /// Updates the device rolling energy window (30-day window).
 /// Subtracts the energy that left the window and adds the new energy.
 fn update_energy_window_u128(
@@ -146,24 +175,50 @@ pub mod enrg_profile {
 
     /// Records energy production into the device rolling window.
     /// Called via CPI from enrg-mvp on every mint.
+    /// Requires the PROFILE OWNER's signature (legacy path, kept for
+    /// compatibility; `mint_energy` uses `record_production_authorized`).
     pub fn record_production(
         ctx: Context<RecordProduction>,
         energy_wh: u64,
         timestamp: i64,
     ) -> Result<()> {
-        let profile = &mut ctx.accounts.profile;
-
-        profile.device_energy_30d = update_energy_window_u128(
-            profile.device_energy_30d,
-            profile.device_energy_updated_at,
-            timestamp,
-            energy_wh as u128,
-        );
-        profile.device_energy_updated_at = timestamp;
+        record_production_inner(&mut ctx.accounts.profile, energy_wh, timestamp);
 
         msg!(
             "record_production: device_energy_30d={}",
-            profile.device_energy_30d
+            ctx.accounts.profile.device_energy_30d
+        );
+
+        Ok(())
+    }
+
+    /// Records production WITHOUT the profile owner's signature.
+    ///
+    /// Used by `enrg-mvp::mint_energy` so an oracle can mint for a device owned by
+    /// ANY wallet (the reward goes to `producer.authority`, not to the signer).
+    ///
+    /// Authorization: `caller` MUST be the enrg-mvp `mint-authority` PDA
+    /// (`mint_authority_pda()`). That PDA is owned by enrg-mvp, so only enrg-mvp
+    /// can sign for it — no third party can move a device's window. Everything
+    /// else (device Ed25519 signature, oracle signature, nonce, freshness, policy)
+    /// was already validated by `mint_energy` before this CPI.
+    pub fn record_production_authorized(
+        ctx: Context<RecordProductionAuthorized>,
+        energy_wh: u64,
+        timestamp: i64,
+    ) -> Result<()> {
+        require_keys_eq!(
+            ctx.accounts.caller.key(),
+            mint_authority_pda(),
+            ErrorCode::UnauthorizedCaller
+        );
+
+        record_production_inner(&mut ctx.accounts.profile, energy_wh, timestamp);
+
+        msg!(
+            "record_production_authorized: device_energy_30d={} authority={}",
+            ctx.accounts.profile.device_energy_30d,
+            ctx.accounts.authority.key()
         );
 
         Ok(())
@@ -237,6 +292,31 @@ pub struct RecordProduction<'info> {
     pub profile: Account<'info, EnergyProfile>,
 }
 
+/// Authorized production recording (see `record_production_authorized`).
+///
+/// The profile owner does NOT sign: `caller` is enrg-mvp, which signs the CPI with
+/// its own `mint-authority` PDA. `authority` only participates in the PDA seeds
+/// and the `constraint` proves it is the profile's real owner, so a caller cannot
+/// redirect the update to a foreign profile.
+#[derive(Accounts)]
+pub struct RecordProductionAuthorized<'info> {
+    /// Must equal the enrg-mvp `mint-authority` PDA (checked in the handler).
+    pub caller: Signer<'info>,
+
+    /// Profile owner (NOT a signer) — used only for the PDA seeds.
+    /// CHECK: constrained by the `profile` seeds and the constraint below.
+    pub authority: UncheckedAccount<'info>,
+
+    /// EnergyProfile PDA (mut for updating the rolling window).
+    #[account(
+        mut,
+        seeds = [b"profile", authority.key().as_ref()],
+        bump = profile.bump,
+        constraint = profile.authority == authority.key() @ ErrorCode::ProfileAuthorityMismatch
+    )]
+    pub profile: Account<'info, EnergyProfile>,
+}
+
 #[derive(Accounts)]
 pub struct ReadProfile<'info> {
     /// EnergyProfile PDA (read-only).
@@ -267,6 +347,11 @@ pub enum ErrorCode {
     // (only a verification/upgrade procedure via governance).
     #[msg("Rated power is immutable after initial assignment")]
     RatedPowerImmutable,
+    // Audit 2026-09-16: authorized production recording (oracle-side mint).
+    #[msg("Caller is not the enrg-mvp mint-authority PDA")]
+    UnauthorizedCaller,
+    #[msg("Profile authority does not match the provided authority account")]
+    ProfileAuthorityMismatch,
 }
 
 // M-4: audit event for rated_power changes.

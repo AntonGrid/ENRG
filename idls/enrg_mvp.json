@@ -2683,9 +2683,13 @@
         {
           "name": "authority",
           "docs": [
-            "Transaction signer: the device owner OR a trusted oracle from the",
-            "report (multi-owner mint). It does not receive the reward itself —",
-            "the reward goes to producer.authority (see user_token_account)."
+            "Transaction signer (SUBMITTER) — may be the device owner OR any trusted",
+            "oracle from the OracleRegistry that signed the report (C-2 accepts both).",
+            "",
+            "Audit 2026-09-16: this signer no longer has to be `producer.authority`",
+            "(the profile CPI is now `record_production_authorized`), so an oracle can",
+            "mint for a device owned by any wallet. It never receives the reward — the",
+            "reward goes to `producer.authority` (see `user_token_account`)."
           ],
           "signer": true
         },
@@ -2717,6 +2721,16 @@
               "path": "profile_program"
             }
           }
+        },
+        {
+          "name": "producer_owner",
+          "docs": [
+            "The device owner (`producer.authority`) — NOT a signer.",
+            "",
+            "Audit 2026-09-16: needed only to derive the `[b\"profile\", owner]` PDA in the",
+            "enrg-profile CPI. Because it is no longer a signer, the mint can be submitted",
+            "by a key that does not own the device, while the SRC still go to the owner."
+          ]
         },
         {
           "name": "reputation",
@@ -6944,7 +6958,7 @@
     {
       "name": "EnergyProfile",
       "docs": [
-        "EnergyProfile — хранит метаданные устройства и скользящее окно энергии.",
+        "EnergyProfile — stores device metadata and the rolling energy window.",
         "",
         "Seeds PDA: [b\"profile\", authority.key().as_ref()]"
       ],

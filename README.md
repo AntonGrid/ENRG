@@ -142,6 +142,14 @@ Device → Proof → Oracle → Attestation → Smart Contract → SRC Token
 | Smart Contract | Mints SRC tokens based on verified Proofs. |
 | Owner | Receives tokens proportional to energy produced. |
 
+> **Who signs the mint (since 2026-09-16).** `mint_energy` accepts the device owner
+> *or* the oracle that signed the report as the submitter, and always credits
+> `producer.authority` (the device owner). The mint transaction passes one extra
+> account, `producerOwner` (= `producer.authority`, **not** a signer), used only to
+> derive the `[b"profile", owner]` PDA in the `enrg-profile` CPI. The reference
+> oracle signs the mint with its own key, so a device claimed by a user wallet
+> earns for that user. See `docs/OWNERSHIP-FIX-2026-09-16.md`.
+
 ## Relationship with Axis Repositories
 
 - **Axis-protocol** — the normative specification of the trust standard.
