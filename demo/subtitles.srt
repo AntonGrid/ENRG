@@ -1,0 +1,38 @@
+1
+00:00:01,000 --> 00:00:13,000
+This is ENRG — open verification infrastructure
+that makes physical-world data cryptographically provable.
+Not a token project: we sell trust.
+
+2
+00:00:14,400 --> 00:00:30,500
+STEP 1 — On-chain config: minting is gated, required: true.
+A proof can only be minted after TWO independent,
+staked oracles confirm it.
+Oracles are economically aligned.
+
+3
+00:00:31,500 --> 00:00:44,000
+STEP 2 — A real device proof.
+Oracle #1 signs the canonical SHA-256 hash and votes on-chain.
+Votes: 1 — not yet finalized.
+
+4
+00:00:45,000 --> 00:01:02,800
+STEP 3 — Oracle #2, an independent operator,
+votes the SAME hash.
+Attestation FINALIZED: votes 2, conflict false.
+Any contradictory vote would trigger slashing.
+
+5
+00:01:03,800 --> 00:01:14,700
+STEP 4 — Oracles earn rewards from the staking fund.
+It's idempotent: the second run claims nothing.
+
+6
+00:01:15,700 --> 00:01:29,000
+The full loop is proven on devnet:
+register → claim → activate → mint
+through the quorum gate → reward.
+Repos are public; everything is inspectable on-chain.
+Thank you.
