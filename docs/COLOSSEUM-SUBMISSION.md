@@ -82,6 +82,16 @@ Each update must carry **one number and one link**. Drafts:
    independent oracle operator for the mainnet pilot. Everything is open source;
    devnet is live today."
 
+**Filled example — the first update, ready to post (2026-09-18):**
+
+> Quorum gate `required=true` is live on devnet and just minted again: a fresh
+> device went `register → claim → provision → activate`, two independent staked
+> oracles (`HC8Was…`, `Hm7Ym7…`) voted on the same canonical SHA-256 hash, the
+> attestation finalised and `mint_energy` executed —
+> `2ANc1Lf3az4utCDRw9A7Lfp7z2e7oY2kseJoW6k6U9gcq9uCbTMR1gLRY4M8Ctb7hJfQMm3iuHYHacPQRQiXGKT6`
+> (confirmed, slot 500485022). Metrics: `enrg-oracle.onrender.com/api/v1/stats` ·
+> Program: `HkuC3FT…`
+
 ## 5. Pre-submission checklist
 
 - [ ] Fresh devnet proof **on the day of judging** (last one: 2026-09-05)
