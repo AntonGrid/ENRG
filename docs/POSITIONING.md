@@ -71,7 +71,43 @@ in real time, verification still runs on annual manual audits.
 | AI layer | **Federated learning** on device data + signed AI signals | None |
 | Audit surface | 55 on-chain instructions, 66 e2e tests, public specs/ADR | Opaque off-chain logic |
 
-## 7. Current proof points (2026-08-31)
+## 7. Competitive landscape — vs concrete players
+
+Full evidence, statuses and sources: `docs/COMPETITORS.md` (snapshot
+2026-09-18). Do not cite a third-party status without re-checking it there.
+
+**vs live Solana energy DePINs** — they ship devices and UX; we ship the proof:
+
+| Player | Their wedge | Our answer |
+|---|---|---|
+| Sourceful Energy (`sourceful.energy`) | Home DER gateway + P1 meter, app, live today | We are the proof layer under such a device: SE050-signed readings, ≥2 staked oracles, on-chain audit trail |
+| Starpower (`starpower.world`) | Consumer plugs/batteries mining `$STAR` | Token incentives vs machine-verifiable production; our emission follows provable MWh |
+| DeCharge (`decharge.network`) | EV chargers as DePIN hardware | Their hardware-attestation module (`DePHY OSEM`) is discontinued; ours *is* the product |
+| Power Ledger (`TraceX`, `xGrid`; own L1 retired) | REC/EAC marketplace | We verify at the meter, not from market data |
+
+**vs oracle incumbents on Solana** — same grant budget, different data class:
+
+| Player | What they cover | Where we differ |
+|---|---|---|
+| Chainlink (Data Feeds, CCIP, Functions, CRE) | Price/market data, cross-chain messaging, automation | Physical production data, device-rooted identity, mint gated by a slashing-enforced quorum |
+| Pyth (Price Feeds, Lazer, Pythnet) | Low-latency market data | Not a production/device oracle; different buyer |
+| Switchboard / Supra / DIA / ORAO / Hypernative | General oracles, RWA price data, VRF, security signals | Purpose-built for hardware attestation + economic penalties |
+| Attest Protocol, Orb Oracles (early) | Generic attestations, multi-operator aggregation | Our anchors: secure element + stake/slash, not reputation only |
+
+**vs off-chain and off-Solana incumbents:**
+
+| Player | Their approach | Our answer |
+|---|---|---|
+| Energy Web | Registry-level fix for "the verification gap" via portals/APIs | Hardware root of trust instead of trusting a portal |
+| Daylight (named in a16z, 2025) | Sell energy *and* device data back to utilities | We do not sell the energy — we make the data provable for whoever does |
+| Registries & ESG/MRV firms | Annual manual audits, spreadsheets | Real-time, machine-verifiable, independently re-checkable evidence packs |
+
+**Exposure to be honest about:** Sourceful and Starpower already run hardware
+fleets (distribution beats architecture until we have a pilot), and
+Chainlink/Pyth are the default "trust" answer inside ecosystem grant reviews.
+The deciding factor is therefore the **first live pilot**, not the feature list.
+
+## 8. Current proof points (2026-08-31)
 
 - Full vertical stack: **firmware (ESP32 + SE050) → oracles → Solana contract
   (55 instructions) → AI layer (ENRG-AI: FL + reputation)**;
@@ -82,7 +118,7 @@ in real time, verification still runs on annual manual audits.
 - 300+ commits, 10 ADRs, protocol spec v1.0 (1,155 lines), 2 security audits
   documented, key-rotation + multisig governance in place.
 
-## 8. North star / roadmap
+## 9. North star / roadmap
 
 1. **Mainnet deployment** (Q4 2026) — moves from "prototype" to "live network";
 2. **Pilot** with a real distributed-energy or ESG partner (the proof-of-value);
@@ -91,6 +127,7 @@ in real time, verification still runs on annual manual audits.
 
 ---
 
-*Related: `docs/GRANTS.md` (funding plan), `docs/MULTI-ORACLE-ROLLOUT.md`
+*Related: `docs/COMPETITORS.md` (competitive landscape, evidence and refresh
+procedure), `docs/GRANTS.md` (funding plan), `docs/MULTI-ORACLE-ROLLOUT.md`
 (quorum ops), `docs/MAINNET-RUNBOOK.md` (deployment), audit report
 `MAINNET-AUDIT-2026-08-30.md`.*

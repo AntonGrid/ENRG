@@ -55,6 +55,9 @@ Before the mainnet launch, follow in order:
 - **[`docs/POSITIONING.md`](./docs/POSITIONING.md)** — how we describe ENRG:
    *cryptographic trust between the physical and digital worlds* (audit,
    certificates, ESG, DePIN) — use for any pitch/deck/application.
+- **[`docs/COMPETITORS.md`](./docs/COMPETITORS.md)** — who we compete with in
+   DePIN on Solana: four rings, live-product statuses, exposure analysis and a
+   quarterly refresh procedure.
 - **[`docs/ONEPAGER.md`](./docs/ONEPAGER.md)** — one-page handout for people.
 - **[`docs/GRANTS.md`](./docs/GRANTS.md)** — funding plan (Solana, peaq, Filecoin,
    Gitcoin, IoTeX) + copy-paste application template.
