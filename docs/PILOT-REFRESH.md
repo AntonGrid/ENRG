@@ -64,8 +64,41 @@ proof — the oracle reads the on-chain Registry, not its local DB
 **Caveat:** `scripts/devnet_e2e_lifecycle.ts` generates the device keypair in
 memory and never persists it, so the proof it mints cannot be replayed against
 the oracle API. To keep the public metrics continuously fresh, run a persistent
-device — the ESP32 pilot (`firmware/esp32_proof_sender`) or a key-persisting
-simulator that saves its keypair outside the repository.
+device — the ESP32 pilot (`firmware/esp32_proof_sender`) — or the key-persisting
+recipe below.
+
+### Key-persisting recipe (verified 2026-09-18)
+
+```bash
+# 1. a device key that survives the run (outside the repository)
+mkdir -p ~/keys/pilot && solana-keygen new --no-bip39-passphrase --silent \
+  --outfile ~/keys/pilot/device-pilot-1.json
+
+# 2. register it ON-CHAIN with that key (the oracle reads the on-chain registry)
+TS_NODE_TRANSPILE_ONLY=1 DEVICE_KEY_PATH=~/keys/pilot/device-pilot-1.json \
+  RPC_ENDPOINT=https://api.devnet.solana.com \
+  ORACLE_KEY_PATH="$KEY_DIR/oracle-keypair.json" \
+  ORACLE2_KEY_PATH="$KEY_DIR/oracle-tx-keypair.json" \
+  npx ts-node scripts/devnet_mint_third_party.ts
+
+# 3. push a fresh signed proof to the public oracle
+DEVICE_KEY_PATH=~/keys/pilot/device-pilot-1.json \
+  node scripts/submit-proof-to-oracle.js
+```
+
+Observed in the verified run (`scripts/submit-proof-to-oracle.js` against
+`https://enrg-oracle.onrender.com`):
+
+```text
+register  HTTP 200 {"ok":true,"message":"Device registered successfully"}
+proof     HTTP 200 {"ok":true,"accumulated":1000,"mint":"queued"}
+stats     ... "total_proofs":22, "active_producers":8, "accepted_proofs":1,
+          "last_proof_ts":1789759394   -> 2026-09-18 19:23 UTC
+```
+
+The proof row came back `mint_status: accepted` (queued for minting), not
+`deferred` — i.e. the current pipeline works; the six `deferred` proofs are the
+stale 2026-09-05 batch from before the `mint_error` fix in `69f541f`.
 
 ## 4. Health checks (read-only)
 

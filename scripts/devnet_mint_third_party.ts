@@ -124,8 +124,14 @@ const oracle2Provider = new AnchorProvider(connection, new Wallet(oracle2), {
 });
 const oracle2Program = loadProgram(MVP_IDL, PROGRAM_ID, oracle2Provider);
 
-const find = (seed: string, extra: Buffer[] = [], pid = PROGRAM_ID) =>
-  PublicKey.findProgramAddressSync([Buffer.from(seed), ...extra], pid)[0];
+// Accept both Buffer and Uint8Array seeds: `PublicKey.toBytes()` returns a
+// Uint8Array, and this file is type-checked strictly by ts-node (TS2740
+// without the coercion below).
+const find = (seed: string, extra: (Buffer | Uint8Array)[] = [], pid = PROGRAM_ID) =>
+  PublicKey.findProgramAddressSync(
+    [Buffer.from(seed), ...extra.map((e) => Buffer.from(e))],
+    pid
+  )[0];
 
 const producerPda = find("producer", [deviceId.toBytes()]);
 const profilePda = find("profile", [owner.publicKey.toBytes()], PROFILE_PROGRAM_ID);

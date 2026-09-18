@@ -92,6 +92,14 @@ Each update must carry **one number and one link**. Drafts:
 > (confirmed, slot 500485022). Metrics: `enrg-oracle.onrender.com/api/v1/stats` ·
 > Program: `HkuC3FT…`
 
+**Numbers as of 2026-09-18 19:23 UTC** (paste the live ones, not these):
+`total_proofs 22`, `active_producers 8`, `accepted_proofs 1`,
+`last_proof_ts 1789759394` (today), `total_energy_wh 31015`; the six `deferred`
+proofs are the stale 2026-09-05 batch. Also verified the same day: a third-party
+device mint (an owner who did **not** sign the mint received its SRC) —
+`3VzmRDVqcNqRdNX8vAPo3wCcLwJXL6LPR1kKhkNaYrHn3KHjZSSHXgzR27BVdRAynVWaipUrjdNC4RRi4eA69ofB`.
+How to reproduce: `docs/PILOT-REFRESH.md`.
+
 ## 5. Pre-submission checklist
 
 - [ ] Fresh devnet proof **on the day of judging** (last one: 2026-09-05)
