@@ -28,8 +28,30 @@
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Connection, PublicKey } from "@solana/web3.js";
-import rawIdl from "../target/idl/enrg_mvp.json";
 import { patchIdl } from "../tests/helpers/patch-idl";
+
+/**
+ * `target/` is gitignored, so a fresh CI checkout has no build output — the
+ * authority guard could never run there (the job was red for that reason).
+ * Load the build output first, then fall back to the bundled IDL
+ * (`idls/enrg_mvp.json`, same address, same 58 instructions).
+ */
+function loadEnrgIdl(): any {
+  const candidates = ["../target/idl/enrg_mvp.json", "../idls/enrg_mvp.json"];
+  for (const rel of candidates) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      return require(rel);
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  throw new Error(
+    "ENRG IDL not found: run `anchor build` or restore idls/enrg_mvp.json"
+  );
+}
+
+const rawIdl = loadEnrgIdl();
 
 const ENRG_MVP_ID = new PublicKey("HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb");
 const ENRG_PROFILE_ID = new PublicKey("78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt");
