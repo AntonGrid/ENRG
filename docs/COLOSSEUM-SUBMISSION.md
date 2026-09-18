@@ -16,7 +16,7 @@
 | Name | "Axis Protocol — Cryptographic Trust for DePIN" | Keep the substance; consider leading with **ENRG** — another project on the platform is already called "Axis" (`axis-1`, a crypto index), which invites confusion |
 | Tag | `DePIN` | Keep — matches where we actually compete |
 | About the project | One sentence, no numbers | Replace with section 2 |
-| **Project pitch** | `youtu.be/qrgdc1X9kDU` — "ENRG Protocol — Live Demo on Solana Devnet" | **Record a real pitch** — see `docs/PITCH-VIDEO-STORYBOARD.md` |
+| **Project pitch** | `youtu.be/qrgdc1X9kDU` — "ENRG Protocol — Live Demo on Solana Devnet" | Pitch **rendered** 2026-09-18: `demo/pitch-video/ENRG_pitch.mp4` (2:24, 1080p). Upload it, set it here, and keep the devnet walkthrough below. See `demo/pitch-video/README.md` |
 | **Technical demo** | the *same* link as the pitch | Keep this one here; never reuse one link for both fields |
 | GitHub · Source code | `AntonGrid/ENRG` | ✅ fixed on 2026-09-18 |
 | Website / X | `enrg.network` · `x.com/enrg_protocol` | Keep |
@@ -103,7 +103,7 @@ How to reproduce: `docs/PILOT-REFRESH.md`.
 ## 5. Pre-submission checklist
 
 - [ ] Fresh devnet proof **on the day of judging** (last one: 2026-09-05)
-- [ ] *Project pitch* = new video, *Technical demo* = `qrgdc1X9kDU` (different links)
+- [x] *Project pitch* rendered — `demo/pitch-video/ENRG_pitch.mp4` (2:24, 1920×1080, H.264/AAC, captions in `demo/pitch-video/ENRG_pitch.srt`); upload it and paste the link, then keep *Technical demo* = `qrgdc1X9kDU` (the two fields must not share a link)
 - [ ] About replaced (section 2); team roles filled (section 3)
 - [ ] GitHub link → `AntonGrid/ENRG` ✅; Axis-protocol cited in the About text as the standard
 - [ ] README "Start here" block present; LICENSE consistent; submodules documented
@@ -132,6 +132,6 @@ How to reproduce: `docs/PILOT-REFRESH.md`.
 
 ---
 
-*Related: `docs/PITCH-VIDEO-STORYBOARD.md`, `docs/POSITIONING.md`,
-`docs/COMPETITORS.md`, `docs/GRANTS.md` (long-form applications).*
+*Related: `demo/pitch-video/README.md` (the rendered pitch), `docs/PITCH-VIDEO-STORYBOARD.md`,
+`docs/POSITIONING.md`, `docs/COMPETITORS.md`, `docs/GRANTS.md` (long-form applications).*
 

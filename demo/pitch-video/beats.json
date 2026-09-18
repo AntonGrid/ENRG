@@ -1,0 +1,207 @@
+{
+  "meta": {
+    "title": "ENRG — Axis Protocol (Colosseum pitch)",
+    "output": "demo/pitch-video/ENRG_pitch.mp4",
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "bg": "#0B1020",
+    "accent": "#4FC3F7",
+    "fg": "#E6EDF7",
+    "muted": "#8FA3BF",
+    "danger": "#FF6B6B",
+    "success": "#34D399",
+    "grid": "#151F3A",
+    "length_scale": 1.18,
+    "beat_gap": 0.28,
+    "scene_pad": 0.75,
+    "fade": 0.45,
+    "endcard": 3.6
+  },
+  "scenes": [
+    {
+      "id": "s1",
+      "label": "01 / 06   WHO I AM",
+      "min_duration": 15.0,
+      "kicker": "WHO I AM",
+      "headline": "Anton — founder\nVladimir, Russia",
+      "decoration": "portrait",
+      "beats": [
+        {
+          "vo": "Hi. I am Anton.",
+          "bullet": "Anton Gulda — founder"
+        },
+        {
+          "vo": "I work rotational shifts at an oil field, two weeks away from home at a time.",
+          "bullet": "Rotational shifts at an oil field"
+        },
+        {
+          "vo": "On my rotations off, I build verification infrastructure for the physical world, on Solana.",
+          "bullet": "On rotations off: building on Solana",
+          "kind": "accent"
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "label": "02 / 06   THE PROBLEM",
+      "min_duration": 20.0,
+      "kicker": "THE PROBLEM",
+      "headline": "Physical data is not provable",
+      "decoration": "table",
+      "beats": [
+        {
+          "vo": "Every number that reaches a market starts as a claim somebody typed.",
+          "bullet": "A kilowatt-hour, a carbon credit, an ESG report"
+        },
+        {
+          "vo": "A spreadsheet cell can be edited. A portal can be inflated.",
+          "bullet": "Spreadsheets can be edited"
+        },
+        {
+          "vo": "And the same megawatt-hour can be sold twice.",
+          "bullet": "The same MWh can be sold twice"
+        },
+        {
+          "vo": "Markets move in milliseconds, while verification still runs on annual audits.",
+          "bullet": "Verification still runs on annual audits"
+        },
+        {
+          "vo": "The result has a name: greenwashing.",
+          "bullet": "The result has a name",
+          "stamp": "GREENWASHING",
+          "kind": "danger"
+        }
+      ]
+    },
+    {
+      "id": "s3",
+      "label": "03 / 06   THE SOLUTION",
+      "min_duration": 30.0,
+      "kicker": "THE SOLUTION",
+      "headline": "Axis Protocol — an open standard for trust",
+      "decoration": "pipeline",
+      "beats": [
+        {
+          "vo": "Axis Protocol closes that gap: identity, proof, attestation, policy.",
+          "bullet": "Identity · Proof · Attestation · Policy",
+          "stage": 0
+        },
+        {
+          "vo": "On the device, an Ed25519 key inside an NXP SE050 secure element signs every reading — the device itself is the signature.",
+          "bullet": "SE050 signs — the key never leaves the chip",
+          "stage": 1
+        },
+        {
+          "vo": "Then at least two staked oracles vote on the same canonical hash.",
+          "bullet": "At least two independent, staked oracles",
+          "stage": 2
+        },
+        {
+          "vo": "A contradictory vote is a slashing event, and minting waits for a finalised attestation.",
+          "bullet": "Contradiction = slashing; mint waits for finalisation",
+          "stage": 3
+        },
+        {
+          "vo": "One compromised oracle cannot create value.",
+          "bullet": "One compromised oracle cannot create value",
+          "stage": 4,
+          "kind": "accent"
+        }
+      ]
+    },
+    {
+      "id": "s4",
+      "label": "04 / 06   WHAT IS DONE",
+      "min_duration": 25.0,
+      "kicker": "WHAT IS DONE",
+      "headline": "Not a slide deck — it runs",
+      "decoration": "numbers",
+      "beats": [
+        {
+          "vo": "Fifty-five on-chain instructions in Rust.",
+          "bullet": "55 on-chain instructions",
+          "kind": "number",
+          "bignum": "55"
+        },
+        {
+          "vo": "Two hundred and sixty-six tests pass: Rust, Node, Python and Foundry.",
+          "bullet": "266 tests green",
+          "kind": "number",
+          "bignum": "266"
+        },
+        {
+          "vo": "The full stack is live on devnet today — ESP32 firmware, secure element, two independent oracles.",
+          "bullet": "Live on devnet — 2 independent oracles",
+          "kind": "number",
+          "bignum": "2"
+        },
+        {
+          "vo": "A finalised attestation, and a mint that only executed because the gate said required equals true.",
+          "bullet": "Finalised attestation, then mint through the gate",
+          "kind": "number",
+          "bignum": "1"
+        },
+        {
+          "vo": "Every proof and mint is public — verify it yourself.",
+          "bullet": "Every proof and mint is public — verify it yourself",
+          "kind": "accent"
+        }
+      ]
+    },
+    {
+      "id": "s5",
+      "label": "05 / 06   WHY ME",
+      "min_duration": 25.0,
+      "kicker": "WHY ME",
+      "headline": "Self-taught. Solo. Four months.",
+      "decoration": "timeline",
+      "beats": [
+        {
+          "vo": "Why me? I have no degree, no team and no funding.",
+          "bullet": "No degree · no team · no funding"
+        },
+        {
+          "vo": "Four months of nights and rotations off. I wrote the firmware, the contracts, the oracles and the AI layer myself.",
+          "bullet": "Firmware, contracts, oracles, AI — one person"
+        },
+        {
+          "vo": "I got tired of watching physical data be trusted on faith.",
+          "bullet": "Tired of physical data trusted on faith"
+        },
+        {
+          "vo": "This is not a sprint for me. It is a mission: make the physical world provable. Judge me by the code, not by the pitch.",
+          "bullet": "A mission, not a sprint — judge me by the code",
+          "kind": "accent"
+        }
+      ]
+    },
+    {
+      "id": "s6",
+      "label": "06 / 06   THE ASK",
+      "min_duration": 20.0,
+      "kicker": "THE ASK",
+      "headline": "One pilot partner. Mentors.",
+      "decoration": "contact",
+      "beats": [
+        {
+          "vo": "So here is my ask. I need one real pilot: a solar site, a meter, an operator — anyone whose data should be provable.",
+          "bullet": "A real site with a meter — solar, wind, or a lab bench"
+        },
+        {
+          "vo": "And I need mentors who have taken infrastructure like this to mainnet.",
+          "bullet": "Mentors who took infrastructure to mainnet"
+        },
+        {
+          "vo": "The protocol is open, the devnet is live, and the code is public.",
+          "bullet": "Open protocol · live devnet · public code"
+        },
+        {
+          "vo": "If that is you, let us talk.",
+          "bullet": "github.com/AntonGrid/ENRG",
+          "kind": "accent"
+        }
+      ]
+    }
+  ]
+}
