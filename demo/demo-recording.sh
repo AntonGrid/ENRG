@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # ENRG live demo — run under a screen recorder.
 # Start recording (GNOME: Ctrl+Shift+Alt+R; OBS; or a phone camera), then:
-#   bash grants/demo-recording.sh
+#   bash demo/demo-recording.sh
 # Resilient: RPC hiccups are retried up to 5x with backoff, so the demo
 # always finishes. Each run creates a FRESH device+nonce (real on-chain votes).
-cd /home/enrg/Axis-workspace/ENRG
+# Run it from anywhere — the script locates the repository itself.
+cd "$(dirname "$0")/.."
 
 # Pick the first healthy devnet RPC (failover for unstable endpoints).
 RPC=""
@@ -33,9 +34,20 @@ run() {
 # Fresh synthetic device + nonce.
 DEV=$(solana-keygen new --no-bip39-passphrase --silent --outfile /tmp/enrg-demo-device.json >/dev/null 2>&1; solana address --keypair /tmp/enrg-demo-device.json)
 NONCE=$(date +%s | tail -c 8)
-ORACLE1=/home/enrg/keys/enrg-mainnet/oracle-keypair.json
-ORACLE2=/home/enrg/keys/enrg-mainnet/oracle-tx-keypair.json
-FOUNDER=/home/enrg/keys/enrg-mainnet/founder-keypair.json
+# Key material is never committed. Point KEY_DIR at your own keyring, or
+# override ORACLE1 / ORACLE2 / FOUNDER individually:
+#   KEY_DIR=/secure/enrg bash demo/demo-recording.sh
+KEY_DIR="${KEY_DIR:-$HOME/keys/enrg-mainnet}"
+ORACLE1="${ORACLE1:-$KEY_DIR/oracle-keypair.json}"
+ORACLE2="${ORACLE2:-$KEY_DIR/oracle-tx-keypair.json}"
+FOUNDER="${FOUNDER:-$KEY_DIR/founder-keypair.json}"
+for k in "$ORACLE1" "$ORACLE2" "$FOUNDER"; do
+  if [ ! -f "$k" ]; then
+    echo -e "${YEL}   ✗ missing keypair: $k${NC}"
+    echo "     set KEY_DIR (or ORACLE1/ORACLE2/FOUNDER) to your own keyring"
+    exit 1
+  fi
+done
 
 step "STEP 1/4 — Quorum config: the mint gate (required=true) is live on devnet"
 export ANCHOR_WALLET=$FOUNDER

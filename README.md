@@ -6,6 +6,35 @@ ENRG focuses on the **energy domain**: it tokenizes real electricity production 
 
 ---
 
+## Start here (judges, reviewers, grant teams)
+
+**One line:** ENRG is verification infrastructure that makes physical-world data
+cryptographically provable on Solana — we sell trust, not tokens.
+
+**See it working (no setup required):**
+
+- Live oracle + metrics — `https://enrg-oracle.onrender.com/api/v1/stats`
+- Program on devnet — `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb`
+- Technical demo — `demo/ENRG_live_demo.mp4` · pitch storyboard —
+  `docs/PITCH-VIDEO-STORYBOARD.md` · submission pack —
+  `docs/COLOSSEUM-SUBMISSION.md`
+
+**The claims, and where to check them:**
+
+| Claim | Evidence in this repository |
+|---|---|
+| Hardware root of trust | `firmware/` — ESP32 + NXP SE050, non-extractable Ed25519 key; device identity *is* the signing key (ADR-0001/0007) |
+| One oracle cannot mint | `programs/enrg-mvp` — ≥2 staked oracles vote on a canonical SHA-256 hash, a contradictory vote is a slashing event, minting is gated by a *finalised* attestation (ADR-0006) |
+| Anyone can re-verify | Every proof, attestation, policy decision and mint is an inspectable Solana account |
+| It is real code, not slides | 55 on-chain instructions · 266 tests green: 124 Rust (`cargo test -p enrg-mvp`), 107 Node (`npm test`), 21 Python (`pytest -q -p no:anchorpy`), 14 Foundry (`cd onchain && forge test`) |
+
+**Five-minute reading order:** `docs/POSITIONING.md` (what we are) →
+`docs/COMPETITORS.md` (who else is in this space) → `docs/STATE.md` (what is
+implemented) → `docs/MULTI-ORACLE-ROLLOUT.md` (how an independent operator joins)
+→ `MAINNET-CHECKLIST.md` (what remains before mainnet).
+
+---
+
 ## What ENRG Does
 
 ENRG connects physical energy producers (solar panels, wind turbines, meters) to the Solana blockchain.
@@ -96,8 +125,10 @@ Before the mainnet launch, follow in order:
 ### Clone and Install
 
 ```bash
-git clone https://github.com/AntonGrid/ENRG.git
+git clone --recurse-submodules https://github.com/AntonGrid/ENRG.git
 cd ENRG
+# already cloned without --recurse-submodules? then run:
+#   git submodule update --init landing
 
 # Install Node.js dependencies
 npm install
@@ -182,4 +213,4 @@ Contributions are welcome! Please read:
 
 ## License
 
-Apache 2.0 © 2026 Anton Gulda
+MIT © 2026 Anton Gulda (see [LICENSE](./LICENSE) — the file is the authoritative text)

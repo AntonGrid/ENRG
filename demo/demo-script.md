@@ -38,5 +38,5 @@
 2. **OBS**: simple window capture, click record;
 3. **Phone**: point at the screen, keep it stable;
 4. **Text-only backup** (no video):
-   `script -c 'bash grants/demo-recording.sh' /tmp/enrg-demo.typescript`
+   `script -c 'bash demo/demo-recording.sh' /tmp/enrg-demo.typescript`
    → this text log is also useful as an artifact in applications.
