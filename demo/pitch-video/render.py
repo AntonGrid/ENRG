@@ -197,7 +197,7 @@ def decorate_table(bg):
 
 
 PIPELINE = {"x": 140, "y": 926, "w": 300, "h": 78, "gap": 62,
-            "labels": ["SE050 DEVICE", "PROOF", "ORACLE QUORUM", "ATTESTATION", "MINT"]}
+            "labels": META["pipeline_stages"]}
 
 
 def decorate_pipeline(bg):
@@ -363,9 +363,10 @@ def endcard(scene_count):
 
 
 def add_numbers_footer(bg):
+    signature, line2 = META["numbers_footer"]
     run(f'{CONVERT} "{bg}" -font "{F_MONO}" -pointsize 22 -fill "{MUTED}" -gravity NorthWest '
-        f'-annotate +140+1008 "mint 2ANc1Lf3az4utCDRw9A7Lfp7z2e7oY2kseJoW6k6U9gcq9uCbTMR1gLRY4M8Ctb7hJfQMm3iuHYHacPQRQiXGKT6" '
-        f'-annotate +140+1040 "slot 500485022  ·  devnet  ·  verified 2026-09-18" "{bg}"')
+        f'-annotate +140+1008 "{signature}" '
+        f'-annotate +140+1040 "{line2}" "{bg}"')
 
 
 def assemble(scene_files, out_path):

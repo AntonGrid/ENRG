@@ -1,7 +1,7 @@
 # ENRG — pitch video (Colosseum submission)
 
 `ENRG_pitch.mp4` — the **project pitch**: who I am, the problem, the solution,
-what is already built, why me, and the ask. 2:24, 1920×1080, MP4 (H.264 + AAC).
+what is already built, why me, and the ask. 2:27, 1920×1080, MP4 (H.264 + AAC).
 
 This is **not** the technical demo. The devnet walkthrough is a separate video
 and must stay in the Colosseum *Technical demo* field; this file goes into
@@ -12,12 +12,12 @@ and must stay in the Colosseum *Technical demo* field; this file goes into
 | t | section | on screen |
 |---|---|---|
 | 0:00–0:15 | Who I am — Anton, founder, Vladimir (Russia), rotational shifts at an oil field | kicker + name card |
-| 0:15–0:35 | The problem — physical data is not provable: editable exports, double counting, audits, greenwashing | mock utility export with the edited cell struck through, `GREENWASHING` stamp |
-| 0:35–1:07 | The solution — Axis Protocol: identity · proof · attestation · policy; SE050 signs on the device; ≥2 staked oracles; contradiction = slashing; mint only after finalisation | pipeline `SE050 DEVICE → PROOF → ORACLE QUORUM → ATTESTATION → MINT` lights up stage by stage |
-| 1:07–1:34 | What is done — 58 on-chain instructions, 272 tests, live devnet, 2 oracles, finalised attestation, mint through the gate | big counters + the real mint signature and slot |
-| 1:34–1:59 | Why me — self-taught, solo, four months, a mission rather than a sprint | timeline `day 0 → month 4 · today` |
-| 1:59–2:20 | The ask — one real pilot (a site with a meter) and mentors who have shipped infra to mainnet | contact block |
-| 2:20–2:23 | End card — logo, tagline, repository | — |
+| 0:15–0:36 | The problem — physical data is not provable: editable exports, double counting, audits, greenwashing | mock utility export with the edited cell struck through, `GREENWASHING` stamp |
+| 0:36–1:10 | The solution — Axis Protocol: identity · proof · attestation · policy; every reading signed on the device with Ed25519 (the SE050 tier is what mainnet requires); ≥2 staked oracles; contradiction = slashing; mint only after finalisation | pipeline `DEVICE · Ed25519 → PROOF → ORACLE QUORUM → ATTESTATION → MINT` lights up stage by stage |
+| 1:10–1:38 | What is done — 58 on-chain instructions, 276 tests, live devnet, 2 staked oracle instances, finalised attestation, mint through the gate | big counters + the real mint signature and slot |
+| 1:38–2:03 | Why me — self-taught, solo, four months, a mission rather than a sprint | timeline `day 0 → month 4 · today` |
+| 2:03–2:24 | The ask — one real pilot (a site with a meter) and mentors who have shipped infra to mainnet | contact block |
+| 2:24–2:27 | End card — logo, tagline, repository | — |
 
 The exact rendered timings and every spoken line are in [`narration.md`](narration.md);
 `ENRG_pitch.srt` holds the same text as captions.
@@ -26,7 +26,7 @@ The exact rendered timings and every spoken line are in [`narration.md`](narrati
 
 | requirement | how it is met |
 |---|---|
-| 2:00–2:30 | **2:23.6** — 143.6 s of timeline, 143.63 s in the file (AAC tail) |
+| 2:00–2:30 | **2:27.2** — 147.2 s of timeline, 147.23 s in the file (AAC tail) |
 | 1920×1080, MP4 | H.264 (CRF 18, 30 fps) + AAC 192 kb/s, `+faststart` |
 | dark `#0B1020`, accent `#4FC3F7` | palette in `beats.json → meta`; every frame uses it |
 | ENRG logo in a corner | flat accent mark + wordmark, top left of every scene |

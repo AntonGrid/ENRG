@@ -936,24 +936,91 @@ app.get('/api/v1/device/:id/status', (req, res) => {
     });
 });
 
-// === BALANCE (stub) ===
-app.get('/api/v1/device/:id/balance', (req, res) => {
+// === BALANCE (live, 2026-09-21) ===
+// Real SRC balance of the device owner: the on-chain EnergyProducer gives the
+// owner, the owner's ATA gives the balance. The previous version always answered
+// `{ balance: 0 }` — see the honesty table in README.md.
+app.get('/api/v1/device/:id/balance', async (req, res) => {
     const deviceId = req.params.id;
-    if (!devices[deviceId]) {
-        return res.status(404).json({ error: 'device not found' });
+
+    const d = policy.validateDeviceId(deviceId);
+    if (!d.ok) {
+        return res.status(d.status).json({ error: d.error });
     }
-    // A real Solana balance could be fetched here; for now a stub
-    res.json({ balance: 0, device_id: deviceId });
+    if (!d.deviceIdPubkey) {
+        return res.status(400).json({ error: 'invalid device_id (must be a 32-byte key)' });
+    }
+
+    const connection = getConnection();
+    let producer;
+    try {
+        producer = await readOnlyProgram(connection).account.energyProducer
+            .fetch(findProducerPda(d.deviceIdPubkey));
+    } catch (e) {
+        if (isAccountNotFoundError(e)) {
+            return res.status(404).json({ error: 'device_not_registered_on_chain' });
+        }
+        failoverRpc();
+        return res.status(503).json({ error: 'rpc_unavailable', reason: (e && e.message) || '' });
+    }
+
+    const [srcMintPda] = PublicKey.findProgramAddressSync([Buffer.from('src-mint')], PROGRAM_ID);
+    const ata = getAssociatedTokenAddressSync(srcMintPda, producer.owner, true);
+
+    let balance = 0;
+    let balanceAtomic = '0';
+    try {
+        const bal = await connection.getTokenAccountBalance(ata);
+        balance = bal.value.uiAmount || 0;
+        balanceAtomic = bal.value.amount;
+    } catch (e) {
+        // An owner that has never been paid simply has no ATA yet — that is a
+        // zero balance, not an error. Anything else is an RPC problem.
+        if (!isAccountNotFoundError(e)) {
+            failoverRpc();
+            return res.status(503).json({ error: 'rpc_unavailable', reason: (e && e.message) || '' });
+        }
+    }
+
+    res.json({
+        device_id: deviceId,
+        owner: producer.owner.toBase58(),
+        ata: ata.toBase58(),
+        mint: srcMintPda.toBase58(),
+        balance,
+        balance_atomic: balanceAtomic,
+    });
 });
 
-// === HISTORY (stub) ===
-app.get('/api/v1/device/:id/history', (req, res) => {
+// === HISTORY (live, 2026-09-21) ===
+// The device's own proof/mint rows from the oracle storage — the same rows that
+// /api/v1/stats aggregates. The previous version always answered `[]`.
+app.get('/api/v1/device/:id/history', async (req, res) => {
     const deviceId = req.params.id;
     if (!devices[deviceId]) {
         return res.status(404).json({ error: 'device not found' });
     }
-    // For now return an empty array; mint history can be added later
-    res.json({ history: [] });
+    const requested = Number.parseInt(req.query.limit, 10);
+    const limit = Math.min(Number.isFinite(requested) && requested > 0 ? requested : 50, 200);
+    try {
+        const rows = await storage.loadProofs(deviceId, limit);
+        res.json({
+            device_id: deviceId,
+            count: rows.length,
+            history: rows.map((r) => ({
+                ts: Number(r.ts),
+                energy_wh: Number(r.energy_wh),
+                nonce: Number(r.nonce),
+                mint_status: r.mint_status,
+                mint_tx: r.mint_tx || null,
+                mint_error: r.mint_error || null,
+                oracle_id: r.oracle_id || null,
+            })),
+        });
+    } catch (e) {
+        logger.error('❌ Error fetching device history:', e);
+        res.status(500).json({ error: e.message });
+    }
 });
 
 // === SIGNED DEVICE MANIFEST (ADR-0004) ===

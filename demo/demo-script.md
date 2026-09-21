@@ -9,7 +9,7 @@
 
 ## Step 1 — Config (30 s)
 > "Here's the on-chain config: minting is gated — `required: true`. A proof
-> can only be minted after TWO independent, staked oracles confirm it. Also
+> can only be minted after TWO staked oracle instances confirm it. Also
 > note the reward per vote — oracles are economically aligned."
 
 ## Step 2 — Oracle #1 votes (30 s)
@@ -17,7 +17,7 @@
 > the report and votes on-chain. Votes: 1, not yet finalized."
 
 ## Step 3 — Oracle #2 votes (30 s)
-> "Oracle #2 — an independent operator, different RPC provider — votes the
+> "Oracle #2 — a separate instance with its own key and RPC provider — votes the
 > SAME hash. Now the attestation is FINALIZED: votes 2, conflict false.
 > Any contradictory vote would be a conflict and trigger slashing."
 

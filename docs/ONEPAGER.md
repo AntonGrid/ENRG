@@ -14,13 +14,15 @@ value in any DePIN.
 
 **The solution — three anchors of trust:**
 
-1. **Hardware root of trust.** Devices sign proofs with Ed25519 keys held in
-   an **NXP SE050 secure element** (non-extractable). Device identity *is* the
-   signing key — you cannot fake a device, even with physical access.
-2. **Oracle quorum + economics.** ≥2 independent **staked** oracles vote on a
-   canonical proof hash; contradictory votes trigger **slashing**; minting is
-   **gated by a finalized attestation**. One compromised oracle cannot mint
-   value.
+1. **Hardware root of trust.** Every proof is signed with Ed25519 by the device
+   itself. Key storage has three tiers (ADR-0007): NVS (development), an
+   ATECC608A seed vault, and **NXP SE050 with on-chip signing** — the tier the
+   mainnet build refuses to compile without. Device identity *is* the signing
+   key; SE050 bring-up on real silicon is the current milestone.
+2. **Oracle quorum + economics.** ≥2 **staked** oracles — separate keys, separate
+   instances — vote on a canonical proof hash; contradictory votes trigger
+   **slashing**; minting is **gated by a finalized attestation**. One compromised
+   oracle cannot mint value.
 3. **On-chain audit trail.** Every proof, attestation, policy and reward is an
    inspectable Solana account — anyone can independently re-verify any claim.
 
@@ -35,11 +37,12 @@ asset owners, ESG assurance firms (CSRD/CBAM/SAF), other DePIN projects.
 
 **Proof points (live, 2026-09-21).**
 - Full vertical stack: **ESP32 + SE050 firmware → oracles → Solana contract
-  (58 instructions) → AI layer** (federated learning + device reputation);
+  (58 instructions) → AI layer** (forecasting, anomaly detection, federated-round
+  tooling — sibling repo ENRG-AI);
 - **Devnet live:** two independent oracles staked and voted; attestation
   finalized; a full device lifecycle minted through the **required=true**
   quorum gate; rewards claimed idempotently;
-- **Quality:** 272 tests green (125 Rust / 112 Node / 21 Python / 14 Foundry);
+- **Quality:** 276 tests green (125 Rust / 112 Node / 21 Python / 18 Foundry);
   300+ commits;
   10 ADRs; protocol spec v1.0; documented security audits; multisig governance.
 

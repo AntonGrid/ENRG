@@ -99,3 +99,8 @@ firmware/legacy/*
 # narration text ARE tracked — see demo/ and demo/pitch-video/.
 demo/*.mp4
 demo/voice/
+
+# Foundry build output (Solidity): artefacts and the compiler cache — never
+# tracked, `forge build` regenerates them.
+onchain/out/
+onchain/cache/

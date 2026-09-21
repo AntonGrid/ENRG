@@ -31,77 +31,77 @@ Markets move in milliseconds, while verification still runs on annual audits.
 The result has a name: greenwashing.
 
 9
-00:00:35,613 --> 00:00:41,502
+00:00:35,613 --> 00:00:41,351
 Axis Protocol closes that gap: identity, proof, attestation, policy.
 
 10
-00:00:41,782 --> 00:00:53,348
-On the device, an Ed25519 key inside an NXP SE050 secure element signs every reading — the device itself is the signature.
+00:00:41,631 --> 00:00:56,332
+Every reading is signed on the device with Ed25519 — at the tier mainnet requires, that key lives inside an NXP SE050 and never leaves the chip, and the build refuses to compile without it.
 
 11
-00:00:53,628 --> 00:00:58,042
+00:00:56,612 --> 00:01:00,759
 Then at least two staked oracles vote on the same canonical hash.
 
 12
-00:00:58,322 --> 00:01:03,723
+00:01:01,039 --> 00:01:06,522
 A contradictory vote is a slashing event, and minting waits for a finalised attestation.
 
 13
-00:01:04,004 --> 00:01:07,106
+00:01:06,802 --> 00:01:09,858
 One compromised oracle cannot create value.
 
 14
-00:01:07,856 --> 00:01:10,808
+00:01:10,608 --> 00:01:13,594
 Fifty-eight on-chain instructions in Rust.
 
 15
-00:01:11,088 --> 00:01:16,594
-Two hundred and seventy-two tests pass: Rust, Node, Python and Foundry.
+00:01:13,874 --> 00:01:19,333
+Two hundred and seventy-six tests pass: Rust, Node, Python and Foundry.
 
 16
-00:01:16,873 --> 00:01:23,865
-The full stack is live on devnet today — ESP32 firmware, secure element, two independent oracles.
+00:01:19,614 --> 00:01:27,442
+The protocol is live on devnet today — two staked oracle instances, and a mint that only passed because the quorum was finalised.
 
 17
-00:01:24,145 --> 00:01:30,231
+00:01:27,721 --> 00:01:33,807
 A finalised attestation, and a mint that only executed because the gate said required equals true.
 
 18
-00:01:30,511 --> 00:01:33,927
+00:01:34,088 --> 00:01:37,539
 Every proof and mint is public — verify it yourself.
 
 19
-00:01:34,677 --> 00:01:38,560
+00:01:38,289 --> 00:01:42,172
 Why me? I have no degree, no team and no funding.
 
 20
-00:01:38,840 --> 00:01:46,252
+00:01:42,452 --> 00:01:49,864
 Four months of nights and rotations off. I wrote the firmware, the contracts, the oracles and the AI layer myself.
 
 21
-00:01:46,532 --> 00:01:49,867
+00:01:50,144 --> 00:01:53,479
 I got tired of watching physical data be trusted on faith.
 
 22
-00:01:50,147 --> 00:01:57,434
+00:01:53,759 --> 00:02:01,046
 This is not a sprint for me. It is a mission: make the physical world provable. Judge me by the code, not by the pitch.
 
 23
-00:01:59,677 --> 00:02:07,983
+00:02:03,289 --> 00:02:11,595
 So here is my ask. I need one real pilot: a solar site, a meter, an operator — anyone whose data should be provable.
 
 24
-00:02:08,263 --> 00:02:11,888
+00:02:11,875 --> 00:02:15,500
 And I need mentors who have taken infrastructure like this to mainnet.
 
 25
-00:02:12,168 --> 00:02:16,757
+00:02:15,780 --> 00:02:20,369
 The protocol is open, the devnet is live, and the code is public.
 
 26
-00:02:17,037 --> 00:02:19,211
+00:02:20,649 --> 00:02:22,823
 If that is you, let us talk.
 
 27
-00:02:19,961 --> 00:02:23,561
+00:02:23,573 --> 00:02:27,173
 ENRG — verification infrastructure for the physical world. github.com/AntonGrid/ENRG

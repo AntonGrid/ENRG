@@ -15,7 +15,7 @@ cryptographically provable on Solana — we sell trust, not tokens.
 
 **See it working (no setup required):**
 
-- **Project pitch — 2:24, English, this repository:**
+- **Project pitch — 2:27, English, this repository:**
   [`demo/pitch-video/ENRG_pitch.mp4`](./demo/pitch-video/ENRG_pitch.mp4)
   (captions: `ENRG_pitch.srt`; the script and timings are in
   `demo/pitch-video/narration.md`; rebuild it with
@@ -31,10 +31,28 @@ cryptographically provable on Solana — we sell trust, not tokens.
 
 | Claim | Evidence in this repository |
 |---|---|
-| Hardware root of trust | `firmware/` — ESP32 + NXP SE050, non-extractable Ed25519 key; device identity *is* the signing key (ADR-0001/0007) |
+| Hardware root of trust | `firmware/` — ESP32 signs every proof with Ed25519, and the device identity *is* the signing key (ADR-0001). Key storage has three tiers (ADR-0007): NVS (development), ATECC608A seed vault, **NXP SE050 with on-chip Ed25519 signing** — the tier the `mainnet` build refuses to compile without |
 | One oracle cannot mint | `programs/enrg-mvp` — ≥2 staked oracles vote on a canonical SHA-256 hash, a contradictory vote is a slashing event, minting is gated by a *finalised* attestation (ADR-0006) |
 | Anyone can re-verify | Every proof, attestation, policy decision and mint is an inspectable Solana account |
-| It is real code, not slides | 58 on-chain instructions · 272 tests green: 125 Rust (`cargo test -p enrg-mvp`), 112 Node (`npm test`), 21 Python (`pytest -q -p no:anchorpy`), 14 Foundry (`cd onchain && forge test`) |
+| It is real code, not slides | 58 on-chain instructions · 276 tests green: 125 Rust (`cargo test -p enrg-mvp`), 112 Node (`npm test`), 21 Python (`pytest -q -p no:anchorpy`), 18 Foundry (`cd onchain && forge test`) |
+
+## What runs today — and what is still pending
+
+Written down on 2026-09-21 so that nobody has to guess which claim is
+production-grade and which is a reference implementation still waiting for
+hardware. If a statement here disagrees with the code, the code wins and this
+table is wrong.
+
+| Claim | Status today | Evidence, and the limit |
+|---|---|---|
+| 58 on-chain instructions, deployed on devnet | ✅ runs | `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb`; `solana program show` |
+| Minting requires a *finalised* attestation; a contradictory vote slashes | ✅ runs | mint tx `2ANc1Lf3…KT6`, slot `500485022`, `err: None` |
+| ≥2 staked oracles attest the same hash | ✅ runs | two oracle **instances with separate keys** (`HC8Was…`, `Hm7Ym7…`) report through `GET /api/v1/oracles`. Both are run by me today — independence between *operators* is the next step (`docs/MULTI-ORACLE-ROLLOUT.md`), not a claim |
+| The device signs readings with Ed25519 and the program verifies it through the precompile | ✅ runs | the devnet proofs were submitted by a device **keypair** on the host (`scripts/submit-proof-to-oracle.js`) |
+| The key lives inside an NXP SE050 and never leaves the chip | ⚠️ **code complete, no chip flashed yet** | `ENRG_USE_SE050` path, `platformio.ini` envs `esp32dev-se050` / `esp32dev-mainnet` (the mainnet env fails the build without SE050), bring-up checklist in `firmware/esp32_proof_sender/SE050-HARDWARE-SIGNING.md`. The default build still signs in software with the seed in NVS |
+| A physical ESP32 has sent a proof to devnet | ⚠️ **not yet** | this is the next milestone; no bring-up log exists in this repository |
+| AI layer (forecast, anomaly, federated rounds) | 🟡 sibling repo, currently a fallback | [ENRG-AI](https://github.com/AntonGrid/ENRG-AI) publishes signed `assessments.json`; the live file reports `"source": "offline-fallback"` (Holt trend, not a trained round). The on-chain `commit_contribution` (proof-of-intelligence) instruction exists and is not yet used in production |
+| 276 tests green | ✅ measured 2026-09-21 | 125 Rust / 112 Node / 21 Python / 18 Foundry. Note: the Python suite is mock-level **simulation** of the tokenomics math, not a verification of the Rust implementation, and the Foundry suite covers the EVM attestation sink, not the Solana program |
 
 ## Verify it yourself in two minutes
 
@@ -72,7 +90,7 @@ devnet (`docs/assets/`, rendered from `demo/pitch-video/ENRG_pitch.mp4`):
 
 ![The trust path as drawn in the pitch video](docs/assets/pitch-pipeline.png)
 
-![What is done today: 58 instructions, 272 tests, a devnet mint](docs/assets/pitch-proof.png)
+![What is done today: 58 instructions, 276 tests, a devnet mint](docs/assets/pitch-proof.png)
 
 ---
 

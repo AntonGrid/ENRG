@@ -27,27 +27,27 @@
 
 ## 03 / 06   THE SOLUTION
 
-*32.2s · "Axis Protocol — an open standard for trust"*
+*35.0s · "Axis Protocol — an open standard for trust"*
 
 | t | voice-over | on screen |
 |---|---|---|
 |   35.6s | Axis Protocol closes that gap: identity, proof, attestation, policy. | Identity · Proof · Attestation · Policy |
-|   41.8s | On the device, an Ed25519 key inside an NXP SE050 secure element signs every reading — the device itself is the signature. | SE050 signs — the key never leaves the chip |
-|   53.6s | Then at least two staked oracles vote on the same canonical hash. | At least two independent, staked oracles |
-|   58.3s | A contradictory vote is a slashing event, and minting waits for a finalised attestation. | Contradiction = slashing; mint waits for finalisation |
-|   64.0s | One compromised oracle cannot create value. | One compromised oracle cannot create value |
+|   41.6s | Every reading is signed on the device with Ed25519 — at the tier mainnet requires, that key lives inside an NXP SE050 and never leaves the chip, and the build refuses to compile without it. | Ed25519 on the device · mainnet build requires SE050 |
+|   56.6s | Then at least two staked oracles vote on the same canonical hash. | At least two staked oracles — separate keys |
+|   61.0s | A contradictory vote is a slashing event, and minting waits for a finalised attestation. | Contradiction = slashing; mint waits for finalisation |
+|   66.8s | One compromised oracle cannot create value. | One compromised oracle cannot create value |
 
 ## 04 / 06   WHAT IS DONE
 
-*26.8s · "Not a slide deck — it runs"*
+*27.7s · "Not a slide deck — it runs"*
 
 | t | voice-over | on screen |
 |---|---|---|
-|   67.9s | Fifty-eight on-chain instructions in Rust. | 58 on-chain instructions |
-|   71.1s | Two hundred and seventy-two tests pass: Rust, Node, Python and Foundry. | 272 tests green |
-|   76.9s | The full stack is live on devnet today — ESP32 firmware, secure element, two independent oracles. | Live on devnet — 2 independent oracles |
-|   84.1s | A finalised attestation, and a mint that only executed because the gate said required equals true. | Finalised attestation, then mint through the gate |
-|   90.5s | Every proof and mint is public — verify it yourself. | Every proof and mint is public — verify it yourself |
+|   70.6s | Fifty-eight on-chain instructions in Rust. | 58 on-chain instructions |
+|   73.9s | Two hundred and seventy-six tests pass: Rust, Node, Python and Foundry. | 276 tests green |
+|   79.6s | The protocol is live on devnet today — two staked oracle instances, and a mint that only passed because the quorum was finalised. | Live on devnet — 2 staked oracle instances |
+|   87.7s | A finalised attestation, and a mint that only executed because the gate said required equals true. | Finalised attestation, then mint through the gate |
+|   94.1s | Every proof and mint is public — verify it yourself. | Every proof and mint is public — verify it yourself |
 
 ## 05 / 06   WHY ME
 
@@ -55,10 +55,10 @@
 
 | t | voice-over | on screen |
 |---|---|---|
-|   94.7s | Why me? I have no degree, no team and no funding. | No degree · no team · no funding |
-|   98.8s | Four months of nights and rotations off. I wrote the firmware, the contracts, the oracles and the AI layer myself. | Firmware, contracts, oracles, AI — one person |
-|  106.5s | I got tired of watching physical data be trusted on faith. | Tired of physical data trusted on faith |
-|  110.1s | This is not a sprint for me. It is a mission: make the physical world provable. Judge me by the code, not by the pitch. | A mission, not a sprint — judge me by the code |
+|   98.3s | Why me? I have no degree, no team and no funding. | No degree · no team · no funding |
+|  102.5s | Four months of nights and rotations off. I wrote the firmware, the contracts, the oracles and the AI layer myself. | Firmware, contracts, oracles, AI — one person |
+|  110.1s | I got tired of watching physical data be trusted on faith. | Tired of physical data trusted on faith |
+|  113.8s | This is not a sprint for me. It is a mission: make the physical world provable. Judge me by the code, not by the pitch. | A mission, not a sprint — judge me by the code |
 
 ## 06 / 06   THE ASK
 
@@ -66,15 +66,15 @@
 
 | t | voice-over | on screen |
 |---|---|---|
-|  119.7s | So here is my ask. I need one real pilot: a solar site, a meter, an operator — anyone whose data should be provable. | A real site with a meter — solar, wind, or a lab bench |
-|  128.3s | And I need mentors who have taken infrastructure like this to mainnet. | Mentors who took infrastructure to mainnet |
-|  132.2s | The protocol is open, the devnet is live, and the code is public. | Open protocol · live devnet · public code |
-|  137.0s | If that is you, let us talk. | github.com/AntonGrid/ENRG |
+|  123.3s | So here is my ask. I need one real pilot: a solar site, a meter, an operator — anyone whose data should be provable. | A real site with a meter — solar, wind, or a lab bench |
+|  131.9s | And I need mentors who have taken infrastructure like this to mainnet. | Mentors who took infrastructure to mainnet |
+|  135.8s | The protocol is open, the devnet is live, and the code is public. | Open protocol · live devnet · public code |
+|  140.6s | If that is you, let us talk. | github.com/AntonGrid/ENRG |
 
 ## end card
 
 *3.6s · logo, tagline, repository*
 
 
-**Total: 143.6s (2:23.6)**
+**Total: 147.2s (2:27.2)**
 

@@ -33,8 +33,8 @@ in real time, verification still runs on annual manual audits.
 
 | Layer | What we build | Why it is hard to fake |
 |---|---|---|
-| **Hardware root of trust** | ESP32 firmware signs proofs with an Ed25519 key held in an **NXP SE050 secure element** (non-extractable) | The key cannot be extracted even with full device access; device identity is the signing key (ADR-0001) |
-| **Oracle quorum + economics** | ≥2 independent, **staked** oracles vote on a canonical proof hash (`SHA-256`); contradictory votes trigger **slashing**; minting requires a **finalized attestation** (`required=true`) | A single compromised oracle cannot mint value; economic disincentive for fraud (ADR-0006, P3-6) |
+| **Hardware root of trust** | The device signs every proof with Ed25519. Key storage has three tiers (ADR-0007): NVS (dev), ATECC608A seed vault, **NXP SE050 with on-chip signing** — required by the mainnet build, which fails to compile without it | Device identity *is* the signing key (ADR-0001). Honest status 2026-09-21: the SE050 path is implemented and still awaits bring-up on a real chip |
+| **Oracle quorum + economics** | ≥2 **staked** oracles — separate keys, separate instances — vote on a canonical proof hash (`SHA-256`); contradictory votes trigger **slashing**; minting requires a **finalized attestation** (`required=true`) | A single compromised oracle cannot mint value; economic disincentive for fraud (ADR-0006, P3-6). Operator independence is the next milestone, not a claim |
 | **On-chain audit trail** | Every proof, attestation, policy decision and reward is a Solana account with a public, inspectable history | Anyone can independently re-verify any claim without trusting us |
 
 ## 4. What we sell (segments / products)
@@ -69,7 +69,7 @@ in real time, verification still runs on annual manual audits.
 | Emission | Dynamic, tied to real energy (energy-per-token, self-adjusting) | Fixed rate (e.g. 1 token/kWh) |
 | Device reputation | **ERS** (tiers, limits, quarantine) on-chain | None or off-chain |
 | AI layer | **Federated learning** on device data + signed AI signals | None |
-| Audit surface | 58 on-chain instructions, 272 tests, public specs/ADR | Opaque off-chain logic |
+| Audit surface | 58 on-chain instructions, 276 tests, public specs/ADR | Opaque off-chain logic |
 
 ## 7. Competitive landscape — vs concrete players
 
@@ -114,9 +114,9 @@ The deciding factor is therefore the **first live pilot**, not the feature list.
 - **Live on devnet**: two independent oracles staked, voted and finalized a
   real attestation; a full device lifecycle (register→claim→activate→mint)
   minted with the quorum gate **required=true**; rewards claimed idempotently;
-- **Testing**: 272 tests green — 125 Rust (`cargo test -p enrg-mvp`),
+- **Testing**: 276 tests green — 125 Rust (`cargo test -p enrg-mvp`),
   112 Node (`npm test`), 21 Python (`pytest -q -p no:anchorpy`),
-  14 Foundry (`cd onchain && forge test`);
+  18 Foundry (`cd onchain && forge test`);
 - 300+ commits, 10 ADRs, protocol specification v8.0
   (`docs/ENRG_Technical_Specification_v8.0.md`, 960 lines), 2 security audits
   documented, key-rotation + multisig governance in place.

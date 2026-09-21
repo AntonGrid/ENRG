@@ -183,4 +183,77 @@ contract EnrgOracleAttestationTest is Test {
         vm.expectRevert(EnrgOracleAttestation.AlreadyVoted.selector);
         enrg.submitAttestation(attId, devId, true, 1000, issuedAt);
     }
+
+    // ── Execution rules: no schedule, no replay, permissionless after timelock ──
+
+    function testExecuteWithoutScheduleReverts() public {
+        vm.expectRevert(EnrgOracleAttestation.NoPendingUpdate.selector);
+        enrg.executeSetTrustedOracle(oracle2, true);
+    }
+
+    function testScheduledChangeCannotBeReplayed() public {
+        vm.prank(owner);
+        enrg.scheduleSetTrustedOracle(oracle2, true);
+        vm.warp(block.timestamp + enrg.TIMELOCK() + 1);
+        enrg.executeSetTrustedOracle(oracle2, true);
+        assertTrue(enrg.trustedOracles(oracle2));
+
+        // The pending entry is consumed: a second execution must revert instead
+        // of silently re-applying a change that was already made.
+        vm.expectRevert(EnrgOracleAttestation.NoPendingUpdate.selector);
+        enrg.executeSetTrustedOracle(oracle2, true);
+    }
+
+    function testExecutionIsPermissionlessAfterTimelock() public {
+        vm.prank(owner);
+        enrg.scheduleSetTrustedOracle(oracle2, true);
+        vm.warp(block.timestamp + enrg.TIMELOCK() + 1);
+
+        // Scheduling is owner-only; execution is not, so a scheduled change
+        // cannot get stuck if the owner disappears.
+        vm.prank(stranger);
+        enrg.executeSetTrustedOracle(oracle2, true);
+        assertTrue(enrg.trustedOracles(oracle2));
+    }
+
+    // ── Trusted-set cap (MAX_ORACLES) and its counter ──────────────────────
+
+    function testOracleSetIsCappedAndCountIsTracked() public {
+        assertEq(enrg.oracleCount(), 1, "setUp trusts exactly one oracle");
+
+        for (uint160 i = 0; i < uint160(enrg.MAX_ORACLES() - 1); i++) {
+            _addOracle(address(uint160(0x5000) + i));
+        }
+        assertEq(enrg.oracleCount(), enrg.MAX_ORACLES());
+
+        // One more: scheduling succeeds, execution hits the cap.
+        address over = address(0x9999);
+        vm.prank(owner);
+        enrg.scheduleSetTrustedOracle(over, true);
+        vm.warp(block.timestamp + enrg.TIMELOCK() + 1);
+        vm.expectRevert(EnrgOracleAttestation.OracleLimitReached.selector);
+        enrg.executeSetTrustedOracle(over, true);
+    }
+
+    function testRemovingOracleFreesACapSlot() public {
+        _addOracle(oracle2);
+        assertEq(enrg.oracleCount(), 2);
+
+        vm.prank(owner);
+        enrg.scheduleSetTrustedOracle(oracle1, false);
+        vm.warp(block.timestamp + enrg.TIMELOCK() + 1);
+        enrg.executeSetTrustedOracle(oracle1, false);
+
+        assertFalse(enrg.trustedOracles(oracle1));
+        assertEq(enrg.oracleCount(), 1, "untrusting frees a slot");
+    }
+
+    function testThresholdAboveMaxReverts() public {
+        // NOTE: read the constant *before* expectRevert — an external getter in
+        // the argument list would itself become the "next call".
+        uint256 tooBig = enrg.MAX_THRESHOLD() + 1;
+        vm.prank(owner);
+        vm.expectRevert(EnrgOracleAttestation.InvalidThreshold.selector);
+        enrg.scheduleSetThreshold(tooBig);
+    }
 }

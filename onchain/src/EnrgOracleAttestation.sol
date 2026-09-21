@@ -45,6 +45,12 @@ contract EnrgOracleAttestation {
     /// @notice minimum distinct-oracle confirmations to finalize an attestation
     uint256 public oracleThreshold;
 
+    /// @notice number of oracles currently trusted (bounded by MAX_ORACLES).
+    ///         Kept as an explicit counter so the trusted set cannot grow past
+    ///         the cap without a deliberate, visible governance decision
+    ///         (audit P0-4: the cap used to be declared but never enforced).
+    uint256 public oracleCount;
+
     uint256 public constant TIMELOCK = 2 days;
     uint256 public constant MAX_ORACLES = 20;
     uint256 public constant MAX_THRESHOLD = 10;
@@ -95,12 +101,24 @@ contract EnrgOracleAttestation {
     }
 
     /// @notice Execute a previously scheduled trust change after the timelock.
+    /// @dev Scheduling is owner-only, execution is permissionless once the
+    ///      timelock has elapsed (so a scheduled change cannot get stuck if the
+    ///      owner disappears). The trusted set is capped at MAX_ORACLES.
     function executeSetTrustedOracle(address oracle, bool trusted) external {
         bytes32 key = keccak256(abi.encode(oracle, trusted));
         uint256 executeAt = pendingOracleUpdateAt[key];
         if (executeAt == 0) revert NoPendingUpdate();
         if (block.timestamp < executeAt) revert TimelockNotElapsed();
         delete pendingOracleUpdateAt[key];
+
+        bool wasTrusted = trustedOracles[oracle];
+        if (trusted && !wasTrusted) {
+            if (oracleCount >= MAX_ORACLES) revert OracleLimitReached();
+            oracleCount += 1;
+        } else if (!trusted && wasTrusted) {
+            oracleCount -= 1;
+        }
+
         trustedOracles[oracle] = trusted;
         emit OracleUpdated(oracle, trusted);
     }

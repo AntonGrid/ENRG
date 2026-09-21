@@ -16,7 +16,7 @@
 | Name | "Axis Protocol — Cryptographic Trust for DePIN" | Keep the substance; consider leading with **ENRG** — another project on the platform is already called "Axis" (`axis-1`, a crypto index), which invites confusion |
 | Tag | `DePIN` | Keep — matches where we actually compete |
 | About the project | One sentence, no numbers | Replace with section 2 |
-| **Project pitch** | `youtu.be/qrgdc1X9kDU` — "ENRG Protocol — Live Demo on Solana Devnet" | Pitch **rendered** and committed: `demo/pitch-video/ENRG_pitch.mp4` (2:24, 1080p, rebuilt 2026-09-21 so the film says 58 instructions / 272 tests like the docs). Upload it, set it here, and keep the devnet walkthrough below. See `demo/pitch-video/README.md` |
+| **Project pitch** | `youtu.be/qrgdc1X9kDU` — "ENRG Protocol — Live Demo on Solana Devnet" | Pitch **rendered** and committed: `demo/pitch-video/ENRG_pitch.mp4` (2:27, 1080p, rebuilt 2026-09-21 so the film says 58 instructions / 276 tests like the docs, and does not claim SE050 bring-up that has not happened yet). Upload it, set it here, and keep the devnet walkthrough below. See `demo/pitch-video/README.md` |
 | **Technical demo** | the *same* link as the pitch | Keep this one here; never reuse one link for both fields |
 | GitHub · Source code | `AntonGrid/ENRG` | ✅ fixed on 2026-09-18 |
 | Website / X | `enrg.network` · `x.com/enrg_protocol` | Keep |
@@ -26,27 +26,29 @@
 
 ## 2. "About the project" (paste)
 
-**Short version (~330 chars):**
+**Short version (~400 chars):**
 
 > ENRG is verification infrastructure that makes physical-world data provable on
-> Solana. Devices sign readings with a non-extractable SE050 key; ≥2 staked
-> oracles must confirm the same hash before anything is minted. Live on devnet:
-> 58 instructions, 272 tests, an inspectable audit trail. Not another solar
-> token — the trust layer energy DePINs build on.
+> Solana. Every reading is signed by the device itself (Ed25519) — at the tier
+> mainnet requires, that key lives inside an NXP SE050; ≥2 staked oracles must
+> confirm the same hash before anything is minted. Live on devnet: 58
+> instructions, 276 tests, an inspectable audit trail. Not another solar token —
+> the trust layer energy DePINs build on.
 
-**Long version (~800 chars):**
+**Long version (~900 chars):**
 
 > ENRG is verification infrastructure that makes physical-world data
 > cryptographically provable on Solana — we sell trust, not tokens.
 >
-> Devices sign every reading with an Ed25519 key held inside an NXP SE050 secure
-> element (non-extractable), so a device cannot be cloned or faked. At least two
-> independent, staked oracles vote on the canonical SHA-256 hash of each report;
-> a contradictory vote is a slashing event, and minting stays blocked until the
-> attestation is finalised.
+> Devices sign every reading with their own Ed25519 key, so a device cannot be
+> cloned or faked; at the tier mainnet requires, that key lives inside an NXP
+> SE050 and never leaves the chip (implemented, bring-up pending). At least two
+> staked oracles — separate keys, separate instances — vote on the canonical
+> SHA-256 hash of each report; a contradictory vote is a slashing event, and
+> minting stays blocked until the attestation is finalised.
 >
-> Live on devnet: 58 on-chain instructions, 272 tests green (125 Rust / 112 Node
-> / 21 Python / 14 Foundry), a complete device lifecycle minted through the
+> Live on devnet: 58 on-chain instructions, 276 tests green (125 Rust / 112 Node
+> / 21 Python / 18 Foundry), a complete device lifecycle minted through the
 > quorum gate, and an audit trail anyone can re-verify independently.
 >
 > Beyond energy, the same oracle + attestation module is reusable by any DePIN
@@ -55,9 +57,10 @@
 ## 3. Team roles (paste)
 
 - **Anton Gulda — Founder & Protocol Architect.** Anchor/Rust contracts
-  (58 instructions), multi-oracle quorum with slashing, ESP32 + SE050 firmware,
-  ENRG-AI (federated learning + anomaly detection), protocol specification and
-  ADRs.
+  (58 instructions), multi-oracle quorum with slashing, ESP32 firmware including
+  the SE050 signing path, the AI layer in the sibling repository
+  (ENRG-AI: forecasting, anomaly detection, federated-round tooling), protocol
+  specification and ADRs.
 - **Vitaly Arteev — ⟨role⟩.** Replace with his real contribution (e.g. product /
   frontend: Axis-connect PWA, `enrg.network`, device onboarding UX, demo
   production). A teammate with no role reads as unfilled.
@@ -85,8 +88,8 @@ Each update must carry **one number and one link**. Drafts:
 **Filled example — the first update, ready to post (2026-09-18):**
 
 > Quorum gate `required=true` is live on devnet and just minted again: a fresh
-> device went `register → claim → provision → activate`, two independent staked
-> oracles (`HC8Was…`, `Hm7Ym7…`) voted on the same canonical SHA-256 hash, the
+> device went `register → claim → provision → activate`, two staked oracle
+> instances with separate keys (`HC8Was…`, `Hm7Ym7…`) voted on the same canonical
 > attestation finalised and `mint_energy` executed —
 > `2ANc1Lf3az4utCDRw9A7Lfp7z2e7oY2kseJoW6k6U9gcq9uCbTMR1gLRY4M8Ctb7hJfQMm3iuHYHacPQRQiXGKT6`
 > (confirmed, slot 500485022). Metrics: `enrg-oracle.onrender.com/api/v1/stats` ·
@@ -118,7 +121,7 @@ How to reproduce: `docs/PILOT-REFRESH.md`.
 - [ ] About replaced (section 2); team roles filled (section 3)
 - [ ] GitHub link → `AntonGrid/ENRG` ✅; Axis-protocol cited in the About text as the standard
 - [x] README "Start here" block present, and it now links the pitch inside the repository instead of the missing `demo/ENRG_live_demo.mp4`; LICENSE consistent; submodules documented
-- [x] Numbers in the README, the submission pack and the film re-verified against the code and the four test suites (58 instructions, 272 tests, mint in slot 500485022)
+- [x] Numbers in the README, the submission pack and the film re-verified against the code and the four test suites (58 instructions, 276 tests, mint in slot 500485022)
 - [ ] GitHub *About* replaced from section 8 (the current description still says "buyback & burn")
 - [ ] ≥3 public updates published during the window
 - [ ] Public Goods entry prepared (section 6)
@@ -154,7 +157,8 @@ forbids.
 **Description** (replace):
 
 > Verification infrastructure that makes physical-world data provable on Solana.
-> Devices sign readings with a non-extractable SE050 key; ≥2 staked oracles must
+> Every reading is signed by the device itself (Ed25519; the SE050 tier is what
+> mainnet requires) and ≥2 staked oracles must
 > confirm the same hash before anything is minted. Live on devnet. We sell trust,
 > not tokens.
 

@@ -41,18 +41,23 @@ near-term income, and use the first grant as a reference for #3–#5.
 > single-oracle arbitrariness in DePINs.
 >
 > **Solution (3 anchors):**
-> 1. Hardware root of trust — non-extractable Ed25519 keys, device identity = signing key;
-> 2. Oracle quorum + economics — ≥2 staked oracles, canonical SHA-256 vote,
->    slashing on contradiction, mint gated by finalized attestation;
+> 1. Hardware root of trust — per-device Ed25519 signatures; three key-storage tiers
+>    (NVS / ATECC608A / **SE050 on-chip signing**, the tier the mainnet build requires);
+>    device identity = signing key;
+> 2. Oracle quorum + economics — ≥2 staked oracles (separate keys, separate
+>    instances), canonical SHA-256 vote, slashing on contradiction, mint gated by
+>    finalized attestation;
 > 3. On-chain audit trail — every proof/attestation/policy is an inspectable
 >    Solana account.
 >
 > **Proof points (live):**
-> - Full stack: ESP32+SE050 firmware → oracles → Solana contract (58 instructions) → AI layer;
+> - Full stack: ESP32 firmware (the SE050 signing path is implemented; bring-up on
+>   hardware pending) → oracles → Solana contract (58 instructions) → AI layer
+>   (sibling repo ENRG-AI, currently a forecast fallback);
 > - Devnet live: 2 oracles staked & voted, attestation finalized, gated mint
 >   executed, rewards claimed idempotently;
-> - Quality: 272 tests green (125 Rust / 112 Node / 21 Python / 14 Foundry), 300+ commits, 10 ADRs,
->   protocol spec v1.0, documented security audits, multisig governance.
+> - Quality: 276 tests green (125 Rust / 112 Node / 21 Python / 18 Foundry), 300+ commits, 10 ADRs,
+>   protocol specification v8.0, documented security audits, multisig governance.
 >
 > **Milestones (proposed):**
 > - M1 (month 1): mainnet deployment + public explorer/dashboard;
@@ -76,7 +81,7 @@ Short version of `docs/POSITIONING.md` to paste into messages/emails:
 > a finalized-quorum mint gate make fraud economically irrational. Use cases:
 > audit, REC/GO and carbon-credit verification, ESG assurance, DePIN trust.
 > Live demo on devnet (2-oracle quorum + gated mint executed); Solana-native
-> (58 instructions); 272 tests green (125 Rust / 112 Node / 21 Python / 14 Foundry). More:
+> (58 instructions); 276 tests green (125 Rust / 112 Node / 21 Python / 18 Foundry). More:
 > [repo links].
 
 ## 5. Action items (this week)

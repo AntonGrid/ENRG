@@ -17,7 +17,9 @@
     "scene_pad": 0.75,
     "fade": 0.45,
     "endcard": 3.6,
-    "endcard_stats": "devnet HkuC3FT…  ·  58 instructions  ·  272 tests"
+    "endcard_stats": "devnet HkuC3FT…  ·  58 instructions  ·  276 tests",
+    "pipeline_stages": ["DEVICE · Ed25519", "PROOF", "ORACLE QUORUM", "ATTESTATION", "MINT"],
+    "numbers_footer": ["mint 2ANc1Lf3az4utCDRw9A7Lfp7z2e7oY2kseJoW6k6U9gcq9uCbTMR1gLRY4M8Ctb7hJfQMm3iuHYHacPQRQiXGKT6", "slot 500485022  ·  devnet  ·  re-verified 2026-09-21"]
   },
   "scenes": [
     {
@@ -89,13 +91,13 @@
           "stage": 0
         },
         {
-          "vo": "On the device, an Ed25519 key inside an NXP SE050 secure element signs every reading — the device itself is the signature.",
-          "bullet": "SE050 signs — the key never leaves the chip",
+          "vo": "Every reading is signed on the device with Ed25519 — at the tier mainnet requires, that key lives inside an NXP SE050 and never leaves the chip, and the build refuses to compile without it.",
+          "bullet": "Ed25519 on the device · mainnet build requires SE050",
           "stage": 1
         },
         {
           "vo": "Then at least two staked oracles vote on the same canonical hash.",
-          "bullet": "At least two independent, staked oracles",
+          "bullet": "At least two staked oracles — separate keys",
           "stage": 2
         },
         {
@@ -126,14 +128,14 @@
           "bignum": "58"
         },
         {
-          "vo": "Two hundred and seventy-two tests pass: Rust, Node, Python and Foundry.",
-          "bullet": "272 tests green",
+          "vo": "Two hundred and seventy-six tests pass: Rust, Node, Python and Foundry.",
+          "bullet": "276 tests green",
           "kind": "number",
-          "bignum": "272"
+          "bignum": "276"
         },
         {
-          "vo": "The full stack is live on devnet today — ESP32 firmware, secure element, two independent oracles.",
-          "bullet": "Live on devnet — 2 independent oracles",
+          "vo": "The protocol is live on devnet today — two staked oracle instances, and a mint that only passed because the quorum was finalised.",
+          "bullet": "Live on devnet — 2 staked oracle instances",
           "kind": "number",
           "bignum": "2"
         },
