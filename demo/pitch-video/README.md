@@ -14,7 +14,7 @@ and must stay in the Colosseum *Technical demo* field; this file goes into
 | 0:00–0:15 | Who I am — Anton, founder, Vladimir (Russia), rotational shifts at an oil field | kicker + name card |
 | 0:15–0:35 | The problem — physical data is not provable: editable exports, double counting, audits, greenwashing | mock utility export with the edited cell struck through, `GREENWASHING` stamp |
 | 0:35–1:07 | The solution — Axis Protocol: identity · proof · attestation · policy; SE050 signs on the device; ≥2 staked oracles; contradiction = slashing; mint only after finalisation | pipeline `SE050 DEVICE → PROOF → ORACLE QUORUM → ATTESTATION → MINT` lights up stage by stage |
-| 1:07–1:34 | What is done — 55 on-chain instructions, 266 tests, live devnet, 2 oracles, finalised attestation, mint through the gate | big counters + the real mint signature and slot |
+| 1:07–1:34 | What is done — 58 on-chain instructions, 272 tests, live devnet, 2 oracles, finalised attestation, mint through the gate | big counters + the real mint signature and slot |
 | 1:34–1:59 | Why me — self-taught, solo, four months, a mission rather than a sprint | timeline `day 0 → month 4 · today` |
 | 1:59–2:20 | The ask — one real pilot (a site with a meter) and mentors who have shipped infra to mainnet | contact block |
 | 2:20–2:23 | End card — logo, tagline, repository | — |
