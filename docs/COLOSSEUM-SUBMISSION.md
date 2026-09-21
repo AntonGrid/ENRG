@@ -1,6 +1,6 @@
 # ENRG — Colosseum Submission Pack
 
-> **Status:** Active (2026-09-18)
+> **Status:** Active (2026-09-21)
 > **Purpose:** the exact text to paste into the Colosseum project card
 > `colosseum.com/arena/projects/axis-protocol-cryptographic-trust-for-depin`, a
 > checklist of what still blocks points, and drafts for the public updates.
@@ -16,7 +16,7 @@
 | Name | "Axis Protocol — Cryptographic Trust for DePIN" | Keep the substance; consider leading with **ENRG** — another project on the platform is already called "Axis" (`axis-1`, a crypto index), which invites confusion |
 | Tag | `DePIN` | Keep — matches where we actually compete |
 | About the project | One sentence, no numbers | Replace with section 2 |
-| **Project pitch** | `youtu.be/qrgdc1X9kDU` — "ENRG Protocol — Live Demo on Solana Devnet" | Pitch **rendered** 2026-09-18: `demo/pitch-video/ENRG_pitch.mp4` (2:24, 1080p). Upload it, set it here, and keep the devnet walkthrough below. See `demo/pitch-video/README.md` |
+| **Project pitch** | `youtu.be/qrgdc1X9kDU` — "ENRG Protocol — Live Demo on Solana Devnet" | Pitch **rendered** and committed: `demo/pitch-video/ENRG_pitch.mp4` (2:24, 1080p, rebuilt 2026-09-21 so the film says 58 instructions / 272 tests like the docs). Upload it, set it here, and keep the devnet walkthrough below. See `demo/pitch-video/README.md` |
 | **Technical demo** | the *same* link as the pitch | Keep this one here; never reuse one link for both fields |
 | GitHub · Source code | `AntonGrid/ENRG` | ✅ fixed on 2026-09-18 |
 | Website / X | `enrg.network` · `x.com/enrg_protocol` | Keep |
@@ -117,7 +117,9 @@ How to reproduce: `docs/PILOT-REFRESH.md`.
 - [x] *Project pitch* rendered — `demo/pitch-video/ENRG_pitch.mp4` (2:24, 1920×1080, H.264/AAC, captions in `demo/pitch-video/ENRG_pitch.srt`); upload it and paste the link, then keep *Technical demo* = `qrgdc1X9kDU` (the two fields must not share a link)
 - [ ] About replaced (section 2); team roles filled (section 3)
 - [ ] GitHub link → `AntonGrid/ENRG` ✅; Axis-protocol cited in the About text as the standard
-- [ ] README "Start here" block present; LICENSE consistent; submodules documented
+- [x] README "Start here" block present, and it now links the pitch inside the repository instead of the missing `demo/ENRG_live_demo.mp4`; LICENSE consistent; submodules documented
+- [x] Numbers in the README, the submission pack and the film re-verified against the code and the four test suites (58 instructions, 272 tests, mint in slot 500485022)
+- [ ] GitHub *About* replaced from section 8 (the current description still says "buyback & burn")
 - [ ] ≥3 public updates published during the window
 - [ ] Public Goods entry prepared (section 6)
 - [ ] Profile in [The Grid](https://thegrid.id) created (ecosystem discoverability)
