@@ -11,6 +11,64 @@
 > Cross-references: `docs/ENRG_Technical_Specification_v8.0.md`,
 > `docs/protocol/blockchain/protocol-economics.md`, and this file.
 
+## 0. Latest audit pass — 2026-09-21
+
+A full read-only audit was run against the code and the live devnet deployment,
+and the repository was changed so that the claims match what actually executes.
+Everything below was **measured**, not inferred.
+
+**Fixed (P0):**
+
+- `/api/v1/device/:id/balance` and `/history` were stubs (`{ balance: 0 }` /
+  `[]`). They now read the on-chain owner's token account and the stored
+  proof/mint rows — measured: `EAv5ND…Fm2` → `0.000536313` SRC (`536313` atomic)
+  from ATA `F5TGjRA1…`. This also fixes the public dashboard, which displays
+  `balance.balance` from that endpoint.
+- `GET /api/v1/oracles` reported `count: 12` where only 2 keys ever did anything.
+  It now separates `counts.registered / with_proofs / idle` and explains
+  `unattributed_proofs` (rows written before the `oracle_id` column existed on
+  2026-08-30 — the real reason every oracle showed `minted: 0` while `/stats`
+  showed the real totals). `scripts/oracle-registry-audit.ts` audits and can
+  remove idle keys; on devnet that needs the **offline** `oracle_admin` key
+  `H3tXm4…`, so the script refuses without it.
+- Claims were corrected wherever they overstated reality: the SE050 tier is
+  reference code that **does not build yet**, no physical board has sent a proof,
+  the AI layer runs in `offline-fallback` mode, and the two oracle instances
+  share one operator. `README.md` now carries a
+  "what runs today — and what is still pending" table; the pitch film was
+  re-rendered (2:26.8) so the voice-over cannot claim a chip that was never
+  flashed.
+- Dead and never-run code moved to `legacy/` (FastAPI mock importing
+  `axis_core`, the eight "Part II" OpenAPI files, the unaccepted ADR-00X, the
+  first public artefacts, local-validator scripts), with `legacy/README.md`
+  explaining each item. The forge-init `Counter.sol` template is gone; `out/`
+  and `cache/` are no longer tracked.
+- `buyback.rs` keeps its on-chain name (an Anchor discriminator cannot change
+  without breaking the deployed program) but now states that it destroys supply
+  from a protocol-owned account rather than buying on a market.
+
+**Added (P1):**
+
+- `docs/openapi.json`, generated from the 16 real routes of `server.js`
+  (`npm run openapi`), with `npm run openapi:check` in CI — the eight mock specs
+  are replaced by one spec that cannot drift.
+- `sdk/` — JavaScript and Python reference clients, with the wire format pinned
+  by `sdk/vectors/wire_format.json` (generated from `policy.js`, asserted by both
+  suites byte for byte).
+- `scripts/oracle-registry-audit.ts`, `.env.example`, a working
+  `docker compose` path (`oracle/Dockerfile` no longer needs a local
+  `anchor build`; the stack mounts `./data`), and a memory-safe Foundry suite.
+- Tests: **295** (125 Rust / 122 Node / 30 Python / 18 Foundry), all green.
+
+**Blocked (needs a decision or hardware, not code):**
+
+| Item | Blocked by |
+|---|---|
+| SE050 / mainnet firmware tier | NXP Plug & Trust middleware is not vendored (it is not a PlatformIO package); no board with an SE050 has been connected |
+| Removing the 10 idle registry keys | `oracle_admin` is the offline deployer key `H3tXm4…` |
+| Live API serving the new `/balance` | the Render deployment has to pick up this commit (verified: the instance still answers the old shape) |
+| ATECC608A tier | `cryptoauthlib` needs an `atca_config.h` for the target board |
+
 ## 1. Overview
 
 **Implemented (in `programs/enrg-mvp`):**
@@ -24,7 +82,7 @@
 | Manifest registry / merkle verification | ✅ Implemented | `instructions/manifest_registry.rs`, `manifest_verification.rs`, `merkle_proof_verification.rs` |
 | Policy Engine (ADR-0003) | ✅ **Implemented** | `instructions/policy_engine.rs`, `state/policy.rs` (PolicyRegistry, PDA `[b"policy-registry"]`); `mint_energy` — the Verifier, executes policies |
 | OTA + secure updates (ADR-0008) | ✅ Implemented | Firmware v3: image signing with a **separate cold firmware key** (`ENRG_FIRMWARE_PUBKEY_HEX`), SHA-256, anti-rollback (NVS + optional eFuse); dual-bank A/B (`partitions_ota.csv`) + monotonic eFuse (`esp32dev-ota`); server: `FIRMWARE_SIGNING_KEY_PATH` |
-| Hardware device signing (ADR-0001/0007) | ⚠️ Partial | SE050 path (hardware Ed25519, `esp32dev-se050`) + a documented compromise (ATECC608A seed-vault, CPU signing) — `SE050-HARDWARE-SIGNING.md` |
+| Hardware device signing (ADR-0001/0007) | ⚠️ Partial | SE050 path (hardware Ed25519, `esp32dev-se050`) + a documented compromise (ATECC608A seed-vault, CPU signing) — `SE050-HARDWARE-SIGNING.md`. Measured 2026-09-21: only the `basic` tiers (`esp32dev`, `esp32dev-ota`) compile; `esp32dev-se050` / `-mainnet` stop at an explicit `#error` until NXP's middleware is vendored, `esp32dev-atecc` needs `atca_config.h` (build matrix in `firmware/esp32_proof_sender/README.md`) |
 | Multisig for `set_vault_authority` / timelock changes | ⏸️ Deferred (TODO(audit)) | `instructions/initialize.rs` |
 
 Emission principle: post-premine emission **only** through governance;
