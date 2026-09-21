@@ -224,14 +224,27 @@ cd programs && anchor build && cd ..
 ### Run Oracle
 
 ```bash
+# Option A — local, Node only (defaults to devnet, SQLite in ./enrg.db)
 node server.js
+
+# Option B — self-hosted stack (oracle + manifest registry) with Docker.
+# `.env.example` documents every variable the stack reads; copy and edit it.
+# NOTE: the Dockerfiles copy the tracked IDL (idls/enrg_mvp.json) — no local
+# `anchor build` is needed for the image (fixed 2026-09-21).
+cp .env.example .env
+docker compose up --build
 ```
+
+> `docker compose` needs the Compose v2 plugin (`docker-compose-plugin`). Free
+> hosting of the reference oracle is `https://enrg-oracle.onrender.com` — it is a
+> free instance, so the first request after idle can answer `503` while it wakes
+> (the SDKs in `sdk/` retry that automatically).
 
 ### Run Tests
 
 ```bash
-# Node suites (hermetic, 112 tests, no validator): policy, conformance, mint,
-# manifest, firmware, key rotation, oracle quorum, webcrypto, storage queue
+# Node suites (hermetic, 122 tests, no validator): policy, conformance, mint,
+# manifest, firmware, key rotation, oracle quorum, webcrypto, storage queue, SDK
 npm test
 
 # TypeScript suite that needs a live cluster (local validator or devnet)
@@ -240,8 +253,12 @@ npm run test:integration
 # Rust: program + integration tests (125 tests, incl. the policy conformance vectors)
 cargo test -p enrg-mvp
 
-# Python: tokenomics and mainnet-critical simulations
+# Python: tokenomics, mainnet-critical simulations and the Python SDK (30 tests)
 pytest -q -p no:anchorpy
+
+# The spec and the SDK vectors must match their sources of truth
+npm run openapi:check        # docs/openapi.json vs the 16 routes of server.js
+npm run wire:vectors:check   # sdk/vectors/wire_format.json vs policy.js
 
 # Foundry
 cd onchain && forge test

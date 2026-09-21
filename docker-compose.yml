@@ -26,9 +26,17 @@ services:
       MINT_MAX_ATTEMPTS: ${MINT_MAX_ATTEMPTS:-8}
       # P3-2 (audit 2026-08-30): mint only proofs >= this energy (Wh).
       MINT_MIN_ENERGY_WH: ${MINT_MIN_ENERGY_WH:-0}
+      # P1 (audit 2026-09-21): the SQLite file lives in the mounted ./data directory
+      # (see the volumes note below) — never point this at ./enrg.db, which is
+      # gitignored and would be created as a directory on a fresh clone.
+      ENRG_SQLITE_PATH: /app/data/enrg.db
     volumes:
       # Persistence of the SQLite store and OTA images (ADR-0008).
-      - ./enrg.db:/app/enrg.db
+      # P1 (audit 2026-09-21): mount a DIRECTORY, not ./enrg.db — that file is
+      # gitignored, so on a fresh clone Docker would silently create a *directory*
+      # called enrg.db and better-sqlite3 would fail at startup. `./data` exists
+      # in the repository (data/.gitkeep) and the path is set explicitly above.
+      - ./data:/app/data
       - ./firmware/updates:/app/firmware/updates
     restart: unless-stopped
 
