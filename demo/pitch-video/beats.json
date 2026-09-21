@@ -16,7 +16,8 @@
     "beat_gap": 0.28,
     "scene_pad": 0.75,
     "fade": 0.45,
-    "endcard": 3.6
+    "endcard": 3.6,
+    "endcard_stats": "devnet HkuC3FT…  ·  58 instructions  ·  272 tests"
   },
   "scenes": [
     {
@@ -119,16 +120,16 @@
       "decoration": "numbers",
       "beats": [
         {
-          "vo": "Fifty-five on-chain instructions in Rust.",
-          "bullet": "55 on-chain instructions",
+          "vo": "Fifty-eight on-chain instructions in Rust.",
+          "bullet": "58 on-chain instructions",
           "kind": "number",
-          "bignum": "55"
+          "bignum": "58"
         },
         {
-          "vo": "Two hundred and sixty-six tests pass: Rust, Node, Python and Foundry.",
-          "bullet": "266 tests green",
+          "vo": "Two hundred and seventy-two tests pass: Rust, Node, Python and Foundry.",
+          "bullet": "272 tests green",
           "kind": "number",
-          "bignum": "266"
+          "bignum": "272"
         },
         {
           "vo": "The full stack is live on devnet today — ESP32 firmware, secure element, two independent oracles.",

@@ -26,7 +26,7 @@ The exact rendered timings and every spoken line are in [`narration.md`](narrati
 
 | requirement | how it is met |
 |---|---|
-| 2:00–2:30 | **2:24.0** — 143.8 s of timeline, 143.93 s in the file (AAC tail) |
+| 2:00–2:30 | **2:23.6** — 143.6 s of timeline, 143.63 s in the file (AAC tail) |
 | 1920×1080, MP4 | H.264 (CRF 18, 30 fps) + AAC 192 kb/s, `+faststart` |
 | dark `#0B1020`, accent `#4FC3F7` | palette in `beats.json → meta`; every frame uses it |
 | ENRG logo in a corner | flat accent mark + wordmark, top left of every scene |
@@ -39,7 +39,7 @@ The exact rendered timings and every spoken line are in [`narration.md`](narrati
 
 | file | role |
 |---|---|
-| `beats.json` | the script: scenes, spoken lines, on-screen text, palette, timings |
+| `beats.json` | the script: scenes, spoken lines, on-screen text, palette, timings — and `meta.endcard_stats`, the single source for the closing numbers |
 | `render.py` | the pipeline: TTS → timings → ImageMagick backgrounds → ffmpeg scenes → concat → audio mix |
 | `extras.py` | regenerates `narration.md` and `ENRG_pitch.srt` from the cached audio |
 | `build.sh` | one-shot build (fetches piper + the voice, prepares the fonts) |
@@ -57,9 +57,12 @@ python3 demo/pitch-video/extras.py        # narration.md + captions
 
 Needs `ffmpeg`, ImageMagick (`convert`), `python3`, `curl`; no root. On the
 first run it downloads the piper binary and the `en_US-ryan-high` voice model
-(~120 MB) into `/tmp/assets` and builds the TTFs from the brand faces in the
-`landing` submodule (`@fontsource/space-grotesk`, `@fontsource/jetbrains-mono`),
-so the video uses exactly the brand fonts.
+(~120 MB) into `/tmp/assets` and builds the TTFs from the brand faces
+(`@fontsource/space-grotesk`, `@fontsource/jetbrains-mono`), so the video uses
+exactly the brand fonts. Those faces are read from the `landing` submodule when
+its `node_modules` is installed and otherwise fetched from the npm CDN mirror
+(`PITCH_FONTS_SRC`, `PITCH_FONTS_CDN`, `PITCH_FONTS_VER` override where they come
+from) — three woff2 files should not require an `npm ci` of the whole site.
 
 Change the script by editing `beats.json` and re-running; nothing else hard-codes
 the words, and re-running is deterministic for a given voice model.

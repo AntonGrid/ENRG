@@ -336,6 +336,7 @@ def build_scene(scene, beats, total, bg, audio):
 def endcard(scene_count):
     """Closing card: logo, tagline, repository."""
     png = os.path.join(WORK, "bg-end.png")
+    stats = META["endcard_stats"]
     lines = " ".join(f'-stroke "{GRID}" -strokewidth 1 -fill none -draw "line {x},0 {x},{H}"'
                      for x in range(120, W, 120))
     hlines = " ".join(f'-stroke "{GRID}" -strokewidth 1 -fill none -draw "line 0,{y} {W},{y}"'
@@ -347,7 +348,7 @@ def endcard(scene_count):
         f'-font "{F_HEAD}" -pointsize 96 -fill "{FG}" -gravity North -annotate +0+470 "ENRG" '
         f'-font "{F_BODY}" -pointsize 40 -fill "{MUTED}" -gravity North -annotate +0+600 "Verification infrastructure for the physical world" '
         f'-font "{F_MONO}" -pointsize 30 -fill "{ACCENT}" -gravity North -annotate +0+690 "github.com/AntonGrid/ENRG" '
-        f'-font "{F_MONO}" -pointsize 26 -fill "{MUTED}" -gravity North -annotate +0+745 "devnet HkuC3FT…  ·  55 instructions  ·  266 tests" '
+        f'-font "{F_MONO}" -pointsize 26 -fill "{MUTED}" -gravity North -annotate +0+745 "{stats}" '
         f'"{png}"')
     total = META["endcard"]
     out = os.path.join(WORK, "scene-end.mp4")

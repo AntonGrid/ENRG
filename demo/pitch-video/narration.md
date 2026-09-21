@@ -10,20 +10,20 @@
 | t | voice-over | on screen |
 |---|---|---|
 |    0.0s | Hi. I am Anton. | Anton Gulda — founder |
-|    5.5s | I work rotational shifts at an oil field, two weeks away from home at a time. | Rotational shifts at an oil field |
-|    7.3s | On my rotations off, I build verification infrastructure for the physical world, on Solana. | On rotations off: building on Solana |
+|    1.7s | I work rotational shifts at an oil field, two weeks away from home at a time. | Rotational shifts at an oil field |
+|    7.1s | On my rotations off, I build verification infrastructure for the physical world, on Solana. | On rotations off: building on Solana |
 
 ## 02 / 06   THE PROBLEM
 
-*20.3s · "Physical data is not provable"*
+*20.6s · "Physical data is not provable"*
 
 | t | voice-over | on screen |
 |---|---|---|
 |   15.0s | Every number that reaches a market starts as a claim somebody typed. | A kilowatt-hour, a carbon credit, an ESG report |
-|   19.4s | A spreadsheet cell can be edited. A portal can be inflated. | Spreadsheets can be edited |
-|   23.5s | And the same megawatt-hour can be sold twice. | The same MWh can be sold twice |
-|   26.5s | Markets move in milliseconds, while verification still runs on annual audits. | Verification still runs on annual audits |
-|   32.1s | The result has a name: greenwashing. | The result has a name |
+|   19.5s | A spreadsheet cell can be edited. A portal can be inflated. | Spreadsheets can be edited |
+|   23.6s | And the same megawatt-hour can be sold twice. | The same MWh can be sold twice |
+|   26.6s | Markets move in milliseconds, while verification still runs on annual audits. | Verification still runs on annual audits |
+|   32.2s | The result has a name: greenwashing. | The result has a name |
 
 ## 03 / 06   THE SOLUTION
 
@@ -31,23 +31,23 @@
 
 | t | voice-over | on screen |
 |---|---|---|
-|   35.3s | Axis Protocol closes that gap: identity, proof, attestation, policy. | Identity · Proof · Attestation · Policy |
+|   35.6s | Axis Protocol closes that gap: identity, proof, attestation, policy. | Identity · Proof · Attestation · Policy |
 |   41.8s | On the device, an Ed25519 key inside an NXP SE050 secure element signs every reading — the device itself is the signature. | SE050 signs — the key never leaves the chip |
 |   53.6s | Then at least two staked oracles vote on the same canonical hash. | At least two independent, staked oracles |
-|   57.8s | A contradictory vote is a slashing event, and minting waits for a finalised attestation. | Contradiction = slashing; mint waits for finalisation |
-|   63.7s | One compromised oracle cannot create value. | One compromised oracle cannot create value |
+|   58.3s | A contradictory vote is a slashing event, and minting waits for a finalised attestation. | Contradiction = slashing; mint waits for finalisation |
+|   64.0s | One compromised oracle cannot create value. | One compromised oracle cannot create value |
 
 ## 04 / 06   WHAT IS DONE
 
-*27.3s · "Not a slide deck — it runs"*
+*26.8s · "Not a slide deck — it runs"*
 
 | t | voice-over | on screen |
 |---|---|---|
-|   67.5s | Fifty-five on-chain instructions in Rust. | 55 on-chain instructions |
-|   70.9s | Two hundred and sixty-six tests pass: Rust, Node, Python and Foundry. | 266 tests green |
-|   76.8s | The full stack is live on devnet today — ESP32 firmware, secure element, two independent oracles. | Live on devnet — 2 independent oracles |
-|   84.5s | A finalised attestation, and a mint that only executed because the gate said required equals true. | Finalised attestation, then mint through the gate |
-|   90.8s | Every proof and mint is public — verify it yourself. | Every proof and mint is public — verify it yourself |
+|   67.9s | Fifty-eight on-chain instructions in Rust. | 58 on-chain instructions |
+|   71.1s | Two hundred and seventy-two tests pass: Rust, Node, Python and Foundry. | 272 tests green |
+|   76.9s | The full stack is live on devnet today — ESP32 firmware, secure element, two independent oracles. | Live on devnet — 2 independent oracles |
+|   84.1s | A finalised attestation, and a mint that only executed because the gate said required equals true. | Finalised attestation, then mint through the gate |
+|   90.5s | Every proof and mint is public — verify it yourself. | Every proof and mint is public — verify it yourself |
 
 ## 05 / 06   WHY ME
 
@@ -55,26 +55,26 @@
 
 | t | voice-over | on screen |
 |---|---|---|
-|   94.8s | Why me? I have no degree, no team and no funding. | No degree · no team · no funding |
-|   98.9s | Four months of nights and rotations off. I wrote the firmware, the contracts, the oracles and the AI layer myself. | Firmware, contracts, oracles, AI — one person |
-|  106.9s | I got tired of watching physical data be trusted on faith. | Tired of physical data trusted on faith |
-|  110.5s | This is not a sprint for me. It is a mission: make the physical world provable. Judge me by the code, not by the pitch. | A mission, not a sprint — judge me by the code |
+|   94.7s | Why me? I have no degree, no team and no funding. | No degree · no team · no funding |
+|   98.8s | Four months of nights and rotations off. I wrote the firmware, the contracts, the oracles and the AI layer myself. | Firmware, contracts, oracles, AI — one person |
+|  106.5s | I got tired of watching physical data be trusted on faith. | Tired of physical data trusted on faith |
+|  110.1s | This is not a sprint for me. It is a mission: make the physical world provable. Judge me by the code, not by the pitch. | A mission, not a sprint — judge me by the code |
 
 ## 06 / 06   THE ASK
 
-*20.4s · "One pilot partner. Mentors."*
+*20.3s · "One pilot partner. Mentors."*
 
 | t | voice-over | on screen |
 |---|---|---|
-|  119.8s | So here is my ask. I need one real pilot: a solar site, a meter, an operator — anyone whose data should be provable. | A real site with a meter — solar, wind, or a lab bench |
-|  128.2s | And I need mentors who have taken infrastructure like this to mainnet. | Mentors who took infrastructure to mainnet |
+|  119.7s | So here is my ask. I need one real pilot: a solar site, a meter, an operator — anyone whose data should be provable. | A real site with a meter — solar, wind, or a lab bench |
+|  128.3s | And I need mentors who have taken infrastructure like this to mainnet. | Mentors who took infrastructure to mainnet |
 |  132.2s | The protocol is open, the devnet is live, and the code is public. | Open protocol · live devnet · public code |
-|  137.2s | If that is you, let us talk. | github.com/AntonGrid/ENRG |
+|  137.0s | If that is you, let us talk. | github.com/AntonGrid/ENRG |
 
 ## end card
 
 *3.6s · logo, tagline, repository*
 
 
-**Total: 143.8s (2:23.8)**
+**Total: 143.6s (2:23.6)**
 

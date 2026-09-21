@@ -19,6 +19,8 @@ VENV="${PITCH_VENV:-/tmp/venv}"
 VOICE_NAME="en_US-ryan-high"                    # calm male US English
 PIPER_URL="https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz"
 VOICE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/en/en_US/ryan/high"
+FONTS_CDN="${PITCH_FONTS_CDN:-https://cdn.jsdelivr.net/npm}"   # fallback source
+FONTS_VER="${PITCH_FONTS_VER:-5.3.0}"                          # pinned brand faces
 
 say() { printf '\n\033[1;36m== %s\033[0m\n' "$*"; }
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing tool: $1" >&2; exit 1; }; }
@@ -43,10 +45,23 @@ fi
 # ── 2. fonts: brand faces from the landing submodule (woff2 -> ttf) ─────────
 if [ ! -f "$ASSETS/SpaceGrotesk-700.ttf" ]; then
   say "preparing fonts"
-  FS="$REPO/landing/node_modules/@fontsource"
+  FS="${PITCH_FONTS_SRC:-$REPO/landing/node_modules/@fontsource}"
   if [ ! -d "$FS" ]; then
-    echo "landing/node_modules not found — run: git submodule update --init landing && (cd landing && npm ci)" >&2
-    exit 1
+    # The landing submodule ships no node_modules, and `npm ci` there is heavy
+    # for three woff2 files. Fall back to the same @fontsource faces (pinned)
+    # from the npm CDN mirror, in an identical directory layout.
+    say "fontsource not installed — fetching the brand faces from $FONTS_CDN"
+    FS="$WORK/fontsource"
+    mkdir -p "$FS/space-grotesk/files" "$FS/jetbrains-mono/files"
+    for f in space-grotesk-latin-500-normal space-grotesk-latin-700-normal; do
+      curl -sSL -o "$FS/space-grotesk/files/$f.woff2" \
+        "$FONTS_CDN/@fontsource/space-grotesk@$FONTS_VER/files/$f.woff2"
+    done
+    curl -sSL -o "$FS/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2" \
+      "$FONTS_CDN/@fontsource/jetbrains-mono@$FONTS_VER/files/jetbrains-mono-latin-400-normal.woff2"
+    for f in "$FS/space-grotesk/files/"*.woff2 "$FS/jetbrains-mono/files/"*.woff2; do
+      [ -s "$f" ] || { echo "failed to fetch the brand face: $f" >&2; exit 1; }
+    done
   fi
   if [ ! -x "$VENV/bin/python" ]; then python3 -m venv "$VENV"; fi
   "$VENV/bin/pip" install -q fonttools brotli

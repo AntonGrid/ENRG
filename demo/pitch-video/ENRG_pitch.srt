@@ -1,107 +1,107 @@
 1
-00:00:00,000 --> 00:00:05,239
+00:00:00,000 --> 00:00:01,375
 Hi. I am Anton.
 
 2
-00:00:05,519 --> 00:00:07,010
+00:00:01,655 --> 00:00:06,836
 I work rotational shifts at an oil field, two weeks away from home at a time.
 
 3
-00:00:07,290 --> 00:00:12,912
+00:00:07,116 --> 00:00:13,040
 On my rotations off, I build verification infrastructure for the physical world, on Solana.
 
 4
-00:00:15,000 --> 00:00:19,078
+00:00:15,000 --> 00:00:19,182
 Every number that reaches a market starts as a claim somebody typed.
 
 5
-00:00:19,358 --> 00:00:23,171
+00:00:19,462 --> 00:00:23,287
 A spreadsheet cell can be edited. A portal can be inflated.
 
 6
-00:00:23,451 --> 00:00:26,252
+00:00:23,567 --> 00:00:26,333
 And the same megawatt-hour can be sold twice.
 
 7
-00:00:26,532 --> 00:00:31,806
+00:00:26,613 --> 00:00:31,875
 Markets move in milliseconds, while verification still runs on annual audits.
 
 8
-00:00:32,085 --> 00:00:34,595
+00:00:32,155 --> 00:00:34,863
 The result has a name: greenwashing.
 
 9
-00:00:35,346 --> 00:00:41,548
+00:00:35,613 --> 00:00:41,502
 Axis Protocol closes that gap: identity, proof, attestation, policy.
 
 10
-00:00:41,828 --> 00:00:53,313
+00:00:41,782 --> 00:00:53,348
 On the device, an Ed25519 key inside an NXP SE050 secure element signs every reading — the device itself is the signature.
 
 11
-00:00:53,593 --> 00:00:57,531
+00:00:53,628 --> 00:00:58,042
 Then at least two staked oracles vote on the same canonical hash.
 
 12
-00:00:57,812 --> 00:01:03,422
+00:00:58,322 --> 00:01:03,723
 A contradictory vote is a slashing event, and minting waits for a finalised attestation.
 
 13
-00:01:03,702 --> 00:01:06,770
+00:01:04,004 --> 00:01:07,106
 One compromised oracle cannot create value.
 
 14
-00:01:07,520 --> 00:01:10,576
-Fifty-five on-chain instructions in Rust.
+00:01:07,856 --> 00:01:10,808
+Fifty-eight on-chain instructions in Rust.
 
 15
-00:01:10,856 --> 00:01:16,536
-Two hundred and sixty-six tests pass: Rust, Node, Python and Foundry.
+00:01:11,088 --> 00:01:16,594
+Two hundred and seventy-two tests pass: Rust, Node, Python and Foundry.
 
 16
-00:01:16,816 --> 00:01:24,249
+00:01:16,873 --> 00:01:23,865
 The full stack is live on devnet today — ESP32 firmware, secure element, two independent oracles.
 
 17
-00:01:24,529 --> 00:01:30,476
+00:01:24,145 --> 00:01:30,231
 A finalised attestation, and a mint that only executed because the gate said required equals true.
 
 18
-00:01:30,756 --> 00:01:34,021
+00:01:30,511 --> 00:01:33,927
 Every proof and mint is public — verify it yourself.
 
 19
-00:01:34,771 --> 00:01:38,573
+00:01:34,677 --> 00:01:38,560
 Why me? I have no degree, no team and no funding.
 
 20
-00:01:38,853 --> 00:01:46,637
+00:01:38,840 --> 00:01:46,252
 Four months of nights and rotations off. I wrote the firmware, the contracts, the oracles and the AI layer myself.
 
 21
-00:01:46,917 --> 00:01:50,205
+00:01:46,532 --> 00:01:49,867
 I got tired of watching physical data be trusted on faith.
 
 22
-00:01:50,485 --> 00:01:57,598
+00:01:50,147 --> 00:01:57,434
 This is not a sprint for me. It is a mission: make the physical world provable. Judge me by the code, not by the pitch.
 
 23
-00:01:59,771 --> 00:02:07,926
+00:01:59,677 --> 00:02:07,983
 So here is my ask. I need one real pilot: a solar site, a meter, an operator — anyone whose data should be provable.
 
 24
-00:02:08,206 --> 00:02:11,912
+00:02:08,263 --> 00:02:11,888
 And I need mentors who have taken infrastructure like this to mainnet.
 
 25
-00:02:12,193 --> 00:02:16,886
+00:02:12,168 --> 00:02:16,757
 The protocol is open, the devnet is live, and the code is public.
 
 26
-00:02:17,166 --> 00:02:19,456
+00:02:17,037 --> 00:02:19,211
 If that is you, let us talk.
 
 27
-00:02:20,206 --> 00:02:23,806
+00:02:19,961 --> 00:02:23,561
 ENRG — verification infrastructure for the physical world. github.com/AntonGrid/ENRG
