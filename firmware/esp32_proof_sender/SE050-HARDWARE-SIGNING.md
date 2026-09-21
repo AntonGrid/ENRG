@@ -61,25 +61,66 @@ NVS, ни в RAM, ни на шине I2C (при использовании SCP0
   - `identity_init_se050()` — точка входа в `setup()`.
 - **`setup()`:** приоритет SE050 → ATECC608A → NVS; при недоступности SE050 —
   автоматический fallback.
-- **`send_proof()`:** если SE050 готов — аппаратная подпись, иначе CPU.
-- **PlatformIO env `esp32dev-se050`** (`lib_deps = se050`, `-D ENRG_USE_SE050=1`).
+- **PlatformIO env `esp32dev-se050`** (`-D ENRG_USE_SE050=1`).
+- **PlatformIO env `esp32dev-mainnet`** (`ENRG_MAINNET=1` + `ENRG_USE_SE050=1` +
+  `ENRG_MANIFEST_REQUIRED=1` + anti-rollback) — единственная сборка, разрешённая
+  для продакшена.
 
-> ⚠️ **Статус кода:** reference implementation. Путь требует платы с SE050
-> и библиотеки `se050`; не входит в базовую сборку (`esp32dev`). При bring-up
-> сверьте имена SSS-функций с версией библиотеки (SSS API стабилен, но
-> возможны различия мажорных версий).
+> ⚠️ **Статус кода (проверено 2026-09-21).** Путь SE050 — это **reference
+> implementation на 141 строку** с настоящими вызовами SSS API
+> (`sss_se05x_connect` → `sss_open_session` → `sss_key_store_init` →
+> `sss_crypto_object_get_handle/create` → `sss_asymmetric_get_pub_key` →
+> `sss_asymmetric_sign`). Но **этот tier пока не собирается**, и вот честные
+> причины:
+>
+> 1. Заголовки `sss.h`, `fsl_sss_se05x_apis.h`, `fsl_sss_se05x_types.h` — это
+>    middleware **NXP Plug & Trust**, а не библиотека PlatformIO. В реестре
+>    PlatformIO пакета с таким именем нет: сборка печатала
+>    `Library Manager: Installing se050` →
+>    `Warning! Could not find the package with 'se050' requirements`
+>    (было в `platformio.ini` до 2026-09-21, теперь записи нет — вместо неё
+>    внятный `#error` в `.ino`).
+> 2. В `lib_deps` не хватало `WiFiManager` (из-за чего сборка падала первой
+>    ошибкой `WiFiManager.h: No such file or directory` — теперь добавлен).
+> 3. Ни одна плата с SE050 не подключалась: аппаратного лога bring-up нет.
+>
+> Ниже — что именно нужно сделать, чтобы tier стал собираемым и проверяемым.
+
+### Vendoring: что положить в `lib/`
+
+Middleware NXP Plug & Trust (закрытый по лицензии NXP, поэтому не вендорится
+в этот репозиторий) нужно положить локально:
+
+```
+firmware/esp32_proof_sender/lib/
+├── se05x/          # NXP Plug & Trust middleware: sss.h, fsl_sss_se05x_*.h,
+│                   # fsl_sss_ftr.h, apdu/ (se05x_APDU_apis), platform hooks
+└── (ваш port-layer) # реализация sss_* transport hooks под ESP32 I2C
+```
+
+Источник: NXP Plug & Trust MW (`plug-and-trust` / `se05x-middleware`), раздел
+«SE05x host library». Версию middleware зафиксируйте в
+`lib/se05x/VERSION` и в этом документе после первого успешного bring-up —
+вызовы SSS устойчивы, но имена/состав заголовков между мажорными версиями
+меняются, поэтому версия должна быть записана, а не угадываться.
 
 ### Bring-up (чек-лист)
 
 ```bash
 cd firmware/esp32_proof_sender
 # 1. Подключите SE050 к I2C (SDA=21, SCL=22 по умолчанию) + VCC/GND.
-# 2. Убедитесь, что PlatformIO скачал библиотеку se050:
-pio pkg install se050   # при необходимости
-# 3. Соберите SE050-окружение:
+# 2. Положите middleware NXP в lib/se05x/ (см. §Vendoring выше) и запишите версию.
+# 3. Соберите tier (до vendoring команда обязана падать с #error — это ожидаемо):
 pio run -e esp32dev-se050
 # 4. Прошейте и проверьте Serial: "[KEY] хранилище: NXP SE050 ..."
+pio run -e esp32dev-se050 -t upload -t monitor
+# 5. Отправьте ОДИН proof этим устройством и приложите к задаче строку Serial
+#    + device_id + tx подписи/минта (это и есть «железный bring-up log»).
 ```
+
+Только после шага 5 в `README.md`/`docs/STATE.md` можно писать, что устройство
+подписывает proof'ы внутри SE050: до этого корректная формулировка —
+«reference implementation готова, чип не поднимался».
 
 ### Проверка после bring-up
 

@@ -64,6 +64,21 @@ pio run -t upload -e esp32dev
 > `/home/enrg/Axis-workspace/.venv/bin/pio`. Скрипт
 > [`upload-firmware.sh`](upload-firmware.sh) находит его автоматически.
 
+## Build matrix — что реально собирается (измерено 2026-09-21)
+
+| env | tier (ADR-0007) | Статус | Почему |
+|---|---|---|---|
+| `esp32dev` | `basic` (ключ в NVS, подпись в CPU) | ✅ `SUCCESS` | — |
+| `esp32dev-ota` | `basic` + A/B OTA + eFuse anti-rollback | ✅ `SUCCESS` | — |
+| `esp32dev-atecc` | `hardware-aided` (seed в ATECC608A, подпись в CPU) | ❌ не собирается | `cryptoauthlib` требует `atca_config.h` (HAL-конфиг под вашу плату) — не вендорен |
+| `esp32dev-se050` | `conforming` (Ed25519 внутри SE050) | ❌ не собирается | нужен middleware NXP Plug & Trust в `lib/`; пакета `se050` в реестре PlatformIO нет |
+| `esp32dev-mainnet` | production (SE050 обязателен) | ❌ не собирается (by design) | то же middleware; падает с явным `#error` — «mainnet без SE050 невозможен» |
+
+То есть **сегодня реально собираются только dev-тиры** (`basic`). Production-тир
+собирается после vendoring'а middleware — шаги в `SE050-HARDWARE-SIGNING.md`
+§Vendoring; после него раскомментируйте `-D ENRG_SE050_MIDDLEWARE_VENDORED=1`
+в `platformio.ini`.
+
 ## Загрузка прошивки на ESP32
 
 ### 1. Сборка
@@ -73,16 +88,19 @@ cd firmware/esp32_proof_sender
 
 # ═══ MAINNET (P1-1, audit 2026-08-30) — ЕДИНСТВЕННАЯ production-сборка ═══
 # SE050 (tier conforming, ADR-0007) + manifest required + A/B eFuse anti-rollback.
-# Fail-closed: без SE050 устройство НЕ запускается. Требует плату с NXP SE050
-# и библиотеку se050 (pio pkg install se050).
-pio run -e esp32dev-mainnet
+# Fail-closed: без SE050 устройство НЕ запускается. Требует ПЛАТУ с NXP SE050 и
+# middleware NXP Plug & Trust в lib/ (НЕ `pio pkg install se050` — такого пакета
+# в реестре нет; см. SE050-HARDWARE-SIGNING.md §Vendoring).
+pio run -e esp32dev-mainnet     # сейчас: ожидаемый #error до vendoring'а
 
-# OTA-версия (dual-bank A/B + anti-rollback, ADR-0008) — dev/QA с SE050-опцией
+# OTA-версия (dual-bank A/B + anti-rollback, ADR-0008) — dev/QA
 pio run -e esp32dev-ota
 
-# Базовая версия (ключ в NVS — tier basic) / ATECC608A (tier hardware-aided)
+# Базовая версия (ключ в NVS — tier basic) — ЕДИНСТВЕННАЯ собирающаяся сегодня
 # ⚠️ НЕ для mainnet — только разработка/обучение (ADR-0007 запрещает basic).
 pio run -e esp32dev
+
+# ATECC608A (tier hardware-aided) — нужен atca_config.h под вашу плату
 pio run -e esp32dev-atecc
 ```
 

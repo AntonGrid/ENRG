@@ -296,7 +296,21 @@ static const char ENRG_CA_CERT[] =
 #endif
 
 #if ENRG_USE_SE050
-// NXP SE050 (plug-and-trust): SSS API. Requires lib_deps: se050.
+// NXP SE050 (plug-and-trust): SSS API.
+//
+// ⚠️ These headers come from NXP's Plug & Trust middleware, which is NOT a
+// PlatformIO registry package (the old `lib_deps = se050` entry never resolved:
+// "Could not find the package with 'se050' requirements"). Until the middleware
+// is vendored into lib/ (see SE050-HARDWARE-SIGNING.md §Vendoring) the tier
+// cannot be built — so the build fails here, with an explanation, instead of
+// dying on a bare missing include.
+//
+// Deliberately an explicit opt-in flag rather than `__has_include`: the flag is
+// the operator's written confirmation that the middleware is in place, and it is
+// visible in platformio.ini (one commented line to uncomment).
+#if !defined(ENRG_SE050_MIDDLEWARE_VENDORED)
+#error "ENRG_USE_SE050=1 requires NXP Plug & Trust middleware (sss.h, fsl_sss_se05x_apis.h) in firmware/esp32_proof_sender/lib/ — see SE050-HARDWARE-SIGNING.md §Vendoring. After vendoring, add -D ENRG_SE050_MIDDLEWARE_VENDORED=1 to this_env build_flags."
+#endif
 #include <sss.h>
 #include <fsl_sss_se05x_apis.h>
 #include <fsl_sss_se05x_types.h>

@@ -1,0 +1,769 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "ENRG oracle API (live)",
+    "version": "1.0.0",
+    "description": "Generated from server.js by scripts/generate-openapi.js — do not edit by hand.\n\nThis is the API that actually runs: the Express oracle on devnet (https://enrg-oracle.onrender.com). The \"Part II\" FastAPI mock specs are legacy and live in legacy/openapi/.\n\nOn-chain programs: enrg-mvp HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb (58 instructions), enrg-profile 78FUdpHn7pWPjnDhA8RWCsXxZq6r4wVPtCcsEKBBvhUt."
+  },
+  "servers": [
+    {
+      "url": "https://enrg-oracle.onrender.com",
+      "description": "devnet deployment"
+    },
+    {
+      "url": "http://localhost:3000",
+      "description": "local (npm start)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "ops"
+    },
+    {
+      "name": "device lifecycle"
+    },
+    {
+      "name": "proof"
+    },
+    {
+      "name": "firmware & manifest"
+    },
+    {
+      "name": "pool"
+    },
+    {
+      "name": "public metrics"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "ops"
+        ],
+        "summary": "Liveness probe (also used by the hosting platform)",
+        "operationId": "get_health",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Service is up",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device/register": {
+      "post": {
+        "tags": [
+          "device lifecycle"
+        ],
+        "summary": "Register a device: the device signs its own registration message",
+        "operationId": "post_api_v1_device_register",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Device accepted, producer PDA derived; `activated_on_chain` reports whether the on-chain registration succeeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "RPC unavailable (retry)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "device_id": {
+                    "description": "base58 device public key (32 bytes)"
+                  },
+                  "public_key": {
+                    "description": "same key, base58 (44 chars)"
+                  },
+                  "signature": {
+                    "description": "base64 Ed25519 signature over the registration message"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device/{id}/status": {
+      "get": {
+        "tags": [
+          "device lifecycle"
+        ],
+        "summary": "Device status (energy accumulated, last nonce, on-chain state)",
+        "operationId": "get_api_v1_device_id_status",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "base58 device public key (32 bytes)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown device",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device/{id}/balance": {
+      "get": {
+        "tags": [
+          "device lifecycle"
+        ],
+        "summary": "SRC balance of the device owner, read from the on-chain token account",
+        "operationId": "get_api_v1_device_id_balance",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "base58 device public key (32 bytes)"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "balance (ui amount), balance_atomic, owner, ata, mint",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Device is not registered on-chain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "RPC unavailable (retry)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "description": "The owner is the EnergyProducer `authority` — the same account `mint_energy` requires as the token-account owner (mint.rs). An owner that was never paid has no token account yet; that is a zero balance, not an error."
+      }
+    },
+    "/api/v1/device/{id}/history": {
+      "get": {
+        "tags": [
+          "device lifecycle"
+        ],
+        "summary": "Proof/mint history of one device from oracle storage",
+        "operationId": "get_api_v1_device_id_history",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "base58 device public key (32 bytes)"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "default 50, max 200"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "history[] with ts, energy_wh, nonce, mint_status, mint_tx, mint_error, oracle_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Unknown device",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/manifest/{device_id}": {
+      "get": {
+        "tags": [
+          "firmware & manifest"
+        ],
+        "summary": "Founder-signed Device Manifest for a device (ADR-0004)",
+        "operationId": "get_api_v1_manifest_device_id",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "base58 device public key"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Manifest JSON + signature",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No manifest for this device",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/firmware/update": {
+      "post": {
+        "tags": [
+          "firmware & manifest"
+        ],
+        "summary": "Publish a firmware image (admin only, ADR-0008)",
+        "operationId": "post_api_v1_firmware_update",
+        "parameters": [
+          {
+            "name": "x-api-key",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "must equal FIRMWARE_ADMIN_KEY"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Published; the oracle signs the metadata with the firmware signing key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing/incorrect x-api-key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "firmware_admin_key_missing (env not configured)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "description": "raw binary firmware image (application/octet-stream)"
+        }
+      }
+    },
+    "/api/v1/firmware/latest": {
+      "get": {
+        "tags": [
+          "firmware & manifest"
+        ],
+        "summary": "Metadata of the latest signed firmware image (version, hash, signature)",
+        "operationId": "get_api_v1_firmware_latest",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "latest.json metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No firmware published yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/firmware/latest/image": {
+      "get": {
+        "tags": [
+          "firmware & manifest"
+        ],
+        "summary": "Download the latest firmware image (binary)",
+        "operationId": "get_api_v1_firmware_latest_image",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "application/octet-stream",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No firmware published yet",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device/revoke/{device_id}": {
+      "post": {
+        "tags": [
+          "device lifecycle"
+        ],
+        "summary": "Revoke a device on-chain (ADR-0007); a revoked device cannot send proofs",
+        "operationId": "post_api_v1_device_revoke_device_id",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "base58 device public key"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revoked, transaction signature returned",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "founder_key_missing / idl_missing",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "description": "Signed server-side with the founder key (vault authority)."
+      }
+    },
+    "/api/v1/device/rotate/{device_id}": {
+      "post": {
+        "tags": [
+          "device lifecycle"
+        ],
+        "summary": "Rotate a device key (ADR-0007) — needs the current owner and the new device signature",
+        "operationId": "post_api_v1_device_rotate_device_id",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "base58 device public key"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Rotation accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Signature/validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "new_device_id": {
+                    "description": "base58 public key of the new device key"
+                  },
+                  "owner_signature": {
+                    "description": "base64 signature by the current owner authorising the rotation"
+                  },
+                  "new_device_signature": {
+                    "description": "base64 signature by the new device key"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/pool/create": {
+      "post": {
+        "tags": [
+          "pool"
+        ],
+        "summary": "Create a pooling group (aggregated minting for small producers)",
+        "operationId": "post_api_v1_pool_create",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Pool created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Missing fields or duplicate pool_id",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "pool_id": {
+                    "description": "string"
+                  },
+                  "threshold": {
+                    "description": "energy threshold in Wh"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/proofs": {
+      "get": {
+        "tags": [
+          "proof"
+        ],
+        "summary": "List stored proofs, newest first, with the accepting oracle",
+        "operationId": "get_api_v1_proofs",
+        "parameters": [
+          {
+            "name": "device_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "optional filter"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "default 100, max 1000"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proof rows (one per oracle that accepted the proof)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/proof/submit": {
+      "post": {
+        "tags": [
+          "proof"
+        ],
+        "summary": "Submit an energy proof (the main ingestion endpoint)",
+        "operationId": "post_api_v1_proof_submit",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Accepted — `mint` is one of `queued` | `deferred` (with `mint_reason`) | `already_minted`",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid proof, bad signature, clock skew or policy rejection",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Device revoked on-chain",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "RPC unavailable (retry)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "description": "Verification is against the on-chain EnergyProducer account, not the local DB. The decisive check is the device Ed25519 signature over SHA-256(device_id‖nonce‖device_timestamp‖energy_wh); the same hash is what oracles vote on. Minting is queued and resumes across restarts.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "device_id": {
+                    "description": "base58 device public key"
+                  },
+                  "nonce": {
+                    "description": "monotonic uint64 counter from the device"
+                  },
+                  "device_timestamp": {
+                    "description": "unix seconds reported by the device (clock-skew checked)"
+                  },
+                  "energy_wh": {
+                    "description": "energy in watt-hours since the previous report"
+                  },
+                  "device_signature": {
+                    "description": "Ed25519 signature, array of 64 bytes"
+                  },
+                  "signature": {
+                    "description": "legacy string signature (accepted for accumulation only, cannot mint)"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/stats": {
+      "get": {
+        "tags": [
+          "public metrics"
+        ],
+        "summary": "Protocol metrics from the proofs table (single source of truth)",
+        "operationId": "get_api_v1_stats",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "total_proofs, minted_proofs, deferred_proofs, accepted_proofs, energy, active_producers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "description": "Counts one row per proof (device_id + nonce), so a proof attested by several oracles is not double counted; `attestation_rows` exposes the raw row count separately."
+      }
+    },
+    "/api/v1/oracles": {
+      "get": {
+        "tags": [
+          "public metrics"
+        ],
+        "summary": "Oracle network: the on-chain trusted set + per-oracle attribution",
+        "operationId": "get_api_v1_oracles",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "oracles[], counts{registered,with_proofs,idle}, unattributed_proofs, note",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "description": "`counts` separates registered keys from keys that have actually handled proofs. `unattributed_proofs` counts rows recorded before per-oracle attribution existed (2026-08-30) — they cannot be assigned to an oracle and are reported instead of being silently shown as 0 for every oracle."
+      }
+    }
+  },
+  "x-generated-from": "server.js",
+  "x-generated-from-sha256": "91f442a4ad377722f56af877f3090fa051c7c5802263b9c728bd83f7bf7eeb32"
+}

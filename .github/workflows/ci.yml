@@ -82,6 +82,13 @@ jobs:
           # TypeScript suite is a separate script: `npm run test:integration`.
           npm test
 
+      - name: Check the published API spec against server.js
+        # docs/openapi.json is generated from server.js (scripts/generate-openapi.js).
+        # This fails when a route is added, renamed or removed without updating the
+        # spec — the exact drift that produced eight mock specs describing an API
+        # nobody ran (audit 2026-09-21).
+        run: npm run openapi:check
+
   anchor:
     name: Anchor program tests (anchor test, local validator)
     runs-on: ubuntu-latest
