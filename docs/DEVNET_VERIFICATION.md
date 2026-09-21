@@ -29,8 +29,9 @@
      the first 226,704 bytes == the local .so). Deploy slot **484849385**.
 3. IDL: `anchor idl upgrade --filepath target/idl/enrg_mvp.json HkuC3… --provider.cluster devnet`
    → The IDL account `BwMKxYtzQ87VDvhqyy3GCULLPeCgGAmnwd2jXLVSmuxP` (37,120 bytes) was updated
-   (48 instructions, incl. `update_policy`, `rotate_device_key`, `set_device_tier`,
-   `initialize_policy_registry`, etc.). The enrg-profile IDL is not stored on-chain
+   (48 instructions as of that deploy, incl. `update_policy`, `rotate_device_key`, `set_device_tier`,
+   `initialize_policy_registry`, etc. The IDL has grown to **58** since — see the README). The
+   enrg-profile IDL is not stored on-chain
    (the local `idls/enrg_profile.json` is used, synced with the source).
 
 ### Verified addresses (current)

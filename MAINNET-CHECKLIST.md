@@ -171,11 +171,11 @@ updated as the fixes land. The canonical audit report is
       deploy, bootstrap, oracle, firmware, AI, go/no-go).
 - [x] **P2-5 The Rust unit suite actually runs in CI** — `[lib] test = false` in
       `programs/enrg-mvp/Cargo.toml` silently excluded the whole inline unit-test
-      suite (95 tests in `producer.rs`, `policy.rs`, `policy_engine.rs`, `math.rs`,
+      suite (95 tests then, in `producer.rs`, `policy.rs`, `policy_engine.rs`, `math.rs`,
       `security/`, `mint.rs`) from `cargo test -p enrg-mvp`, so CI enforced only the
       six integration files (29 tests). The lib test target links fine, so the tests
-      are enabled: `cargo test -p enrg-mvp` now runs **124** tests and CI enforces
-      all of them.
+      are enabled: `cargo test -p enrg-mvp` now runs **125** tests (96 in the lib
+      target + 29 across the six integration files) and CI enforces all of them.
 
 ## P3 — Proof aggregation (roadmap)
 

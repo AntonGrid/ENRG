@@ -197,14 +197,14 @@ node server.js
 ### Run Tests
 
 ```bash
-# Node suites (hermetic, 107 tests, no validator): policy, conformance, mint,
+# Node suites (hermetic, 112 tests, no validator): policy, conformance, mint,
 # manifest, firmware, key rotation, oracle quorum, webcrypto, storage queue
 npm test
 
 # TypeScript suite that needs a live cluster (local validator or devnet)
 npm run test:integration
 
-# Rust: program + integration tests (124 tests, incl. the policy conformance vectors)
+# Rust: program + integration tests (125 tests, incl. the policy conformance vectors)
 cargo test -p enrg-mvp
 
 # Python: tokenomics and mainnet-critical simulations
