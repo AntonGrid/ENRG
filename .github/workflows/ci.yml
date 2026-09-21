@@ -196,6 +196,13 @@ jobs:
         # (programs/enrg-mvp/src/constants.rs), and initialize_config /
         # initialize_governance revert for anyone else. The genesis fixture
         # (tests/genesis/founder-wallet.json) funds exactly this address.
+        #
+        # Trade-off, stated plainly: this secret is the real devnet founder key
+        # (it holds the premine/vesting accounts), and `pull_request` runs from
+        # branches of this repo do receive repository secrets — only fork PRs do
+        # not. So anyone who can push a branch here can read it. The alternative
+        # is no integration coverage in CI, or making EXPECTED_DEPLOYER settable
+        # at init on localnet (a program change, security-sensitive by design).
         env:
           FOUNDER_WALLET_JSON: ${{ secrets.ENRG_FOUNDER_WALLET }}
         run: |
