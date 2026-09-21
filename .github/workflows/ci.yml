@@ -130,6 +130,25 @@ jobs:
       - name: Install Yarn
         run: npm install -g yarn
 
+      - name: Create the localnet provider wallet
+        # ROOT CAUSE of the anchor job being red on 30+ consecutive runs
+        # (2026-08-31 → 2026-09-21), found on 2026-09-21 by moving that file aside
+        # locally and re-running `anchor test`:
+        #
+        #   Anchor.toml: [provider] wallet = "~/.config/solana/id.json"
+        #
+        # that is the *developer's* local wallet. A CI runner has none, so
+        # `anchor test` stops right after the build with
+        #   Error: Unable to read keypair file (~/.config/solana/id.json)
+        # — an error that names a path nobody in CI ever created, which is why it
+        # looked like a mysterious test failure. On localnet this wallet only pays
+        # for the ephemeral deployment, so a throwaway key is correct here.
+        run: |
+          mkdir -p "$HOME/.config/solana"
+          solana-keygen new --no-bip39-passphrase --silent --force -o "$HOME/.config/solana/id.json"
+          solana config set --url http://127.0.0.1:8899 >/dev/null
+          echo "provider wallet: $(solana-keygen pubkey "$HOME/.config/solana/id.json")"
+
       - name: Restore the localnet program keypair
         # Why this exists (audit 2026-09-21): the program id is part of the
         # interface — `declare_id!`, Anchor.toml and the integration tests all pin
@@ -159,7 +178,42 @@ jobs:
           fi
           mkdir -p target/deploy
           printf '%s' "$PROGRAM_KEYPAIR" > target/deploy/enrg_mvp-keypair.json
-          echo "restored program keypair: $(solana-keygen pubkey target/deploy/enrg_mvp-keypair.json)"
+          EXPECTED="HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb"
+          ACTUAL="$(solana-keygen pubkey target/deploy/enrg_mvp-keypair.json)"
+          if [ "$ACTUAL" != "$EXPECTED" ]; then
+            echo "::error::ENRG_MVP_PROGRAM_KEYPAIR restores $ACTUAL, but declare_id!, Anchor.toml and the tests pin $EXPECTED. Use the JSON of target/deploy/enrg_mvp-keypair.json from a checkout where 'solana-keygen pubkey' prints $EXPECTED (the deploy/keys/* files are different keys)."
+            exit 1
+          fi
+          echo "restored program keypair: $ACTUAL"
+
+      - name: Provide the localnet founder keypair
+        # Second missing HOME file (found the same way: the suite died with
+        # "ENOENT: no such file or directory, ~/.config/solana/founder-wallet.json").
+        # Six suites read it at import time — founder-vesting, governance,
+        # merkle-proof-verification, oracle-quorum, trust-ers-pool, zz-e2e-smoke —
+        # so mocha never ran a single test. A synthetic key cannot work:
+        # the program pins EXPECTED_DEPLOYER = FOUNDER_WALLET
+        # (programs/enrg-mvp/src/constants.rs), and initialize_config /
+        # initialize_governance revert for anyone else. The genesis fixture
+        # (tests/genesis/founder-wallet.json) funds exactly this address.
+        env:
+          FOUNDER_WALLET_JSON: ${{ secrets.ENRG_FOUNDER_WALLET }}
+        run: |
+          FOUNDER_PATH="$HOME/.config/solana/founder-wallet.json"
+          EXPECTED_FOUNDER="FnqKH4bjMRM6hzrw6tjcpfyszovbRsvyNjuNwALmcZNC"
+          if [ -z "$FOUNDER_WALLET_JSON" ]; then
+            echo "::error::ENRG_FOUNDER_WALLET is not set, so the integration suite cannot run (six test files load ~/.config/solana/founder-wallet.json at import time)."
+            echo "Set the repository secret to the JSON of ~/.config/solana/founder-wallet.json; 'solana-keygen pubkey' on it must print $EXPECTED_FOUNDER."
+            exit 1
+          fi
+          printf '%s' "$FOUNDER_WALLET_JSON" > "$FOUNDER_PATH"
+          chmod 600 "$FOUNDER_PATH"
+          ACTUAL="$(solana-keygen pubkey "$FOUNDER_PATH")"
+          if [ "$ACTUAL" != "$EXPECTED_FOUNDER" ]; then
+            echo "::error::ENRG_FOUNDER_WALLET restores $ACTUAL, but the program's EXPECTED_DEPLOYER is $EXPECTED_FOUNDER."
+            exit 1
+          fi
+          echo "founder wallet: $ACTUAL"
 
       - name: Build program and run on-chain tests
         # Builds the enrg-mvp program, spawns a local Solana validator with the

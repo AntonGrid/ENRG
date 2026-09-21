@@ -63,6 +63,23 @@ async function fetchRegistry(): Promise<PublicKey[]> {
   return (reg.oracles || []) as PublicKey[];
 }
 
+/**
+ * The registry carries two role keys. Auditors need to know which one is
+ * missing before they can act, so the report names both: `authority` can change
+ * the admin, `oracle_admin` is what `--remove-empty` (removeOracle) requires.
+ */
+async function registryRoles(): Promise<{ authority: string; oracleAdmin: string }> {
+  const [registry] = PublicKey.findProgramAddressSync(
+    [Buffer.from("oracle-registry")],
+    program.programId
+  );
+  const reg: any = await (program.account as any).oracleRegistry.fetch(registry);
+  return {
+    authority: reg.authority.toBase58(),
+    oracleAdmin: reg.oracleAdmin.toBase58(),
+  };
+}
+
 async function stakeExists(oracle: PublicKey): Promise<boolean> {
   const [stakePda] = PublicKey.findProgramAddressSync(
     [Buffer.from("oracle-stake"), oracle.toBuffer()],
@@ -109,6 +126,17 @@ async function main() {
 
   const keys = await fetchRegistry();
   const attribution = await apiAttribution();
+
+  const roles = await registryRoles();
+  console.log(`registry.authority:   ${roles.authority}`);
+  console.log(`registry.oracle_admin: ${roles.oracleAdmin}`);
+  console.log(
+    `your signer:          ${operator.publicKey.toBase58()}` +
+      (roles.oracleAdmin === operator.publicKey.toBase58()
+        ? '  (== oracle_admin: --remove-empty will work)'
+        : '  (!= oracle_admin: read-only, --remove-empty will refuse)')
+  );
+  console.log('');
 
   const rows: RegistryRow[] = [];
   for (const key of keys) {

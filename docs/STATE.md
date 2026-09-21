@@ -30,7 +30,13 @@ Everything below was **measured**, not inferred.
   2026-08-30 — the real reason every oracle showed `minted: 0` while `/stats`
   showed the real totals). `scripts/oracle-registry-audit.ts` audits and can
   remove idle keys; on devnet that needs the **offline** `oracle_admin` key
-  `H3tXm4…`, so the script refuses without it.
+  `H3tXm4…`, so the script refuses without it and now prints both registry roles
+  next to your signer.
+  **Verified live on 2026-09-21** (Render picked up the commits):
+  `/api/v1/oracles` → `counts{registered: 12, with_proofs: 2, idle: 10}` +
+  `unattributed_proofs{proofs: 15}`; `/device/EAv5ND…/balance` →
+  `0.000536313` SRC from ATA `F5TGjRA1…` — the public dashboard no longer reads
+  a fake zero.
 - Claims were corrected wherever they overstated reality: the SE050 tier is
   reference code that **does not build yet**, no physical board has sent a proof,
   the AI layer runs in `offline-fallback` mode, and the two oracle instances
@@ -65,10 +71,9 @@ Everything below was **measured**, not inferred.
 | Item | Blocked by |
 |---|---|
 | SE050 / mainnet firmware tier | NXP Plug & Trust middleware is not vendored (it is not a PlatformIO package); no board with an SE050 has been connected |
-| Removing the 10 idle registry keys | `oracle_admin` is the offline deployer key `H3tXm4…` |
-| Live API serving the new `/balance` | the Render deployment has to pick up this commit (verified: the instance still answers the old shape) |
+| Removing the 10 idle registry keys | `oracle_admin` is the offline deployer key `H3tXm4…` — confirmed on-chain by the audit script, which now prints `registry.authority` / `registry.oracle_admin` next to your signer and refuses `--remove-empty` when they differ |
 | ATECC608A tier | `cryptoauthlib` needs an `atca_config.h` for the target board |
-| CI: the Anchor job (`anchor test`) | it was red on **30+ consecutive runs since 2026-08-31**: a CI checkout has no `target/deploy/enrg_mvp-keypair.json` (`target/` is gitignored), so `anchor build` used a random program id while the tests pin `HkuC3FT…`. The workflow now restores it from the `ENRG_MVP_PROGRAM_KEYPAIR` repository secret and fails with that explanation when the secret is absent (locally, where the keypair exists, the suite is green: 55 passing / 4 pending) |
+| CI: the Anchor job (`anchor test`) | one secret still missing. The job was red on **30+ consecutive runs since 2026-08-31** because it reads three key files that exist only on a developer machine: `target/deploy/enrg_mvp-keypair.json` (gitignored → a random program id while the tests pin `HkuC3FT…`), `~/.config/solana/id.json` (the `[provider] wallet` → `Error: Unable to read keypair file`) and `~/.config/solana/founder-wallet.json` (read by six suites at import time → `ENOENT`, zero tests run). Each was reproduced by moving the file aside. CI now creates the throwaway provider wallet itself, restores the program keypair from `ENRG_MVP_PROGRAM_KEYPAIR` (set ✅, pubkey asserted) and needs `ENRG_FOUNDER_WALLET` (the JSON of `~/.config/solana/founder-wallet.json`; its pubkey must be `FnqKH4…`, the program's `EXPECTED_DEPLOYER`). With all three present the suite passes in a CI-like `HOME`: **55 passing / 4 pending** |
 
 ## 1. Overview
 
