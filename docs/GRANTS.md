@@ -17,7 +17,7 @@
 
 | # | Fund / program | What they fund | Typical size | Notes / links |
 |---|---|---|---|---|
-| 1 | **Solana Foundation Grants** | DePIN, on-chain infra, tools | $5k–$100k | We are Solana-native (55 instructions). `solana.org/grants` / `grants@solana.foundation` |
+| 1 | **Solana Foundation Grants** | DePIN, on-chain infra, tools | $5k–$100k | We are Solana-native (58 instructions). `solana.org/grants` / `grants@solana.foundation` |
 | 2 | **peaq DePIN Grants** | DePIN projects building on peaq | $25k–$100k+ | Re-usable module story (oracle/attestation) fits. `peaq.network/grants` |
 | 3 | **Filecoin / Protocol Labs** | DePIN, verifiable storage/data | $5k–$20k | Angle: provable physical data + verifiable audit trail. `grants.filecoin.io` |
 | 4 | **Gitcoin Grants (public goods)** | Open-source infra | $1k–$50k/round | Great for the open protocol/spec part. `gitcoin.co` |
@@ -48,10 +48,10 @@ near-term income, and use the first grant as a reference for #3–#5.
 >    Solana account.
 >
 > **Proof points (live):**
-> - Full stack: ESP32+SE050 firmware → oracles → Solana contract (55 instructions) → AI layer;
+> - Full stack: ESP32+SE050 firmware → oracles → Solana contract (58 instructions) → AI layer;
 > - Devnet live: 2 oracles staked & voted, attestation finalized, gated mint
 >   executed, rewards claimed idempotently;
-> - Quality: 66 anchor e2e + 92 mocha + 23 cargo, 300+ commits, 10 ADRs,
+> - Quality: 272 tests green (125 Rust / 112 Node / 21 Python / 14 Foundry), 300+ commits, 10 ADRs,
 >   protocol spec v1.0, documented security audits, multisig governance.
 >
 > **Milestones (proposed):**
@@ -76,7 +76,7 @@ Short version of `docs/POSITIONING.md` to paste into messages/emails:
 > a finalized-quorum mint gate make fraud economically irrational. Use cases:
 > audit, REC/GO and carbon-credit verification, ESG assurance, DePIN trust.
 > Live demo on devnet (2-oracle quorum + gated mint executed); Solana-native
-> (55 instructions); 66 e2e + 92 mocha + 23 cargo tests green. More:
+> (58 instructions); 272 tests green (125 Rust / 112 Node / 21 Python / 14 Foundry). More:
 > [repo links].
 
 ## 5. Action items (this week)

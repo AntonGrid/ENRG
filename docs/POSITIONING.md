@@ -1,6 +1,6 @@
 # ENRG — Positioning: Cryptographic Trust Between the Physical and Digital Worlds
 
-> **Status:** Active (2026-08-31)
+> **Status:** Active (2026-09-21)
 > **Purpose:** the single source of truth for how we describe ENRG to grants,
 > partners, customers and investors. Read this before any pitch/deck/application.
 
@@ -69,7 +69,7 @@ in real time, verification still runs on annual manual audits.
 | Emission | Dynamic, tied to real energy (energy-per-token, self-adjusting) | Fixed rate (e.g. 1 token/kWh) |
 | Device reputation | **ERS** (tiers, limits, quarantine) on-chain | None or off-chain |
 | AI layer | **Federated learning** on device data + signed AI signals | None |
-| Audit surface | 55 on-chain instructions, 66 e2e tests, public specs/ADR | Opaque off-chain logic |
+| Audit surface | 58 on-chain instructions, 272 tests, public specs/ADR | Opaque off-chain logic |
 
 ## 7. Competitive landscape — vs concrete players
 
@@ -107,15 +107,18 @@ fleets (distribution beats architecture until we have a pilot), and
 Chainlink/Pyth are the default "trust" answer inside ecosystem grant reviews.
 The deciding factor is therefore the **first live pilot**, not the feature list.
 
-## 8. Current proof points (2026-08-31)
+## 8. Current proof points (2026-09-21)
 
 - Full vertical stack: **firmware (ESP32 + SE050) → oracles → Solana contract
-  (55 instructions) → AI layer (ENRG-AI: FL + reputation)**;
+  (58 instructions) → AI layer (ENRG-AI: FL + reputation)**;
 - **Live on devnet**: two independent oracles staked, voted and finalized a
   real attestation; a full device lifecycle (register→claim→activate→mint)
   minted with the quorum gate **required=true**; rewards claimed idempotently;
-- **Testing**: 66 anchor e2e, 92 mocha, 23 cargo — all green;
-- 300+ commits, 10 ADRs, protocol spec v1.0 (1,155 lines), 2 security audits
+- **Testing**: 272 tests green — 125 Rust (`cargo test -p enrg-mvp`),
+  112 Node (`npm test`), 21 Python (`pytest -q -p no:anchorpy`),
+  14 Foundry (`cd onchain && forge test`);
+- 300+ commits, 10 ADRs, protocol specification v8.0
+  (`docs/ENRG_Technical_Specification_v8.0.md`, 960 lines), 2 security audits
   documented, key-rotation + multisig governance in place.
 
 ## 9. North star / roadmap

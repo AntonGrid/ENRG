@@ -1,5 +1,7 @@
 # ENRG — Energy Tokenization on Solana
 
+<img src="ENRG_Logo.svg" alt="ENRG logo" width="72" align="right">
+
 ENRG is the **first application** built on the [Axis Protocol](https://github.com/AntonGrid/Axis-protocol) — an open standard for cryptographically verifiable trust between physical devices and digital systems.
 
 ENRG focuses on the **energy domain**: it tokenizes real electricity production using cryptographic proofs from IoT devices, verifies them through oracles, and mints SRC tokens on Solana.
@@ -13,11 +15,17 @@ cryptographically provable on Solana — we sell trust, not tokens.
 
 **See it working (no setup required):**
 
+- **Project pitch — 2:24, English, this repository:**
+  [`demo/pitch-video/ENRG_pitch.mp4`](./demo/pitch-video/ENRG_pitch.mp4)
+  (captions: `ENRG_pitch.srt`; the script and timings are in
+  `demo/pitch-video/narration.md`; rebuild it with
+  `demo/pitch-video/build.sh`)
 - Live oracle + metrics — `https://enrg-oracle.onrender.com/api/v1/stats`
+  (free instance: the first request may need ~30 s to wake it up)
 - Program on devnet — `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb`
-- Technical demo — `demo/ENRG_live_demo.mp4` · pitch storyboard —
-  `docs/PITCH-VIDEO-STORYBOARD.md` · submission pack —
-  `docs/COLOSSEUM-SUBMISSION.md`
+- Technical demo (devnet walkthrough, YouTube) — `https://youtu.be/qrgdc1X9kDU`
+- Submission pack — `docs/COLOSSEUM-SUBMISSION.md` · pitch storyboard —
+  `docs/PITCH-VIDEO-STORYBOARD.md`
 
 **The claims, and where to check them:**
 
@@ -26,7 +34,47 @@ cryptographically provable on Solana — we sell trust, not tokens.
 | Hardware root of trust | `firmware/` — ESP32 + NXP SE050, non-extractable Ed25519 key; device identity *is* the signing key (ADR-0001/0007) |
 | One oracle cannot mint | `programs/enrg-mvp` — ≥2 staked oracles vote on a canonical SHA-256 hash, a contradictory vote is a slashing event, minting is gated by a *finalised* attestation (ADR-0006) |
 | Anyone can re-verify | Every proof, attestation, policy decision and mint is an inspectable Solana account |
-| It is real code, not slides | 55 on-chain instructions · 266 tests green: 124 Rust (`cargo test -p enrg-mvp`), 107 Node (`npm test`), 21 Python (`pytest -q -p no:anchorpy`), 14 Foundry (`cd onchain && forge test`) |
+| It is real code, not slides | 58 on-chain instructions · 272 tests green: 125 Rust (`cargo test -p enrg-mvp`), 112 Node (`npm test`), 21 Python (`pytest -q -p no:anchorpy`), 14 Foundry (`cd onchain && forge test`) |
+
+## Verify it yourself in two minutes
+
+| # | Check | How |
+|---|---|---|
+| 1 | The oracle answers | `curl -s https://enrg-oracle.onrender.com/api/v1/stats` — free instance, so the first call may return `503` while it wakes: retry a few seconds later. Captured 2026-09-21: `total_proofs 22`, `minted_proofs 15`, `active_producers 8`, `attestation_rows 28`, `total_energy_wh 31015` |
+| 2 | A mint that passed the gate | [`2ANc1Lf3…KT6`](https://explorer.solana.com/tx/2ANc1Lf3az4utCDRw9A7Lfp7z2e7oY2kseJoW6k6U9gcq9uCbTMR1gLRY4M8Ctb7hJfQMm3iuHYHacPQRQiXGKT6?cluster=devnet) — devnet, **slot 500485022**, `err: None`, 31 program logs |
+| 3 | A third party earned the mint | [`3VzmRDVq…9ofB`](https://explorer.solana.com/tx/3VzmRDVqcNqRdNX8vAPo3wCcLwJXL6LPR1kKhkNaYrHn3KHjZSSHXgzR27BVdRAynVWaipUrjdNC4RRi4eA69ofB?cluster=devnet) — an owner that did **not** sign the mint received the SRC |
+| 4 | The program is deployed | `HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb` on devnet (`solana program show …`) |
+| 5 | The rules are in the code | `programs/enrg-mvp/src/instructions/mint_energy.rs` + the policy engine it executes |
+
+## The trust path
+
+```text
+Device → Proof → Oracle → Attestation → Smart Contract → SRC Token
+```
+
+```mermaid
+flowchart LR
+  M["Meter / ESP32 + SE050<br/>signs the reading"] --> O1["Oracle 1<br/>verifies + votes"]
+  M --> O2["Oracle 2<br/>verifies + votes"]
+  O1 --> QU{"the same<br/>canonical SHA-256?"}
+  O2 --> QU
+  QU -- yes --> AT["Attestation<br/>finalised"]
+  QU -- contradiction --> SL["Slashing"]
+  AT --> MI["mint_energy<br/>required = true"]
+  MI --> CR["SRC credited to<br/>the device owner"]
+```
+
+One compromised oracle cannot create value: minting needs a **finalised**
+attestation, and a contradictory vote is a slashing event.
+
+Two frames from the pitch video — the trust path, and what is already running on
+devnet (`docs/assets/`, rendered from `demo/pitch-video/ENRG_pitch.mp4`):
+
+![The trust path as drawn in the pitch video](docs/assets/pitch-pipeline.png)
+
+![What is done today: 58 instructions, 272 tests, a devnet mint](docs/assets/pitch-proof.png)
+
+---
 
 **Five-minute reading order:** `docs/POSITIONING.md` (what we are) →
 `docs/COMPETITORS.md` (who else is in this space) → `docs/STATE.md` (what is

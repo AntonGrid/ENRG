@@ -166,7 +166,7 @@ individually before being quoted externally.
 **Exposed:**
 
 1. **Distribution.** Sourceful and Starpower already run devices with users;
-   ENRG has devnet, firmware and 55 instructions. A pilot beats architecture.
+   ENRG has devnet, firmware and 58 instructions. A pilot beats architecture.
 2. **Grant-review priors.** Chainlink/Pyth are the default "trust" answer;
    ENRG has to fight for the "physical data" sub-category, not the category.
 3. **Narrative fatigue.** 138 submissions means "solar tokenization" reads as

@@ -31,7 +31,7 @@
 > ENRG is verification infrastructure that makes physical-world data provable on
 > Solana. Devices sign readings with a non-extractable SE050 key; ≥2 staked
 > oracles must confirm the same hash before anything is minted. Live on devnet:
-> 55 instructions, 266 tests, an inspectable audit trail. Not another solar
+> 58 instructions, 272 tests, an inspectable audit trail. Not another solar
 > token — the trust layer energy DePINs build on.
 
 **Long version (~800 chars):**
@@ -45,7 +45,7 @@
 > a contradictory vote is a slashing event, and minting stays blocked until the
 > attestation is finalised.
 >
-> Live on devnet: 55 on-chain instructions, 266 tests green (124 Rust / 107 Node
+> Live on devnet: 58 on-chain instructions, 272 tests green (125 Rust / 112 Node
 > / 21 Python / 14 Foundry), a complete device lifecycle minted through the
 > quorum gate, and an audit trail anyone can re-verify independently.
 >
@@ -55,7 +55,7 @@
 ## 3. Team roles (paste)
 
 - **Anton Gulda — Founder & Protocol Architect.** Anchor/Rust contracts
-  (55 instructions), multi-oracle quorum with slashing, ESP32 + SE050 firmware,
+  (58 instructions), multi-oracle quorum with slashing, ESP32 + SE050 firmware,
   ENRG-AI (federated learning + anomaly detection), protocol specification and
   ADRs.
 - **Vitaly Arteev — ⟨role⟩.** Replace with his real contribution (e.g. product /
@@ -92,10 +92,21 @@ Each update must carry **one number and one link**. Drafts:
 > (confirmed, slot 500485022). Metrics: `enrg-oracle.onrender.com/api/v1/stats` ·
 > Program: `HkuC3FT…`
 
-**Numbers as of 2026-09-18 19:23 UTC** (paste the live ones, not these):
-`total_proofs 22`, `active_producers 8`, `accepted_proofs 1`,
-`last_proof_ts 1789759394` (today), `total_energy_wh 31015`; the six `deferred`
-proofs are the stale 2026-09-05 batch. Also verified the same day: a third-party
+**Live numbers, captured 2026-09-21 17:45 UTC** (`GET /api/v1/stats` — paste the
+live ones, not these): `total_proofs 22`, `minted_proofs 15`, `deferred_proofs 7`,
+`accepted_proofs 0`, `active_producers 8`, `total_energy_wh 31015`,
+`total_energy_mwh 0.03`, `minted_energy_wh 15`, `attestation_rows 28`;
+`last_proof_ts 1789759394` → 2026-09-18 19:23 UTC, i.e. **already 3 days old —
+refresh it before judging** (`docs/PILOT-REFRESH.md`).
+
+> The endpoint runs on a free Render instance and **sleeps**: the first request in
+> a while can answer `503` and the next one a few seconds later answers `200` —
+> retry before concluding the oracle is down (this bit a reviewer once).
+> `deferred_proofs` grew 6 → 7 while `accepted_proofs` fell 1 → 0 since the
+> 2026-09-18 note: the stale 2026-09-05 batch is still parked, which is exactly
+> what the pilot refresh clears.
+
+Also verified on 2026-09-18: a third-party
 device mint (an owner who did **not** sign the mint received its SRC) —
 `3VzmRDVqcNqRdNX8vAPo3wCcLwJXL6LPR1kKhkNaYrHn3KHjZSSHXgzR27BVdRAynVWaipUrjdNC4RRi4eA69ofB`.
 How to reproduce: `docs/PILOT-REFRESH.md`.
@@ -129,6 +140,32 @@ How to reproduce: `docs/PILOT-REFRESH.md`.
   trust** (SE050 secure element).
 - Numbers only from `docs/STATE.md` or the live API — no rounded-up marketing
   figures.
+
+## 8. GitHub repository settings (paste)
+
+The card is not the only first impression — the GitHub *About* box is what a
+reviewer reads **before** the README, and today it sells the wrong thing:
+verbatim, it says *"…turn any energy … into liquid tokens backed by real kWh.
+Energy Vault provides buyback & burn."* That is the exact framing section 7
+forbids.
+
+**Description** (replace):
+
+> Verification infrastructure that makes physical-world data provable on Solana.
+> Devices sign readings with a non-extractable SE050 key; ≥2 staked oracles must
+> confirm the same hash before anything is minted. Live on devnet. We sell trust,
+> not tokens.
+
+**Homepage:** `https://enrg.network` (currently empty — or the pitch video once it
+is on YouTube).
+
+**Topics:** `solana` · `depin` · `energy` · `oracle` · `attestation` ·
+`hardware-security` · `se050` · `rust` · `anchor` · `open-standard` ·
+`verifiable-data` · `pilot-project`
+
+**Also done in the repository (no click needed):** `.gitattributes` now marks the
+vendored paths, so the language bar reports Rust/TypeScript instead of "Solidity"
+— GitHub recomputes it after the next push.
 
 ---
 
