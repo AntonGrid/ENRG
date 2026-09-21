@@ -142,22 +142,24 @@ jobs:
         #
         # Fix: put the JSON array of `target/deploy/enrg_mvp-keypair.json` into the
         # repository secret ENRG_MVP_PROGRAM_KEYPAIR. This is the *program id*
-        # keypair, NOT the upgrade authority (which was rotated to H3tXm4… on
-        # 2026-09-16), so it controls nothing on devnet/mainnet — it only makes the
-        # local validator deploy the program at the address the tests expect.
-        if: ${{ secrets.ENRG_MVP_PROGRAM_KEYPAIR != '' }}
+        # keypair, NOT the upgrade authority (rotated to H3tXm4… on 2026-09-16), so
+        # it controls nothing on devnet/mainnet — it only makes the local validator
+        # deploy the program at the address the tests expect.
+        #
+        # The check is done in the shell, not with `if: secrets.X`: the `secrets`
+        # context is not allowed in a step `if`, and using it there made GitHub
+        # reject the whole workflow (zero jobs) instead of running it.
+        env:
+          PROGRAM_KEYPAIR: ${{ secrets.ENRG_MVP_PROGRAM_KEYPAIR }}
         run: |
+          if [ -z "$PROGRAM_KEYPAIR" ]; then
+            echo "::error::ENRG_MVP_PROGRAM_KEYPAIR is not set. Without it the program would be built with a random id and every test that pins HkuC3FT… would fail."
+            echo "Set the repository secret to the JSON of target/deploy/enrg_mvp-keypair.json — 'solana-keygen pubkey' on it must print HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb."
+            exit 1
+          fi
           mkdir -p target/deploy
-          printf '%s' '${{ secrets.ENRG_MVP_PROGRAM_KEYPAIR }}' > target/deploy/enrg_mvp-keypair.json
+          printf '%s' "$PROGRAM_KEYPAIR" > target/deploy/enrg_mvp-keypair.json
           echo "restored program keypair: $(solana-keygen pubkey target/deploy/enrg_mvp-keypair.json)"
-
-      - name: Fail early and clearly when that keypair is missing
-        # A silent skip would be a fake green: the suite would simply not run.
-        if: ${{ secrets.ENRG_MVP_PROGRAM_KEYPAIR == '' }}
-        run: |
-          echo "::error::ENRG_MVP_PROGRAM_KEYPAIR is not set, so the program would be built with a random id and the suite would fail on every test that pins HkuC3FT…."
-          echo "Set the repository secret to the JSON of target/deploy/enrg_mvp-keypair.json (solana-keygen pubkey must print HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb)."
-          exit 1
 
       - name: Build program and run on-chain tests
         # Builds the enrg-mvp program, spawns a local Solana validator with the
