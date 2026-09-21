@@ -66,61 +66,90 @@ NVS, ни в RAM, ни на шине I2C (при использовании SCP0
   `ENRG_MANIFEST_REQUIRED=1` + anti-rollback) — единственная сборка, разрешённая
   для продакшена.
 
-> ⚠️ **Статус кода (проверено 2026-09-21).** Путь SE050 — это **reference
-> implementation на 141 строку** с настоящими вызовами SSS API
-> (`sss_se05x_connect` → `sss_open_session` → `sss_key_store_init` →
-> `sss_crypto_object_get_handle/create` → `sss_asymmetric_get_pub_key` →
-> `sss_asymmetric_sign`). Но **этот tier пока не собирается**, и вот честные
-> причины:
+> ⚠️ **Статус кода (измерено 2026-09-21).** Tier **собирается**:
+> `pio run -e esp32dev-se050` → `SUCCESS` (20 с, flash 93.6%), `-e esp32dev-mainnet`
+> наследует те же флаги. Но по пути нашлись две ошибки в прежних утверждениях —
+> обе исправлены:
 >
-> 1. Заголовки `sss.h`, `fsl_sss_se05x_apis.h`, `fsl_sss_se05x_types.h` — это
->    middleware **NXP Plug & Trust**, а не библиотека PlatformIO. В реестре
->    PlatformIO пакета с таким именем нет: сборка печатала
->    `Library Manager: Installing se050` →
->    `Warning! Could not find the package with 'se050' requirements`
->    (было в `platformio.ini` до 2026-09-21, теперь записи нет — вместо неё
->    внятный `#error` в `.ino`).
-> 2. В `lib_deps` не хватало `WiFiManager` (из-за чего сборка падала первой
->    ошибкой `WiFiManager.h: No such file or directory` — теперь добавлен).
-> 3. Ни одна плата с SE050 не подключалась: аппаратного лога bring-up нет.
+> 1. **Middleware NXP не «закрытый».** Пакет `NXP/plug-and-trust` на GitHub —
+>    **BSD-3-Clause** (`LICENSE.txt`: «Copyright 2018-2020,2024 NXP», текст
+>    BSD 3-Clause), то есть вендоринг разрешён с сохранением уведомления.
+>    Прежняя формулировка «закрытый по лицензии, поэтому не вендорится» была
+>    неверна: blocker был не юридический, а в том, что вендоринг не сделали.
+> 2. **Прошивка вызывала функции, которых в API NXP нет.** `sss_se05x_connect`,
+>    `sss_open_session`, `sss_key_store_init`, `sss_crypto_object_create/get_handle`,
+>    `sss_asymmetric_get_pub_key`, `sss_asymmetric_sign`,
+>    `kSSS_KeyPart_Pair_Ed25519`, `kSSS_CipherType_EC_ED25519`,
+>    `kAlgorithm_SSS_Ed25519` — таких символов нет ни в mini-package, ни в API.
+>    Именно поэтому tier не мог собраться ни в какой конфигурации. Теперь код
+>    использует реальный API: `sss_se05x_session_open` →
+>    `sss_se05x_key_store_context_init` → `sss_se05x_key_object_init` →
+>    `sss_se05x_key_object_{allocate_handle,get_handle}` →
+>    `sss_se05x_key_store_generate_key`/`_get_key` →
+>    `sss_se05x_asymmetric_context_init` → `sss_se05x_asymmetric_sign`, с
+>    Ed25519 = `kSSS_CipherType_EC_TWISTED_ED` + `kAlgorithm_SSS_SHA512` (внутри
+>    чип выбирает `kSE05x_EDSignatureAlgo_ED25519PURE_SHA_512`).
 >
-> Ниже — что именно нужно сделать, чтобы tier стал собираемым и проверяемым.
+> **Что по-прежнему не проверено:** ни одна плата с SE050 не подключалась, ни один
+> proof не подписан на чипе. Сборка ≠ bring-up. Кроме платы нужен включённый в
+> апплет EDDSA (`AppletConfig_EDDSA`, кривая `RESERVED_ID_ECC_ED_25519`) — это
+> заводская/OTP-настройка, и первое, что стоит проверить на железе.
 
-### Vendoring: что положить в `lib/`
+### Vendoring: middleware + наш порт
 
-Middleware NXP Plug & Trust (закрытый по лицензии NXP, поэтому не вендорится
-в этот репозиторий) нужно положить локально:
+Middleware **не коммитится**, а скачивается скриптом в `vendor/se05x/`
+(gitignored) — третьесторонний код на 105 файлов не должен жить в каждом диффе:
+
+```bash
+cd firmware/esp32_proof_sender
+scripts/vendor-se050.sh          # пиннутый ref + sha256 tarball'а → vendor/se05x/VERSION
+pio run -e esp32dev-se050
+```
+
+Скрипт проверяет, что upstream всё ещё BSD-3-Clause, и отказывается продолжать,
+если лицензия изменилась. Раскладка:
 
 ```
-firmware/esp32_proof_sender/lib/
-├── se05x/          # NXP Plug & Trust middleware: sss.h, fsl_sss_se05x_*.h,
-│                   # fsl_sss_ftr.h, apdu/ (se05x_APDU_apis), platform hooks
-└── (ваш port-layer) # реализация sss_* transport hooks под ESP32 I2C
+firmware/esp32_proof_sender/
+├── vendor/se05x/            # NXP Plug & Trust mini package (BSD-3-Clause,
+│                            # gitignored): sss/, hostlib/, fsl_sss_ftr.h
+└── lib/enrg_se050_port/     # НАШ порт (коммитится): I2C PAL phPalEse_i2c_*,
+                             # sm_sleep/sm_usleep, reset-хуки — ~250 строк
 ```
 
-Источник: NXP Plug & Trust MW (`plug-and-trust` / `se05x-middleware`), раздел
-«SE05x host library». Версию middleware зафиксируйте в
-`lib/se05x/VERSION` и в этом документе после первого успешного bring-up —
-вызовы SSS устойчивы, но имена/состав заголовков между мажорными версиями
-меняются, поэтому версия должна быть записана, а не угадываться.
+Почему middleware не в `lib/`: PlatformIO компилирует **все** библиотеки из `lib/`
+для **каждого** env — дерево в `lib/` ломает `esp32dev`/`esp32dev-ota`, где нет ни
+SSS-include-путей, ни define'ов. Поэтому `vendor/` подключается только в SE050-тир
+через `lib_extra_dirs`. По той же причине наш порт обёрнут в
+`#if ENRG_USE_SE050` — иначе он компилируется и для dev-тиров.
 
 ### Bring-up (чек-лист)
 
 ```bash
 cd firmware/esp32_proof_sender
-# 1. Подключите SE050 к I2C (SDA=21, SCL=22 по умолчанию) + VCC/GND.
-# 2. Положите middleware NXP в lib/se05x/ (см. §Vendoring выше) и запишите версию.
-# 3. Соберите tier (до vendoring команда обязана падать с #error — это ожидаемо):
-pio run -e esp32dev-se050
-# 4. Прошейте и проверьте Serial: "[KEY] хранилище: NXP SE050 ..."
+# 1. Middleware (один раз, нужен доступ в сеть) и сборка тира:
+scripts/vendor-se050.sh
+pio run -e esp32dev-se050              # измерено 2026-09-21: SUCCESS, flash 93.6%
+# 2. Подключите SE050 к I2C (SDA=21, SCL=22 по умолчанию) + VCC/GND.
+#    Есть линия reset — задайте -D ENRG_SE050_RESET_GPIO=<пин>; иначе порт
+#    полагается на протокольный ComReset.
+# 3. Если чип не отвечает: логический анализатор на SDA/SCL. Порт отдаёт кадр
+#    на шину как есть (length byte уже внутри кадра) — см. комментарий в
+#    lib/enrg_se050_port/src/enrg_se050_port.cpp, это первое место для проверки.
+# 4. Прошейте и смотрите Serial: "[KEY] хранилище: NXP SE050 ...", "[SE050] ..."
 pio run -e esp32dev-se050 -t upload -t monitor
 # 5. Отправьте ОДИН proof этим устройством и приложите к задаче строку Serial
 #    + device_id + tx подписи/минта (это и есть «железный bring-up log»).
 ```
 
+Проверьте на шаге 4, что EDDSA включён в апплете: без `AppletConfig_EDDSA`
+генерация Ed25519-ключа вернёт ошибку SSS, и это настройка уровня OTP — программно
+её из прошивки не обойти.
+
 Только после шага 5 в `README.md`/`docs/STATE.md` можно писать, что устройство
-подписывает proof'ы внутри SE050: до этого корректная формулировка —
-«reference implementation готова, чип не поднимался».
+подписывает proof'ы внутри SE050. Корректная формулировка до этого — «tier
+собирается (2026-09-21), чип не поднимался»: сборка и работа на кремнии — разные
+утверждения, и здесь проверено только первое.
 
 ### Проверка после bring-up
 

@@ -66,18 +66,28 @@ pio run -t upload -e esp32dev
 
 ## Build matrix — что реально собирается (измерено 2026-09-21)
 
+Перед сборкой SE050-тиров один раз вендорим middleware (BSD-3-Clause, не
+реестровый пакет): `scripts/vendor-se050.sh` → `vendor/se05x/` (gitignored,
+пиннутая версия в `VERSION`).
+
 | env | tier (ADR-0007) | Статус | Почему |
 |---|---|---|---|
 | `esp32dev` | `basic` (ключ в NVS, подпись в CPU) | ✅ `SUCCESS` | — |
 | `esp32dev-ota` | `basic` + A/B OTA + eFuse anti-rollback | ✅ `SUCCESS` | — |
+| `esp32dev-se050` | `conforming` (Ed25519 внутри SE050) | ✅ `SUCCESS` | вендоренный middleware + порт `lib/enrg_se050_port/`; 93.6% слота (1.23 МБ из 1.31 МБ) |
+| `esp32dev-mainnet` | production (SE050 обязателен) | ✅ `SUCCESS` | `extends = esp32dev-se050` + production-флаги; 67.0% слота (1.23 МБ из 1.83 МБ) |
 | `esp32dev-atecc` | `hardware-aided` (seed в ATECC608A, подпись в CPU) | ❌ не собирается | `cryptoauthlib` требует `atca_config.h` (HAL-конфиг под вашу плату) — не вендорен |
-| `esp32dev-se050` | `conforming` (Ed25519 внутри SE050) | ❌ не собирается | нужен middleware NXP Plug & Trust в `lib/`; пакета `se050` в реестре PlatformIO нет |
-| `esp32dev-mainnet` | production (SE050 обязателен) | ❌ не собирается (by design) | то же middleware; падает с явным `#error` — «mainnet без SE050 невозможен» |
 
-То есть **сегодня реально собираются только dev-тиры** (`basic`). Production-тир
-собирается после vendoring'а middleware — шаги в `SE050-HARDWARE-SIGNING.md`
-§Vendoring; после него раскомментируйте `-D ENRG_SE050_MIDDLEWARE_VENDORED=1`
-в `platformio.ini`.
+**Важно про размер:** дефолтная таблица разделов даёт приложению 1.31 МБ, и
+SE050-образ занимает 93.6% — впритык. `esp32dev-mainnet` собирается с
+`partitions_ota.csv` (слот 1.83 МБ) и укладывается в 67%. Практический вывод: для
+SE050-тира берите OTA-таблицу разделов, даже если A/B пока не нужен, — иначе
+любое добавление кода упрётся в потолок.
+
+**Важно про чип:** сборка — это ещё не bring-up. Ни одна плата с SE050 не
+подключалась, ни один proof не подписан на чипе. Что осталось: плата
+(ESP32 + SE05x/OM-SE050ARD), включённый в апплет EDDSA, первые кадры T=1-over-I2C
+под логическим анализатором. Чек-лист — `SE050-HARDWARE-SIGNING.md` §Bring-up.
 
 ## Загрузка прошивки на ESP32
 

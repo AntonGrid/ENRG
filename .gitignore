@@ -92,6 +92,11 @@ enrg-wallet.json
 deploy/
 # OTA firmware images published by the orchestrator (ADR-0008)
 firmware/updates/
+# NXP Plug & Trust middleware for the SE050 tier — vendored third-party code
+# (BSD-3-Clause, ~105 files) fetched by scripts/vendor-se050.sh into vendor/,
+# not lib/ (PlatformIO compiles all of lib/ for every environment). Our own
+# ESP32 host port for it (lib/enrg_se050_port) IS committed.
+firmware/esp32_proof_sender/vendor/se05x/
 # Legacy firmware v1/v2 (archived, NEVER track — D-1, ADR-0001/0007) and the
 # pre-SE050 identity helper that stored the key in NVS in plaintext (H-4).
 # Only the quarantine note is kept in the repository.

@@ -1,0 +1,11 @@
+{
+  "name": "enrg_se050_port",
+  "version": "1.0.0",
+  "description": "ESP32/Arduino host port for the vendored NXP Plug & Trust middleware: I2C PAL (T=1 over I2C), timers and reset hooks. This is ENRG code, committed; the middleware under lib/se05x is not.",
+  "license": "MIT",
+  "frameworks": "arduino",
+  "platforms": "espressif32",
+  "build": {
+    "srcDir": "src"
+  }
+}

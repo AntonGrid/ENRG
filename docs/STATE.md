@@ -37,8 +37,8 @@ Everything below was **measured**, not inferred.
   `unattributed_proofs{proofs: 15}`; `/device/EAv5ND…/balance` →
   `0.000536313` SRC from ATA `F5TGjRA1…` — the public dashboard no longer reads
   a fake zero.
-- Claims were corrected wherever they overstated reality: the SE050 tier is
-  reference code that **does not build yet**, no physical board has sent a proof,
+- Claims were corrected wherever they overstated reality: the SE050 tier built
+  nothing (and now does — see below), no physical board has sent a proof,
   the AI layer runs in `offline-fallback` mode, and the two oracle instances
   share one operator. `README.md` now carries a
   "what runs today — and what is still pending" table; the pitch film was
@@ -84,7 +84,7 @@ Everything below was **measured**, not inferred.
 
 | Item | Blocked by |
 |---|---|
-| SE050 / mainnet firmware tier | NXP Plug & Trust middleware is not vendored (it is not a PlatformIO package); no board with an SE050 has been connected |
+| SE050 / mainnet firmware tier | only the **board**: the tier builds now (vendored BSD-3-Clause middleware + `lib/enrg_se050_port/`), but no ESP32 with an SE050 has ever been connected, and the applet needs EDDSA enabled — neither is checkable without hardware |
 | Removing the 10 idle registry keys | `oracle_admin` is the offline deployer key `H3tXm4…` — confirmed on-chain by the audit script, which now prints `registry.authority` / `registry.oracle_admin` next to your signer and refuses `--remove-empty` when they differ |
 | ATECC608A tier | `cryptoauthlib` needs an `atca_config.h` for the target board |
 
@@ -101,7 +101,7 @@ Everything below was **measured**, not inferred.
 | Manifest registry / merkle verification | ✅ Implemented | `instructions/manifest_registry.rs`, `manifest_verification.rs`, `merkle_proof_verification.rs` |
 | Policy Engine (ADR-0003) | ✅ **Implemented** | `instructions/policy_engine.rs`, `state/policy.rs` (PolicyRegistry, PDA `[b"policy-registry"]`); `mint_energy` — the Verifier, executes policies |
 | OTA + secure updates (ADR-0008) | ✅ Implemented | Firmware v3: image signing with a **separate cold firmware key** (`ENRG_FIRMWARE_PUBKEY_HEX`), SHA-256, anti-rollback (NVS + optional eFuse); dual-bank A/B (`partitions_ota.csv`) + monotonic eFuse (`esp32dev-ota`); server: `FIRMWARE_SIGNING_KEY_PATH` |
-| Hardware device signing (ADR-0001/0007) | ⚠️ Partial | SE050 path (hardware Ed25519, `esp32dev-se050`) + a documented compromise (ATECC608A seed-vault, CPU signing) — `SE050-HARDWARE-SIGNING.md`. Measured 2026-09-21: only the `basic` tiers (`esp32dev`, `esp32dev-ota`) compile; `esp32dev-se050` / `-mainnet` stop at an explicit `#error` until NXP's middleware is vendored, `esp32dev-atecc` needs `atca_config.h` (build matrix in `firmware/esp32_proof_sender/README.md`) |
+| Hardware device signing (ADR-0001/0007) | ⚠️ Partial | SE050 path (hardware Ed25519, `esp32dev-se050`) + a documented compromise (ATECC608A seed-vault, CPU signing) — `SE050-HARDWARE-SIGNING.md`. Measured 2026-09-21: `esp32dev` / `esp32dev-ota` / **`esp32dev-se050`** compile (the SE050 tier now builds against the vendored BSD-3-Clause middleware + `lib/enrg_se050_port/`, 93.6% of the app slot); `esp32dev-mainnet` needs the same plus a production eFuse/partition plan; `esp32dev-atecc` still needs `atca_config.h` (build matrix in `firmware/esp32_proof_sender/README.md`). **No chip has been flashed** |
 | Multisig for `set_vault_authority` / timelock changes | ⏸️ Deferred (TODO(audit)) | `instructions/initialize.rs` |
 
 Emission principle: post-premine emission **only** through governance;
