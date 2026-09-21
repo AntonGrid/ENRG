@@ -69,7 +69,7 @@ in real time, verification still runs on annual manual audits.
 | Emission | Dynamic, tied to real energy (energy-per-token, self-adjusting) | Fixed rate (e.g. 1 token/kWh) |
 | Device reputation | **ERS** (tiers, limits, quarantine) on-chain | None or off-chain |
 | AI layer | **Federated learning** on device data + signed AI signals | None |
-| Audit surface | 58 on-chain instructions, 276 tests, public specs/ADR | Opaque off-chain logic |
+| Audit surface | 58 on-chain instructions, 295 tests, public specs/ADR | Opaque off-chain logic |
 
 > **One legacy word in the code.** `programs/enrg-mvp/src/instructions/buyback.rs`
 > and the `fund-buyback` PDA keep their historical names: an instruction name is
@@ -122,8 +122,8 @@ The deciding factor is therefore the **first live pilot**, not the feature list.
 - **Live on devnet**: two independent oracles staked, voted and finalized a
   real attestation; a full device lifecycle (register→claim→activate→mint)
   minted with the quorum gate **required=true**; rewards claimed idempotently;
-- **Testing**: 276 tests green — 125 Rust (`cargo test -p enrg-mvp`),
-  112 Node (`npm test`), 21 Python (`pytest -q -p no:anchorpy`),
+- **Testing**: 295 tests green — 125 Rust (`cargo test -p enrg-mvp`),
+  122 Node (`npm test`), 30 Python (`pytest -q -p no:anchorpy`),
   18 Foundry (`cd onchain && forge test`);
 - 300+ commits, 10 ADRs, protocol specification v8.0
   (`docs/ENRG_Technical_Specification_v8.0.md`, 960 lines), 2 security audits

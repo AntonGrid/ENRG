@@ -18,6 +18,8 @@
     "pilot:proof": "node scripts/submit-proof-to-oracle.js",
     "openapi": "node scripts/generate-openapi.js",
     "openapi:check": "node scripts/generate-openapi.js --check",
+    "wire:vectors": "node scripts/generate-wire-vectors.js",
+    "wire:vectors:check": "node scripts/generate-wire-vectors.js --check",
     "mainnet:smoke": "RPC_ENDPOINT=https://api.mainnet-beta.solana.com ts-node scripts/devnet_e2e_lifecycle.ts --smoke"
   },
   "dependencies": {

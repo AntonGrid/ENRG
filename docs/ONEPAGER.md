@@ -42,7 +42,7 @@ asset owners, ESG assurance firms (CSRD/CBAM/SAF), other DePIN projects.
 - **Devnet live:** two independent oracles staked and voted; attestation
   finalized; a full device lifecycle minted through the **required=true**
   quorum gate; rewards claimed idempotently;
-- **Quality:** 276 tests green (125 Rust / 112 Node / 21 Python / 18 Foundry);
+- **Quality:** 295 tests green (125 Rust / 122 Node / 30 Python / 18 Foundry);
   300+ commits;
   10 ADRs; protocol spec v1.0; documented security audits; multisig governance.
 

@@ -43,7 +43,7 @@ tamper attempt fails.** Everything else is supporting material.
 | 0:55–1:20 | **Tamper scene**: edit one byte of the reading in the payload, re-send | red "SIGNATURE INVALID — MINT REJECTED" | "Now the attack: I change one byte of the reading. The signature no longer verifies, the oracle rejects the report, nothing is minted. Fraud becomes a failed transaction, not an investigation." |
 | 1:20–1:45 | Terminal: oracle #1 votes → oracle #2 votes the same SHA-256 hash → attestation FINALIZED → mint | text: "≥2 staked oracles · contradictory vote → slashing" | "Minting is gated: two independent, staked oracles must vote on the same canonical hash. One compromised oracle cannot mint value — a contradiction triggers slashing." |
 | 1:45–2:05 | `enrg.network` + Axis-connect PWA: energy produced in kWh, device list, accrual history | text: "The metric is energy, not tokens" | "The user sees energy produced — not tokens. Everything on screen is an inspectable Solana account: proof, attestation, policy, mint." |
-| 2:05–2:25 | Summary card + repo URL | text: "ENRG — verification infrastructure · 58 instructions · 276 tests · live on devnet" | "We are not another solar token. We are the verification layer every energy DePIN needs — live today, and we are looking for the first real pilot site." |
+| 2:05–2:25 | Summary card + repo URL | text: "ENRG — verification infrastructure · 58 instructions · 295 tests · live on devnet" | "We are not another solar token. We are the verification layer every energy DePIN needs — live today, and we are looking for the first real pilot site." |
 | 2:25–2:30 | End card: GitHub + `enrg.network` | — | (silence) |
 
 ## 4. Recording recipe

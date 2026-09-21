@@ -89,6 +89,13 @@ jobs:
         # nobody ran (audit 2026-09-21).
         run: npm run openapi:check
 
+      - name: Check the wire-format vectors against policy.js
+        # sdk/vectors/wire_format.json is what the JS and Python SDKs are both
+        # tested against; it is generated from policy.js (the mirror the Rust
+        # conformance vectors pin). If policy.js changes, the vectors must be
+        # regenerated in the same commit.
+        run: npm run wire:vectors:check
+
   anchor:
     name: Anchor program tests (anchor test, local validator)
     runs-on: ubuntu-latest

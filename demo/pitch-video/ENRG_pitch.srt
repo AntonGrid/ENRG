@@ -51,57 +51,57 @@ A contradictory vote is a slashing event, and minting waits for a finalised atte
 One compromised oracle cannot create value.
 
 14
-00:01:10,608 --> 00:01:13,594
+00:01:10,608 --> 00:01:13,571
 Fifty-eight on-chain instructions in Rust.
 
 15
-00:01:13,874 --> 00:01:19,333
-Two hundred and seventy-six tests pass: Rust, Node, Python and Foundry.
+00:01:13,851 --> 00:01:19,496
+Two hundred and ninety-five tests pass: Rust, Node, Python and Foundry.
 
 16
-00:01:19,614 --> 00:01:27,442
+00:01:19,776 --> 00:01:27,360
 The protocol is live on devnet today — two staked oracle instances, and a mint that only passed because the quorum was finalised.
 
 17
-00:01:27,721 --> 00:01:33,807
+00:01:27,640 --> 00:01:33,552
 A finalised attestation, and a mint that only executed because the gate said required equals true.
 
 18
-00:01:34,088 --> 00:01:37,539
+00:01:33,832 --> 00:01:37,109
 Every proof and mint is public — verify it yourself.
 
 19
-00:01:38,289 --> 00:01:42,172
+00:01:37,859 --> 00:01:41,742
 Why me? I have no degree, no team and no funding.
 
 20
-00:01:42,452 --> 00:01:49,864
+00:01:42,022 --> 00:01:49,434
 Four months of nights and rotations off. I wrote the firmware, the contracts, the oracles and the AI layer myself.
 
 21
-00:01:50,144 --> 00:01:53,479
+00:01:49,714 --> 00:01:53,049
 I got tired of watching physical data be trusted on faith.
 
 22
-00:01:53,759 --> 00:02:01,046
+00:01:53,329 --> 00:02:00,616
 This is not a sprint for me. It is a mission: make the physical world provable. Judge me by the code, not by the pitch.
 
 23
-00:02:03,289 --> 00:02:11,595
+00:02:02,859 --> 00:02:11,165
 So here is my ask. I need one real pilot: a solar site, a meter, an operator — anyone whose data should be provable.
 
 24
-00:02:11,875 --> 00:02:15,500
+00:02:11,445 --> 00:02:15,070
 And I need mentors who have taken infrastructure like this to mainnet.
 
 25
-00:02:15,780 --> 00:02:20,369
+00:02:15,350 --> 00:02:19,939
 The protocol is open, the devnet is live, and the code is public.
 
 26
-00:02:20,649 --> 00:02:22,823
+00:02:20,219 --> 00:02:22,393
 If that is you, let us talk.
 
 27
-00:02:23,573 --> 00:02:27,173
+00:02:23,143 --> 00:02:26,743
 ENRG — verification infrastructure for the physical world. github.com/AntonGrid/ENRG

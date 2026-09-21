@@ -17,7 +17,7 @@
     "scene_pad": 0.75,
     "fade": 0.45,
     "endcard": 3.6,
-    "endcard_stats": "devnet HkuC3FT…  ·  58 instructions  ·  276 tests",
+    "endcard_stats": "devnet HkuC3FT…  ·  58 instructions  ·  295 tests",
     "pipeline_stages": ["DEVICE · Ed25519", "PROOF", "ORACLE QUORUM", "ATTESTATION", "MINT"],
     "numbers_footer": ["mint 2ANc1Lf3az4utCDRw9A7Lfp7z2e7oY2kseJoW6k6U9gcq9uCbTMR1gLRY4M8Ctb7hJfQMm3iuHYHacPQRQiXGKT6", "slot 500485022  ·  devnet  ·  re-verified 2026-09-21"]
   },
@@ -128,10 +128,10 @@
           "bignum": "58"
         },
         {
-          "vo": "Two hundred and seventy-six tests pass: Rust, Node, Python and Foundry.",
-          "bullet": "276 tests green",
+          "vo": "Two hundred and ninety-five tests pass: Rust, Node, Python and Foundry.",
+          "bullet": "295 tests green",
           "kind": "number",
-          "bignum": "276"
+          "bignum": "295"
         },
         {
           "vo": "The protocol is live on devnet today — two staked oracle instances, and a mint that only passed because the quorum was finalised.",

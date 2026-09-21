@@ -34,7 +34,7 @@ cryptographically provable on Solana — we sell trust, not tokens.
 | Hardware root of trust | `firmware/` — ESP32 signs every proof with Ed25519, and the device identity *is* the signing key (ADR-0001). Key storage has three tiers (ADR-0007): NVS (development), ATECC608A seed vault, **NXP SE050 with on-chip Ed25519 signing** — the tier the `mainnet` build refuses to compile without |
 | One oracle cannot mint | `programs/enrg-mvp` — ≥2 staked oracles vote on a canonical SHA-256 hash, a contradictory vote is a slashing event, minting is gated by a *finalised* attestation (ADR-0006) |
 | Anyone can re-verify | Every proof, attestation, policy decision and mint is an inspectable Solana account |
-| It is real code, not slides | 58 on-chain instructions · 276 tests green: 125 Rust (`cargo test -p enrg-mvp`), 112 Node (`npm test`), 21 Python (`pytest -q -p no:anchorpy`), 18 Foundry (`cd onchain && forge test`) |
+| It is real code, not slides | 58 on-chain instructions · 295 tests green: 125 Rust (`cargo test -p enrg-mvp`), 122 Node (`npm test`), 30 Python (`pytest -q -p no:anchorpy`), 18 Foundry (`cd onchain && forge test`) |
 
 ## What runs today — and what is still pending
 
@@ -50,10 +50,11 @@ table is wrong.
 | ≥2 staked oracles attest the same hash | ✅ runs | two oracle **instances with separate keys** (`HC8Was…`, `Hm7Ym7…`) report through `GET /api/v1/oracles`. Both are run by me today — independence between *operators* is the next step (`docs/MULTI-ORACLE-ROLLOUT.md`), not a claim. The on-chain registry still carries 10 dev-era keys that never staked or voted; the endpoint counts them honestly (`registered: 12, with_proofs: 2, idle: 10`) and `scripts/oracle-registry-audit.ts --remove-empty` removes them once the offline `oracle_admin` key signs |
 | The device signs readings with Ed25519 and the program verifies it through the precompile | ✅ runs | the devnet proofs were submitted by a device **keypair** on the host (`scripts/submit-proof-to-oracle.js`) |
 | `GET /device/:id/balance` and `/device/:id/history` answer real data | ✅ runs | `EAv5ND…Fm2` → `balance: 0.000536313` SRC (`536313` atomic) from the owner's on-chain ATA `F5TGjRA1…` (owner = producer `authority`, the same account `mint_energy` checks); `/history` returns that device's proof/mint rows with `mint_status`, `mint_tx`, `oracle_id`. Before 2026-09-21 they returned `{ balance: 0 }` and `[]` |
+| The published API spec and the SDKs cannot drift from the code | ✅ enforced | `docs/openapi.json` is generated from the 16 real routes of `server.js`; `npm run openapi:check` (run in CI) fails if a route and its documentation disagree. The SDK wire format is pinned by `sdk/vectors/wire_format.json` (generated from `policy.js`) and asserted byte-for-byte by both the JS and the Python suites |
 | The key lives inside an NXP SE050 and never leaves the chip | ⚠️ **reference code written; chip never flashed; the tier does not build yet** | 141 lines of real SSS calls behind `ENRG_USE_SE050` (`sss_se05x_connect` → `sss_open_session` → `sss_key_store_init` → `sss_crypto_object_*` → `sss_asymmetric_get_pub_key` → `sss_asymmetric_sign`). Measured 2026-09-21: `pio run -e esp32dev-se050` and `-e esp32dev-mainnet` stop at an explicit `#error`, because the NXP Plug & Trust middleware is not vendored and the old `lib_deps = se050` entry never existed in the PlatformIO registry. Build matrix in `firmware/esp32_proof_sender/README.md`; vendoring steps in `SE050-HARDWARE-SIGNING.md` §Vendoring |
 | A physical ESP32 has sent a proof to devnet | ⚠️ **not yet** | this is the next milestone; no bring-up log exists in this repository |
 | AI layer (forecast, anomaly, federated rounds) | 🟡 sibling repo, currently a fallback | [ENRG-AI](https://github.com/AntonGrid/ENRG-AI) publishes signed `assessments.json`; the live file reports `"source": "offline-fallback"` (Holt trend, not a trained round). The on-chain `commit_contribution` (proof-of-intelligence) instruction exists and is not yet used in production |
-| 276 tests green | ✅ measured 2026-09-21 | 125 Rust / 112 Node / 21 Python / 18 Foundry. Note: the Python suite is mock-level **simulation** of the tokenomics math, not a verification of the Rust implementation, and the Foundry suite covers the EVM attestation sink, not the Solana program |
+| 295 tests green | ✅ measured 2026-09-21 | 125 Rust / 122 Node / 30 Python / 18 Foundry. Note: the Python suite is mock-level **simulation** of the tokenomics math, not a verification of the Rust implementation, and the Foundry suite covers the EVM attestation sink, not the Solana program |
 
 ## Verify it yourself in two minutes
 
@@ -92,7 +93,7 @@ devnet (`docs/assets/`, rendered from `demo/pitch-video/ENRG_pitch.mp4`):
 
 ![The trust path as drawn in the pitch video](docs/assets/pitch-pipeline.png)
 
-![What is done today: 58 instructions, 276 tests, a devnet mint](docs/assets/pitch-proof.png)
+![What is done today: 58 instructions, 295 tests, a devnet mint](docs/assets/pitch-proof.png)
 
 ---
 
@@ -180,6 +181,10 @@ did not run is now in `legacy/` with its status written down (`legacy/README.md`
   `tests/test_*.py` (pytest); `tests_disabled/` is explicitly switched off.
 - `schemas/` — JSON Schemas for the core artefacts (proof, manifest, record, attestation).
 - `examples/` — runnable example payloads (the early ones are in `legacy/examples/`).
+- `sdk/` — reference clients (JavaScript + Python) and the pinned wire-format
+  vectors they are both tested against (`sdk/README.md`).
+- `docs/openapi.json` — the API spec, generated from `server.js` (`npm run openapi`)
+  and checked in CI against the routes that actually exist.
 - `idls/`, `vendor/` — Anchor IDL exports and the vendored `anchor-spl` patch.
 - `docs/` — specifications, ADRs, audits and runbooks; `docs/STATE.md` is the
   current state of the world.

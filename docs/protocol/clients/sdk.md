@@ -142,3 +142,20 @@ Every compliant implementation SHALL satisfy the following requirements.
 - SDKs MUST remain protocol-version aware.
 - SDKs MUST support standardized protocol interfaces.
 - SDKs MUST remain implementation-independent.
+
+---
+
+## 22.13 Reference implementation in this repository
+
+`sdk/README.md` ships reference clients in **JavaScript** (`sdk/js/enrg-client.js`)
+and **Python** (`sdk/python/enrg_client.py`). Today they cover the live oracle
+interfaces — device registration payloads, proof submission, registry/state
+queries, the device manifest and firmware metadata — plus the wire format
+(`device_message_to_sign`, `oracle_message_to_sign`, `proof_hash`,
+`oracle_attest_message`), which is the part an integrator must get byte-exact.
+
+Not covered yet (gaps, stated rather than implied): governance operations, event
+subscription and direct smart-contract calls — see §22.4. The wire format is not
+hand-written: `sdk/vectors/wire_format.json` is generated from `policy.js`, which
+the conformance vectors pin against the Rust engine, and both language suites
+assert it byte for byte.

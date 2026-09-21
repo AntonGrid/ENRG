@@ -16,7 +16,7 @@
 | Name | "Axis Protocol — Cryptographic Trust for DePIN" | Keep the substance; consider leading with **ENRG** — another project on the platform is already called "Axis" (`axis-1`, a crypto index), which invites confusion |
 | Tag | `DePIN` | Keep — matches where we actually compete |
 | About the project | One sentence, no numbers | Replace with section 2 |
-| **Project pitch** | `youtu.be/qrgdc1X9kDU` — "ENRG Protocol — Live Demo on Solana Devnet" | Pitch **rendered** and committed: `demo/pitch-video/ENRG_pitch.mp4` (2:27, 1080p, rebuilt 2026-09-21 so the film says 58 instructions / 276 tests like the docs, and does not claim SE050 bring-up that has not happened yet). Upload it, set it here, and keep the devnet walkthrough below. See `demo/pitch-video/README.md` |
+| **Project pitch** | `youtu.be/qrgdc1X9kDU` — "ENRG Protocol — Live Demo on Solana Devnet" | Pitch **rendered** and committed: `demo/pitch-video/ENRG_pitch.mp4` (2:27, 1080p, rebuilt 2026-09-21 so the film says 58 instructions / 295 tests like the docs, and does not claim SE050 bring-up that has not happened yet). Upload it, set it here, and keep the devnet walkthrough below. See `demo/pitch-video/README.md` |
 | **Technical demo** | the *same* link as the pitch | Keep this one here; never reuse one link for both fields |
 | GitHub · Source code | `AntonGrid/ENRG` | ✅ fixed on 2026-09-18 |
 | Website / X | `enrg.network` · `x.com/enrg_protocol` | Keep |
@@ -32,7 +32,7 @@
 > Solana. Every reading is signed by the device itself (Ed25519) — at the tier
 > mainnet requires, that key lives inside an NXP SE050; ≥2 staked oracles must
 > confirm the same hash before anything is minted. Live on devnet: 58
-> instructions, 276 tests, an inspectable audit trail. Not another solar token —
+> instructions, 295 tests, an inspectable audit trail. Not another solar token —
 > the trust layer energy DePINs build on.
 
 **Long version (~900 chars):**
@@ -47,8 +47,8 @@
 > SHA-256 hash of each report; a contradictory vote is a slashing event, and
 > minting stays blocked until the attestation is finalised.
 >
-> Live on devnet: 58 on-chain instructions, 276 tests green (125 Rust / 112 Node
-> / 21 Python / 18 Foundry), a complete device lifecycle minted through the
+> Live on devnet: 58 on-chain instructions, 295 tests green (125 Rust / 122 Node
+> / 30 Python / 18 Foundry), a complete device lifecycle minted through the
 > quorum gate, and an audit trail anyone can re-verify independently.
 >
 > Beyond energy, the same oracle + attestation module is reusable by any DePIN
@@ -121,7 +121,7 @@ How to reproduce: `docs/PILOT-REFRESH.md`.
 - [ ] About replaced (section 2); team roles filled (section 3)
 - [ ] GitHub link → `AntonGrid/ENRG` ✅; Axis-protocol cited in the About text as the standard
 - [x] README "Start here" block present, and it now links the pitch inside the repository instead of the missing `demo/ENRG_live_demo.mp4`; LICENSE consistent; submodules documented
-- [x] Numbers in the README, the submission pack and the film re-verified against the code and the four test suites (58 instructions, 276 tests, mint in slot 500485022)
+- [x] Numbers in the README, the submission pack and the film re-verified against the code and the four test suites (58 instructions, 295 tests, mint in slot 500485022)
 - [ ] GitHub *About* replaced from section 8 (the current description still says "buyback & burn")
 - [ ] ≥3 public updates published during the window
 - [ ] Public Goods entry prepared (section 6)

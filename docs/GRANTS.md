@@ -56,7 +56,7 @@ near-term income, and use the first grant as a reference for #3–#5.
 >   (sibling repo ENRG-AI, currently a forecast fallback);
 > - Devnet live: 2 oracles staked & voted, attestation finalized, gated mint
 >   executed, rewards claimed idempotently;
-> - Quality: 276 tests green (125 Rust / 112 Node / 21 Python / 18 Foundry), 300+ commits, 10 ADRs,
+> - Quality: 295 tests green (125 Rust / 122 Node / 30 Python / 18 Foundry), 300+ commits, 10 ADRs,
 >   protocol specification v8.0, documented security audits, multisig governance.
 >
 > **Milestones (proposed):**
@@ -81,7 +81,7 @@ Short version of `docs/POSITIONING.md` to paste into messages/emails:
 > a finalized-quorum mint gate make fraud economically irrational. Use cases:
 > audit, REC/GO and carbon-credit verification, ESG assurance, DePIN trust.
 > Live demo on devnet (2-oracle quorum + gated mint executed); Solana-native
-> (58 instructions); 276 tests green (125 Rust / 112 Node / 21 Python / 18 Foundry). More:
+> (58 instructions); 295 tests green (125 Rust / 122 Node / 30 Python / 18 Foundry). More:
 > [repo links].
 
 ## 5. Action items (this week)

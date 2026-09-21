@@ -1,0 +1,61 @@
+{
+  "schema_version": "1.0",
+  "normative_source": "ENRG on-chain format: OracleReport::device_message_to_sign / oracle_message_to_sign (programs/enrg-mvp/src/state/oracle.rs) and oracle_attest_message (state/oracle_attestation.rs). Generated from policy.js, the mirror that tests/policy-conformance.test.js checks against the Rust Policy Engine.",
+  "generated_by": "scripts/generate-wire-vectors.js",
+  "wire_formats": {
+    "device_message_to_sign": "device_id(32 bytes) ‖ nonce(u64 little-endian) ‖ device_timestamp(u64 LE) ‖ energy_wh(u64 LE)",
+    "oracle_message_to_sign": "device_id(32 bytes) ‖ nonce(u64 LE) ‖ device_timestamp(u64 LE) ‖ verified_at(u64 LE) ‖ energy_wh(u64 LE)",
+    "proof_hash": "SHA-256(oracle_message_to_sign)",
+    "oracle_attest_message": "b\"enrg:oracle:attest\" ‖ device_id(32 bytes) ‖ nonce(u64 LE) ‖ proof_hash(32 bytes)"
+  },
+  "vectors": [
+    {
+      "name": "typical-report",
+      "device_id_hex": "1f2e3d4c5b6a798807162534435261708192a3b4c5d6e7f8091a2b3c4d5e6f70",
+      "nonce": 42,
+      "device_timestamp": 1700000000,
+      "verified_at": 1700000003,
+      "energy_wh": 1000,
+      "device_message_hex": "1f2e3d4c5b6a798807162534435261708192a3b4c5d6e7f8091a2b3c4d5e6f702a0000000000000000f1536500000000e803000000000000",
+      "oracle_message_hex": "1f2e3d4c5b6a798807162534435261708192a3b4c5d6e7f8091a2b3c4d5e6f702a0000000000000000f153650000000003f1536500000000e803000000000000",
+      "proof_hash_hex": "872b52b3aae65a4ff1b8c0cc4965c86986ee849e74eac91c442b19b68b9e305f",
+      "attest_message_hex": "656e72673a6f7261636c653a6174746573741f2e3d4c5b6a798807162534435261708192a3b4c5d6e7f8091a2b3c4d5e6f702a00000000000000872b52b3aae65a4ff1b8c0cc4965c86986ee849e74eac91c442b19b68b9e305f"
+    },
+    {
+      "name": "first-report-zero-nonce",
+      "device_id_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "nonce": 0,
+      "device_timestamp": 1,
+      "verified_at": 1,
+      "energy_wh": 1,
+      "device_message_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa000000000000000001000000000000000100000000000000",
+      "oracle_message_hex": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000000000010000000000000001000000000000000100000000000000",
+      "proof_hash_hex": "ba7648680657ee6ec4df24f7dca4fcfe27c2cc950c5d1f669a1b9bd712a89f9d",
+      "attest_message_hex": "656e72673a6f7261636c653a617474657374aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0000000000000000ba7648680657ee6ec4df24f7dca4fcfe27c2cc950c5d1f669a1b9bd712a89f9d"
+    },
+    {
+      "name": "zero-energy",
+      "device_id_hex": "0000000000000000000000000000000000000000000000000000000000000000",
+      "nonce": 7,
+      "device_timestamp": 1700000000,
+      "verified_at": 1700000010,
+      "energy_wh": 0,
+      "device_message_hex": "0000000000000000000000000000000000000000000000000000000000000000070000000000000000f15365000000000000000000000000",
+      "oracle_message_hex": "0000000000000000000000000000000000000000000000000000000000000000070000000000000000f15365000000000af15365000000000000000000000000",
+      "proof_hash_hex": "c53cbee26498b7f1f2fc11dc39802a09e08256e556587fc422a8c76ab6237ef4",
+      "attest_message_hex": "656e72673a6f7261636c653a61747465737400000000000000000000000000000000000000000000000000000000000000000700000000000000c53cbee26498b7f1f2fc11dc39802a09e08256e556587fc422a8c76ab6237ef4"
+    },
+    {
+      "name": "largest-safely-representable-energy",
+      "device_id_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "nonce": 9007199254740991,
+      "device_timestamp": 1700000000,
+      "verified_at": 1700000000,
+      "energy_wh": 9007199254740991,
+      "device_message_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff1f0000f1536500000000ffffffffffff1f00",
+      "oracle_message_hex": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff1f0000f153650000000000f1536500000000ffffffffffff1f00",
+      "proof_hash_hex": "ea66946ebacf48e4246c72f507278ab4638b45f52b9c7062661e7090eb3341ac",
+      "attest_message_hex": "656e72673a6f7261636c653a617474657374ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff1f00ea66946ebacf48e4246c72f507278ab4638b45f52b9c7062661e7090eb3341ac"
+    }
+  ]
+}
