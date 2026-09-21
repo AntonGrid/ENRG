@@ -71,6 +71,14 @@ in real time, verification still runs on annual manual audits.
 | AI layer | **Federated learning** on device data + signed AI signals | None |
 | Audit surface | 58 on-chain instructions, 276 tests, public specs/ADR | Opaque off-chain logic |
 
+> **One legacy word in the code.** `programs/enrg-mvp/src/instructions/buyback.rs`
+> and the `fund-buyback` PDA keep their historical names: an instruction name is
+> part of the Anchor discriminator, so renaming it would break the deployed
+> program and every client. The behaviour is not a market buyback — the protocol
+> never buys SRC on a market; that instruction destroys supply that is already in
+> a protocol-owned account. Public material deliberately avoids the term
+> (`docs/COLOSSEUM-SUBMISSION.md` §7).
+
 ## 7. Competitive landscape — vs concrete players
 
 Full evidence, statuses and sources: `docs/COMPETITORS.md` (snapshot

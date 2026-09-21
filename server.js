@@ -938,58 +938,66 @@ app.get('/api/v1/device/:id/status', (req, res) => {
 
 // === BALANCE (live, 2026-09-21) ===
 // Real SRC balance of the device owner: the on-chain EnergyProducer gives the
-// owner, the owner's ATA gives the balance. The previous version always answered
-// `{ balance: 0 }` — see the honesty table in README.md.
+// owner (`authority` — the same account `mint_energy` requires as the token
+// account owner, mint.rs:468), the owner's ATA gives the balance. The previous
+// version always answered `{ balance: 0 }` — see the honesty table in README.md.
 app.get('/api/v1/device/:id/balance', async (req, res) => {
     const deviceId = req.params.id;
-
-    const d = policy.validateDeviceId(deviceId);
-    if (!d.ok) {
-        return res.status(d.status).json({ error: d.error });
-    }
-    if (!d.deviceIdPubkey) {
-        return res.status(400).json({ error: 'invalid device_id (must be a 32-byte key)' });
-    }
-
-    const connection = getConnection();
-    let producer;
     try {
-        producer = await readOnlyProgram(connection).account.energyProducer
-            .fetch(findProducerPda(d.deviceIdPubkey));
-    } catch (e) {
-        if (isAccountNotFoundError(e)) {
-            return res.status(404).json({ error: 'device_not_registered_on_chain' });
+        const d = policy.validateDeviceId(deviceId);
+        if (!d.ok) {
+            return res.status(d.status).json({ error: d.error });
         }
-        failoverRpc();
-        return res.status(503).json({ error: 'rpc_unavailable', reason: (e && e.message) || '' });
-    }
+        if (!d.deviceIdPubkey) {
+            return res.status(400).json({ error: 'invalid device_id (must be a 32-byte key)' });
+        }
 
-    const [srcMintPda] = PublicKey.findProgramAddressSync([Buffer.from('src-mint')], PROGRAM_ID);
-    const ata = getAssociatedTokenAddressSync(srcMintPda, producer.owner, true);
-
-    let balance = 0;
-    let balanceAtomic = '0';
-    try {
-        const bal = await connection.getTokenAccountBalance(ata);
-        balance = bal.value.uiAmount || 0;
-        balanceAtomic = bal.value.amount;
-    } catch (e) {
-        // An owner that has never been paid simply has no ATA yet — that is a
-        // zero balance, not an error. Anything else is an RPC problem.
-        if (!isAccountNotFoundError(e)) {
+        const connection = getConnection();
+        let producer;
+        try {
+            producer = await readOnlyProgram(connection).account.energyProducer
+                .fetch(findProducerPda(d.deviceIdPubkey));
+        } catch (e) {
+            if (isAccountNotFoundError(e)) {
+                return res.status(404).json({ error: 'device_not_registered_on_chain' });
+            }
             failoverRpc();
             return res.status(503).json({ error: 'rpc_unavailable', reason: (e && e.message) || '' });
         }
-    }
 
-    res.json({
-        device_id: deviceId,
-        owner: producer.owner.toBase58(),
-        ata: ata.toBase58(),
-        mint: srcMintPda.toBase58(),
-        balance,
-        balance_atomic: balanceAtomic,
-    });
+        const owner = producer.authority;
+        const [srcMintPda] = PublicKey.findProgramAddressSync([Buffer.from('src-mint')], PROGRAM_ID);
+        const ata = getAssociatedTokenAddressSync(srcMintPda, owner, true);
+
+        let balance = 0;
+        let balanceAtomic = '0';
+        try {
+            const bal = await connection.getTokenAccountBalance(ata);
+            balance = bal.value.uiAmount || 0;
+            balanceAtomic = bal.value.amount;
+        } catch (e) {
+            // An owner that has never been paid simply has no ATA yet — that is a
+            // zero balance, not an error. Anything else is an RPC problem.
+            if (!isAccountNotFoundError(e)) {
+                failoverRpc();
+                return res.status(503).json({ error: 'rpc_unavailable', reason: (e && e.message) || '' });
+            }
+        }
+
+        res.json({
+            device_id: deviceId,
+            owner: owner.toBase58(),
+            ata: ata.toBase58(),
+            mint: srcMintPda.toBase58(),
+            balance,
+            balance_atomic: balanceAtomic,
+        });
+    } catch (e) {
+        // Async handlers are not wrapped by Express 4 — an unexpected throw here
+        // must not take the oracle process down.
+        logger.error('❌ Error fetching device balance:', e && e.message);
+        res.status(500).json({ error: (e && e.message) || 'internal error' });
+    }
 });
 
 // === HISTORY (live, 2026-09-21) ===
@@ -1626,6 +1634,9 @@ app.get('/api/v1/oracles', async (req, res) => {
             logger.warn('⚠️ /api/v1/oracles: oracle-registry not readable: ' + (e && e.message));
         }
         const stats = await storage.loadOracleStats();
+        // Rows written before 2026-08-30 carry no oracle attribution at all —
+        // report them explicitly instead of letting every oracle look empty.
+        const unattributed = await storage.loadUnattributedProofStats();
         const self = oracleKeypair ? oracleKeypair.publicKey.toBase58() : null;
 
         const oracles = onChain.map((id) => {
@@ -1641,11 +1652,23 @@ app.get('/api/v1/oracles', async (req, res) => {
             };
         });
 
+        const withProofs = oracles.filter((o) => o.total_proofs > 0);
+
         res.json({
             ok: true,
             this_instance: self,
             registry_pda: registryPda.toBase58(),
             count: onChain.length,
+            counts: {
+                registered: onChain.length,
+                with_proofs: withProofs.length,
+                idle: onChain.length - withProofs.length,
+            },
+            // Attribution only exists for proofs submitted on/after 2026-08-30.
+            unattributed_proofs: unattributed,
+            note: unattributed.proofs > 0
+                ? `${unattributed.proofs} proof(s) were recorded before per-oracle attribution existed (2026-08-30) and cannot be assigned to an oracle; the per-oracle numbers below therefore sum to less than /api/v1/stats.`
+                : null,
             oracles,
         });
     } catch (e) {

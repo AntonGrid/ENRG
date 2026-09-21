@@ -4,12 +4,19 @@ use anchor_spl::token::{self, Burn, Mint, Token, TokenAccount};
 use crate::error::ErrorCode;
 use crate::state::*;
 
-/// Burns SRC tokens from the buyback fund.
+/// Burns SRC from the protocol-owned treasury account (`fund-buyback`).
 ///
-/// Only Vault.authority (protocol admin / temporary governor) can
-/// initiate buyback & burn. Tokens are burned
-/// from the protocol-owned buyback account, reducing total supply.
-/// Buyback PDA (fund-buyback) signs for burn because it is the owner of buyback_account.
+/// Naming note (audit 2026-09-21): the instruction and the `fund-buyback` PDA
+/// keep their historical names because an instruction name is part of the Anchor
+/// discriminator — renaming it would break the deployed program and every client
+/// that calls it. Functionally this is **not** a market buyback: the program
+/// never buys SRC on a market. It destroys supply that already sits in an account
+/// the protocol owns (`mint_energy` routes a share of the commission there),
+/// which is why the positioning material avoids the term.
+///
+/// Only Vault.authority (protocol admin / temporary governor) can initiate it.
+/// Tokens are burned from the protocol-owned account, reducing total supply.
+/// The `fund-buyback` PDA signs for the burn because it owns the account.
 ///
 /// TODO(audit, BLOCK 3): authority-only for now; when governance is added,
 /// replace with governor/multisig + (optionally) rate-limit.

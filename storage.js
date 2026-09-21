@@ -348,6 +348,47 @@ class Storage {
         }));
     }
 
+    /**
+     * P0 (audit 2026-09-21): proofs recorded BEFORE the per-oracle attribution
+     * column existed (added 2026-08-30, P0-1a/P3-5) have `oracle_id = NULL`.
+     * They are excluded from loadOracleStats(), which made every oracle look
+     * empty (`minted: 0`) while /api/v1/stats — which does not group by oracle —
+     * reported the real totals. The two numbers are not contradictory, they
+     * count different things, and the public endpoints now say so.
+     */
+    async loadUnattributedProofStats() {
+        const sql = `
+            SELECT
+                COUNT(*) AS proofs,
+                {minted} AS minted_proofs,
+                COALESCE(SUM(energy_wh), 0) AS energy_wh,
+                COALESCE(MAX(ts), 0) AS last_proof_ts
+            FROM proofs
+            WHERE oracle_id IS NULL
+        `;
+        if (this.backend === 'postgres') {
+            const { rows } = await this.pg.query(
+                sql.replace('{minted}', "COUNT(*) FILTER (WHERE mint_status = 'minted')")
+            );
+            const r = rows[0] || {};
+            return {
+                proofs: Number(r.proofs) || 0,
+                minted_proofs: Number(r.minted_proofs) || 0,
+                energy_wh: Number(r.energy_wh) || 0,
+                last_proof_ts: Number(r.last_proof_ts) || 0,
+            };
+        }
+        const r = this.db.prepare(
+            sql.replace('{minted}', "SUM(CASE WHEN mint_status = 'minted' THEN 1 ELSE 0 END)")
+        ).get() || {};
+        return {
+            proofs: Number(r.proofs) || 0,
+            minted_proofs: Number(r.minted_proofs) || 0,
+            energy_wh: Number(r.energy_wh) || 0,
+            last_proof_ts: Number(r.last_proof_ts) || 0,
+        };
+    }
+
     // Ecosystem stats aggregated from the proofs table — the single source of
     // truth for verified energy (ADR-0010 data bridge). Used by /api/v1/stats.
     /**

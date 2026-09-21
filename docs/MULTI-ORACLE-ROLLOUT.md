@@ -39,7 +39,10 @@ node server.js
 ```bash
 curl -s http://YOUR_HOST/api/v1/oracles
 # → { "this_instance": "<your oracle id>", "registry_pda": "...",
-#     "count": 12, "oracles": [ ... ] }
+#     "count": 2,
+#     "counts": { "registered": 2, "with_proofs": 2, "idle": 0 },
+#     "unattributed_proofs": { "proofs": 0, ... },
+#     "oracles": [ ... ] }
 ```
 
 - `this_instance` must be **your** key.
@@ -47,6 +50,37 @@ curl -s http://YOUR_HOST/api/v1/oracles
   (that is the shared on-chain source of truth).
 - `GET /api/v1/proofs` now attributes each proof to the accepting oracle
   (`oracle_id`), so anyone can see which operator handled what.
+
+## Registry hygiene (audit 2026-09-21)
+
+`add_oracle` is per key, so development runs left keys in the registry that never
+staked and never voted: on 2026-09-21 the devnet registry held **12 keys for 2
+working instances**, and a public `count` read like a network larger than it is.
+`GET /api/v1/oracles` now separates the numbers:
+
+```json
+"counts": { "registered": 12, "with_proofs": 2, "idle": 10 }
+```
+
+Idle keys are harmless — a vote (`submit_oracle_attestation`) requires the
+oracle's stake PDA `[b"oracle-stake", oracle]`, and that account is created only
+by `stake_oracle`, so a key that never staked cannot have voted — but they should
+not be presented as operators. Audit them and clean up:
+
+```bash
+npx ts-node scripts/oracle-registry-audit.ts                 # read-only report
+npx ts-node scripts/oracle-registry-audit.ts --remove-empty  # needs oracle_admin
+```
+
+`--remove-empty` signs as `registry.oracle_admin`. On devnet that role sits on the
+**offline deployer key** `H3tXm4…L7ixM` (`docs/AUTHORITY-ROTATION-2026-09-16.md`),
+so it has to be run where that key is kept; the script refuses and changes nothing
+when the signer is not the admin.
+
+Proofs recorded **before 2026-08-30** have no `oracle_id` and cannot be attributed
+to any oracle. The endpoint reports them under `unattributed_proofs` and explains
+it in `note`, instead of showing `0` for every oracle while `/api/v1/stats`
+(which does not group by oracle) shows the real totals.
 
 ## Network hygiene
 

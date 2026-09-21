@@ -117,7 +117,7 @@ How to reproduce: `docs/PILOT-REFRESH.md`.
 ## 5. Pre-submission checklist
 
 - [ ] Fresh devnet proof **on the day of judging** (last one: 2026-09-05)
-- [x] *Project pitch* rendered — `demo/pitch-video/ENRG_pitch.mp4` (2:24, 1920×1080, H.264/AAC, captions in `demo/pitch-video/ENRG_pitch.srt`); upload it and paste the link, then keep *Technical demo* = `qrgdc1X9kDU` (the two fields must not share a link)
+- [x] *Project pitch* rendered — `demo/pitch-video/ENRG_pitch.mp4` (2:27, 1920×1080, H.264/AAC, captions in `demo/pitch-video/ENRG_pitch.srt`); upload it and paste the link, then keep *Technical demo* = `qrgdc1X9kDU` (the two fields must not share a link)
 - [ ] About replaced (section 2); team roles filled (section 3)
 - [ ] GitHub link → `AntonGrid/ENRG` ✅; Axis-protocol cited in the About text as the standard
 - [x] README "Start here" block present, and it now links the pitch inside the repository instead of the missing `demo/ENRG_live_demo.mp4`; LICENSE consistent; submodules documented
@@ -145,6 +145,13 @@ How to reproduce: `docs/PILOT-REFRESH.md`.
   trust** (SE050 secure element).
 - Numbers only from `docs/STATE.md` or the live API — no rounded-up marketing
   figures.
+- The word still exists in exactly one place: the instruction
+  `buyback_and_burn` in `programs/enrg-mvp/src/instructions/buyback.rs` and the
+  `fund-buyback` PDA. It cannot be renamed without changing the Anchor
+  discriminator (i.e. breaking the deployed program and its clients), and it
+  never described a market buyback — it destroys supply already held by the
+  protocol. `buyback.rs` and `docs/POSITIONING.md` §6 say so explicitly, so the
+  code and the messaging do not contradict each other.
 
 ## 8. GitHub repository settings (paste)
 

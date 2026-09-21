@@ -1,5 +1,12 @@
 ENRG Protocol Master Technical Specification v7.0
 
+> **Superseded (2026-09-21).** This is the v7 specification; the current one is
+> `docs/ENRG_Technical_Specification_v8.0.md`. Parts of v7 describe the "Part II"
+> FastAPI design that never ran in this repository (now labelled legacy in
+> `legacy/`), and its tokenomics section still uses the term "buyback & burn" for
+> what is in fact supply destruction from a protocol-owned account (see
+> `programs/enrg-mvp/src/instructions/buyback.rs` and `docs/POSITIONING.md` §6).
+
 A comprehensive description of the founder's vision, technical architecture, tokenomics, security model and roadmap.
 
 Based on the current ENRG implementation and the planned architecture.
