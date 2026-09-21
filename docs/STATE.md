@@ -64,6 +64,20 @@ Everything below was **measured**, not inferred.
 - `scripts/oracle-registry-audit.ts`, `.env.example`, a working
   `docker compose` path (`oracle/Dockerfile` no longer needs a local
   `anchor build`; the stack mounts `./data`), and a memory-safe Foundry suite.
+- **CI scope decided (2026-09-21): the Anchor integration suite is local-only.**
+  The job is removed from CI instead of being fed secrets — no program code
+  changed. It had been red on 30+ consecutive runs since 2026-08-31 because it
+  silently depended on three files that exist only on a developer machine: the
+  gitignored `target/deploy/enrg_mvp-keypair.json` (a random program id was built
+  while the tests pin `HkuC3FT…`), `~/.config/solana/id.json` (`Error: Unable to
+  read keypair file`) and `~/.config/solana/founder-wallet.json` (`ENOENT` at
+  import in six suites). The founder key is what makes it unfit for CI: the
+  program pins `EXPECTED_DEPLOYER = FOUNDER_WALLET = FnqKH4…` (`constants.rs`),
+  and repository secrets reach `pull_request` runs opened from branches of this
+  repo — so the key would be readable by anyone who can push a branch. The suite
+  runs locally (`anchor test` → **55 passing / 4 pending**), CI now runs **5 jobs,
+  all green**, and the program is still covered there by the `rust` job (125
+  tests) and the read-only authority guard.
 - Tests: **295** (125 Rust / 122 Node / 30 Python / 18 Foundry), all green.
 
 **Blocked (needs a decision or hardware, not code):**
@@ -73,7 +87,6 @@ Everything below was **measured**, not inferred.
 | SE050 / mainnet firmware tier | NXP Plug & Trust middleware is not vendored (it is not a PlatformIO package); no board with an SE050 has been connected |
 | Removing the 10 idle registry keys | `oracle_admin` is the offline deployer key `H3tXm4…` — confirmed on-chain by the audit script, which now prints `registry.authority` / `registry.oracle_admin` next to your signer and refuses `--remove-empty` when they differ |
 | ATECC608A tier | `cryptoauthlib` needs an `atca_config.h` for the target board |
-| CI: the Anchor job (`anchor test`) | one secret still missing. The job was red on **30+ consecutive runs since 2026-08-31** because it reads three key files that exist only on a developer machine: `target/deploy/enrg_mvp-keypair.json` (gitignored → a random program id while the tests pin `HkuC3FT…`), `~/.config/solana/id.json` (the `[provider] wallet` → `Error: Unable to read keypair file`) and `~/.config/solana/founder-wallet.json` (read by six suites at import time → `ENOENT`, zero tests run). Each was reproduced by moving the file aside. CI now creates the throwaway provider wallet itself, restores the program keypair from `ENRG_MVP_PROGRAM_KEYPAIR` (set ✅, pubkey asserted) and needs `ENRG_FOUNDER_WALLET` (the JSON of `~/.config/solana/founder-wallet.json`; its pubkey must be `FnqKH4…`, the program's `EXPECTED_DEPLOYER`). With all three present the suite passes in a CI-like `HOME`: **55 passing / 4 pending**. Trade-off worth knowing before setting it: that secret is the real devnet founder key, and `pull_request` runs from branches of this repo do receive repository secrets (fork PRs do not) |
 
 ## 1. Overview
 

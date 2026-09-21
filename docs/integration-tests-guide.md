@@ -199,7 +199,13 @@ IDL not found → the clients read `target/idl/enrg_mvp.json`; regenerate it wit
 6. On the path to mainnet
 Once the integration test is green locally:
 
-Promote to a CI job running solana-test-validator + anchor deploy automatically.
-Add a staging cluster (solana -u devnet) variant of the test.
-Then migrate to mainnet-beta with the audited program ID and a funded vault.
+- ~~Promote to a CI job running solana-test-validator + anchor deploy automatically.~~
+  **Not doing this (decision 2026-09-21).** The suite needs `~/.config/solana/founder-wallet.json`
+  because the program pins `EXPECTED_DEPLOYER = FOUNDER_WALLET = FnqKH4…` (`constants.rs`), and
+  repository secrets reach `pull_request` runs opened from branches of this repository — the
+  founder key would be readable by anyone who can push a branch. The suite stays local:
+  `anchor test` (55 passing / 4 pending). CI covers the program through the Rust job instead.
+- Add a staging cluster (solana -u devnet) variant of the test.
+- Then migrate to mainnet-beta with the audited program ID and a funded vault.
+
 Next deliverables after this integration test: on-chain mint_energy receipt spec, SRC token transfer accounting, and an end-to-end pipeline demo.

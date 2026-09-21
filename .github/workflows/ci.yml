@@ -96,138 +96,38 @@ jobs:
         # regenerated in the same commit.
         run: npm run wire:vectors:check
 
-  anchor:
-    name: Anchor program tests (anchor test, local validator)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Set up Solana CLI
-        # Official Anza release channel (release.solana.com is EOL/redirecting).
-        run: |
-          curl -sSfL https://release.anza.xyz/v2.1.0/install | sh
-          echo "$HOME/.local/share/solana/install/active_release/bin" >> "$GITHUB_PATH"
-
-      - name: Set up Anchor CLI
-        # Prebuilt Anchor v0.32.1 binary for linux x86_64.
-        run: |
-          curl -sSfL -o /tmp/anchor https://github.com/otter-sec/anchor/releases/download/v0.32.1/anchor-0.32.1-x86_64-unknown-linux-gnu
-          chmod +x /tmp/anchor
-          sudo mv /tmp/anchor /usr/local/bin/anchor
-          anchor --version
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Yarn
-        run: npm install -g yarn
-
-      - name: Create the localnet provider wallet
-        # ROOT CAUSE of the anchor job being red on 30+ consecutive runs
-        # (2026-08-31 → 2026-09-21), found on 2026-09-21 by moving that file aside
-        # locally and re-running `anchor test`:
-        #
-        #   Anchor.toml: [provider] wallet = "~/.config/solana/id.json"
-        #
-        # that is the *developer's* local wallet. A CI runner has none, so
-        # `anchor test` stops right after the build with
-        #   Error: Unable to read keypair file (~/.config/solana/id.json)
-        # — an error that names a path nobody in CI ever created, which is why it
-        # looked like a mysterious test failure. On localnet this wallet only pays
-        # for the ephemeral deployment, so a throwaway key is correct here.
-        run: |
-          mkdir -p "$HOME/.config/solana"
-          solana-keygen new --no-bip39-passphrase --silent --force -o "$HOME/.config/solana/id.json"
-          solana config set --url http://127.0.0.1:8899 >/dev/null
-          echo "provider wallet: $(solana-keygen pubkey "$HOME/.config/solana/id.json")"
-
-      - name: Restore the localnet program keypair
-        # Why this exists (audit 2026-09-21): the program id is part of the
-        # interface — `declare_id!`, Anchor.toml and the integration tests all pin
-        # HkuC3FT… — but `target/` is gitignored, so a CI checkout has no
-        # `target/deploy/enrg_mvp-keypair.json`. `anchor build` then generates a
-        # RANDOM keypair, the program deploys under a different address, and every
-        # test that pins the id fails. That is why this job was red on 30+
-        # consecutive runs from 2026-08-31 to 2026-09-21 while `anchor test`
-        # passed locally (where the keypair exists).
-        #
-        # Fix: put the JSON array of `target/deploy/enrg_mvp-keypair.json` into the
-        # repository secret ENRG_MVP_PROGRAM_KEYPAIR. This is the *program id*
-        # keypair, NOT the upgrade authority (rotated to H3tXm4… on 2026-09-16), so
-        # it controls nothing on devnet/mainnet — it only makes the local validator
-        # deploy the program at the address the tests expect.
-        #
-        # The check is done in the shell, not with `if: secrets.X`: the `secrets`
-        # context is not allowed in a step `if`, and using it there made GitHub
-        # reject the whole workflow (zero jobs) instead of running it.
-        env:
-          PROGRAM_KEYPAIR: ${{ secrets.ENRG_MVP_PROGRAM_KEYPAIR }}
-        run: |
-          if [ -z "$PROGRAM_KEYPAIR" ]; then
-            echo "::error::ENRG_MVP_PROGRAM_KEYPAIR is not set. Without it the program would be built with a random id and every test that pins HkuC3FT… would fail."
-            echo "Set the repository secret to the JSON of target/deploy/enrg_mvp-keypair.json — 'solana-keygen pubkey' on it must print HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb."
-            exit 1
-          fi
-          mkdir -p target/deploy
-          printf '%s' "$PROGRAM_KEYPAIR" > target/deploy/enrg_mvp-keypair.json
-          EXPECTED="HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb"
-          ACTUAL="$(solana-keygen pubkey target/deploy/enrg_mvp-keypair.json)"
-          if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::error::ENRG_MVP_PROGRAM_KEYPAIR restores $ACTUAL, but declare_id!, Anchor.toml and the tests pin $EXPECTED. Use the JSON of target/deploy/enrg_mvp-keypair.json from a checkout where 'solana-keygen pubkey' prints $EXPECTED (the deploy/keys/* files are different keys)."
-            exit 1
-          fi
-          echo "restored program keypair: $ACTUAL"
-
-      - name: Provide the localnet founder keypair
-        # Second missing HOME file (found the same way: the suite died with
-        # "ENOENT: no such file or directory, ~/.config/solana/founder-wallet.json").
-        # Six suites read it at import time — founder-vesting, governance,
-        # merkle-proof-verification, oracle-quorum, trust-ers-pool, zz-e2e-smoke —
-        # so mocha never ran a single test. A synthetic key cannot work:
-        # the program pins EXPECTED_DEPLOYER = FOUNDER_WALLET
-        # (programs/enrg-mvp/src/constants.rs), and initialize_config /
-        # initialize_governance revert for anyone else. The genesis fixture
-        # (tests/genesis/founder-wallet.json) funds exactly this address.
-        #
-        # Trade-off, stated plainly: this secret is the real devnet founder key
-        # (it holds the premine/vesting accounts), and `pull_request` runs from
-        # branches of this repo do receive repository secrets — only fork PRs do
-        # not. So anyone who can push a branch here can read it. The alternative
-        # is no integration coverage in CI, or making EXPECTED_DEPLOYER settable
-        # at init on localnet (a program change, security-sensitive by design).
-        env:
-          FOUNDER_WALLET_JSON: ${{ secrets.ENRG_FOUNDER_WALLET }}
-        run: |
-          FOUNDER_PATH="$HOME/.config/solana/founder-wallet.json"
-          EXPECTED_FOUNDER="FnqKH4bjMRM6hzrw6tjcpfyszovbRsvyNjuNwALmcZNC"
-          if [ -z "$FOUNDER_WALLET_JSON" ]; then
-            echo "::error::ENRG_FOUNDER_WALLET is not set, so the integration suite cannot run (six test files load ~/.config/solana/founder-wallet.json at import time)."
-            echo "Set the repository secret to the JSON of ~/.config/solana/founder-wallet.json; 'solana-keygen pubkey' on it must print $EXPECTED_FOUNDER."
-            exit 1
-          fi
-          printf '%s' "$FOUNDER_WALLET_JSON" > "$FOUNDER_PATH"
-          chmod 600 "$FOUNDER_PATH"
-          ACTUAL="$(solana-keygen pubkey "$FOUNDER_PATH")"
-          if [ "$ACTUAL" != "$EXPECTED_FOUNDER" ]; then
-            echo "::error::ENRG_FOUNDER_WALLET restores $ACTUAL, but the program's EXPECTED_DEPLOYER is $EXPECTED_FOUNDER."
-            exit 1
-          fi
-          echo "founder wallet: $ACTUAL"
-
-      - name: Build program and run on-chain tests
-        # Builds the enrg-mvp program, spawns a local Solana validator with the
-        # genesis founder-vesting account (Anchor.toml [test.validator]), and runs
-        # the TypeScript integration suite. Measured locally on 2026-09-21:
-        # 55 passing, 4 pending in 69 s.
-        run: anchor test
+  # ---------------------------------------------------------------------------
+  # The Anchor integration job is intentionally NOT part of CI (decision 2026-09-21).
+  #
+  # `anchor test` needs three key files that a fresh runner does not have, and one
+  # of them must not be handed to CI at all (the previous job definition lives in
+  # git history: `git show 60ede2e:.github/workflows/ci.yml`):
+  #
+  #   1. target/deploy/enrg_mvp-keypair.json - restorable from a repository secret
+  #      and harmless in itself (it only pins the localnet program id);
+  #   2. ~/.config/solana/id.json - the [provider] wallet from Anchor.toml. A
+  #      runner had none, so the job died with "Error: Unable to read keypair
+  #      file" right after the build, on 30+ consecutive runs since 2026-08-31;
+  #   3. ~/.config/solana/founder-wallet.json - loaded at import time by six
+  #      suites (founder-vesting, governance, merkle-proof-verification,
+  #      oracle-quorum, trust-ers-pool, zz-e2e-smoke). The program pins
+  #      EXPECTED_DEPLOYER = FOUNDER_WALLET = FnqKH4... (constants.rs), so only the
+  #      real founder key works - and that key guards the devnet premine.
+  #      Repository secrets reach every pull_request run that comes from a branch
+  #      of this repository (fork PRs are excluded), so putting it here would hand
+  #      the founder key to anyone who can push a branch.
+  #
+  # Therefore the Anchor suite runs locally, where all three files exist:
+  #     anchor test          # local validator + genesis fixtures (Anchor.toml)
+  # Measured 2026-09-21: 55 passing / 4 pending in 69 s.
+  #
+  # What CI still guards: `rust` compiles and unit-tests enrg-mvp on the host
+  # target (125 tests) and `authorities` verifies the EXPECTED_DEPLOYER /
+  # upgrade-authority invariants against devnet. Only the SBF build and the
+  # on-chain integration suite are local-only - by decision, not by oversight.
+  # The repository secrets ENRG_MVP_PROGRAM_KEYPAIR / ENRG_FOUNDER_WALLET are not
+  # used by CI any more.
+  # ---------------------------------------------------------------------------
 
 
   forge:
