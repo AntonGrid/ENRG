@@ -266,7 +266,8 @@ The oracle REST API:
 
 ### 33. OpenAPI Draft
 
-The repository ships openapi.yaml describing all endpoints.
+The mock `openapi.yaml` of the Part II design is kept (clearly labelled as
+legacy, not the live API) in `legacy/openapi.yaml`.
 
 ### 34. Sequence Diagram Narrative
 

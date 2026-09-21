@@ -1,5 +1,12 @@
 # ENRG API
 
+> **Legacy / mock.** This document describes the earlier local FastAPI mock
+> (`legacy/app`, port 8000) that imported `axis_core` and never ran inside this
+> repository. The **live** oracle API is the Express server `server.js` on
+> devnet — see the endpoints in `README.md` and the metrics at
+> `https://enrg-oracle.onrender.com/api/v1/stats`. Kept for history (audit
+> 2026-09-21).
+
 ## Basic information
 
 - Base URL (local): `http://localhost:8000`

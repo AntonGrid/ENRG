@@ -27,8 +27,7 @@ regexes = [
 ]
 paths = [
   '''examples/.*\.json$''',
-  '''device-manifest-example\.json$''',
-  '''device-record-example\.json$''',
+  '''legacy/examples/.*\.json$''',
   '''tests/genesis/.*\.json$''',
   '''docs/.*\.md$''',
   '''scripts/devnet-upgrade\.sh$''',

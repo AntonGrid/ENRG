@@ -2,6 +2,11 @@ openapi: 3.0.3
 info:
   title: ENRG Part II Mock API
   version: "0.1.0"
+  description: >
+    LEGACY / MOCK (audit 2026-09-21). This bundle describes the earlier local
+    FastAPI mock in legacy/app (port 8000, servers below, registry.example.com
+    placeholders) — it was never the API of the running protocol. The live
+    oracle API is the Express server server.js on devnet.
 
 servers:
   - url: http://localhost:8000

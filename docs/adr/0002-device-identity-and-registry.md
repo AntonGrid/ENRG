@@ -102,7 +102,7 @@ All three artifacts are validated against JSON Schema in `schemas/`.
 
 We define a combined OpenAPI spec for Provisioning Service and Device Registry:
 
-- File: `openapi/provisioning-registry.yaml`
+- File: `legacy/openapi/provisioning-registry.yaml` (legacy mock spec, audit 2026-09-21)
 - Uses external `$ref` to schemas in `../schemas/`.
 
 Key endpoints:

@@ -161,20 +161,28 @@ Before the mainnet launch, follow in order:
 
 ## Repository Structure
 
-- `programs/` — Solana smart contracts (Anchor).
-- `onchain/` — the EVM bridge (`EnrgOracleAttestation.sol`, Foundry) — **the only
-  Solidity source**; the stale `contracts/` copy was removed on 2026-09-16.
-- `oracle/` — Oracle service (verification, aggregation, minting).
-- `firmware/` — ESP32 firmware for energy measurement and signing.
-- `app/` — Backend services (FastAPI).
-- `src/` — Application-specific code.
-- `tests/` — Integration and unit tests.
-- `scripts/` — Helper scripts.
-- `schemas/` — JSON Schemas for core artifacts.
-- `sdk/` — Client SDK (if applicable).
-- `api/` — API definitions.
-- `examples/` — Example payloads and flows.
-- `docs/` — Implementation-specific documentation.
+The live path is deliberately small. Everything that used to sit in the root and
+did not run is now in `legacy/` with its status written down (`legacy/README.md`).
+
+- `programs/` — Solana programs (Anchor/Rust): `enrg-mvp` (58 instructions) and
+  `enrg-profile` (domain profile).
+- `server.js`, `storage.js`, `policy.js` — the live oracle API (Express), its
+  storage (Postgres/SQLite) and the policy engine.
+- `onchain/` — the EVM attestation sink (`EnrgOracleAttestation.sol` + 18 Foundry
+  tests) — **the only Solidity source**; the stale `contracts/` copy was removed
+  on 2026-09-16.
+- `firmware/` — ESP32 firmware (`esp32_proof_sender`) and `firmware/updates/` (OTA images).
+- `oracle/` — the manifest registry microservice (docker-compose service).
+- `scripts/` — the maintained lifecycle/bridge scripts (TypeScript + Python).
+- `tests/` — the suites CI gates on: `tests/*.test.js` (mocha), `tests/**/*.test.ts`,
+  `tests/test_*.py` (pytest); `tests_disabled/` is explicitly switched off.
+- `schemas/` — JSON Schemas for the core artefacts (proof, manifest, record, attestation).
+- `examples/` — runnable example payloads (the early ones are in `legacy/examples/`).
+- `idls/`, `vendor/` — Anchor IDL exports and the vendored `anchor-spl` patch.
+- `docs/` — specifications, ADRs, audits and runbooks; `docs/STATE.md` is the
+  current state of the world.
+- `demo/` — demo script, captions and the reproducible pitch-video pipeline.
+- `legacy/` — earlier designs and app-shaped code, clearly labelled as not live.
 
 ---
 
@@ -232,9 +240,10 @@ pytest -q -p no:anchorpy
 cd onchain && forge test
 ```
 
-The local-validator Python scripts (`integration_mint_energy.py`,
-`bootstrap_protocol.py` in the repository root) are run directly, not by pytest:
-`solana-test-validator` + `anchor deploy`, then `python integration_mint_energy.py`.
+The local-validator Python scripts now live in `legacy/local-validator/`
+(`bootstrap_protocol.py`, `integration_mint_energy.py`). They are manual tools,
+not pytest modules: `solana-test-validator` + `anchor deploy`, then
+`python legacy/local-validator/integration_mint_energy.py`.
 The devnet end-to-end proofs are `npm run devnet:e2e` and
 `npx ts-node scripts/devnet_mint_third_party.ts`.
 

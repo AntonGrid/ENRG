@@ -88,13 +88,13 @@ We deliberately keep most complexity off-chain:
 
 ### API Boundaries
 
-- **Provisioning Service API** — described by `openapi/provisioning-service.yaml`:
+- **Provisioning Service API** — described by `legacy/openapi/provisioning-service.yaml` (legacy mock spec):
   - `POST /devices` — create device via manifest.
   - `GET /devices/{device_id}` — retrieve provisioned device.
   - `POST /devices/{device_id}/bootstrap` — device bootstrap with signed proof.
   - `POST /devices/{device_id}/attestations` — submit attestation.
 
-- **Device Registry API** — described by `openapi/device-registry.yaml`:
+- **Device Registry API** — described by `legacy/openapi/device-registry.yaml` (legacy mock spec):
   - `GET /devices` — list/filter devices.
   - `POST /devices` — create/upsert DeviceRecord (administrative / internal).
   - `GET /devices/{device_id}` — retrieve DeviceRecord.

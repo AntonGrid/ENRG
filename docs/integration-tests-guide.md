@@ -75,12 +75,13 @@ On success you'll see the newly deployed program ID. If the program has an IDL, 
 3.3 (Optional) one-shot build + deploy
 anchor build && anchor deploy
 4. Local end-to-end check (Python + anchorpy)
-`ENRG/integration_mint_energy.py` and `ENRG/bootstrap_protocol.py` (both in the
-repository root) already implement the flow below against a LOCAL validator: they
+`ENRG/legacy/local-validator/integration_mint_energy.py` and
+`ENRG/legacy/local-validator/bootstrap_protocol.py` already implement the flow
+below against a LOCAL validator: they
 bootstrap the whole protocol and call `mint_energy`. They are **scripts, not pytest
 modules** — run them directly:
 
-    python integration_mint_energy.py      # validator + `anchor deploy` first
+    python legacy/local-validator/integration_mint_energy.py   # validator + `anchor deploy` first
 
 ⚠️ The maintained end-to-end proofs are the TypeScript ones in `ENRG/scripts/`
 (`devnet_e2e_lifecycle.ts`, `devnet_mint_third_party.ts`): they run against devnet and
@@ -189,7 +190,7 @@ Wrap the whole flow in a pytest test with pytest.mark.asyncio.
 cd ~/Axis-workspace/ENRG
 # 1) validator must be running (separate terminal)
 # 2) oracle must be running on :8000 (separate terminal / via uvicorn)
-python integration_mint_energy.py
+python legacy/local-validator/integration_mint_energy.py
 Troubleshooting
 Anchor error: AccountNotInitialized → the token/recipient account wasn't created before mint_energy; add an init step (create associated token account) first.
 Signature mismatch → the signed bytes differ from what axis_core canonicalizes; align the encoder.

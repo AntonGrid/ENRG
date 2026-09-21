@@ -96,7 +96,8 @@ Part II adopts the following architecture and trust model.
      - `device_record.schema.json`
      - `device_manifest.schema.json`
      - `device_proof.schema.json`
-   - The API is described in `openapi.yaml`.
+   - The API is described in `legacy/openapi.yaml` (Part II mock; the live API is
+     `server.js`).
    - Behavior is covered by pytest tests.
 
 2. **The on-chain part can evolve independently**  

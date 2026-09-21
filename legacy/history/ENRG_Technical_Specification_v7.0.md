@@ -1,5 +1,12 @@
 # ENRG Protocol Master Technical Specification v7.0
 
+> **Legacy (moved to `legacy/history/` on 2026-09-21).** This is the first public
+> technical specification of the "Part II" design — it describes the early
+> FastAPI mock, which is now itself labelled as legacy in `legacy/app/` and
+> `legacy/openapi/`. The current specification is
+> `docs/ENRG_Technical_Specification_v8.0.md`; the live API is `server.js`.
+> Kept so the public history stays readable.
+
 Comprehensive description of the founder's vision, technical architecture, tokenomics, security model, and roadmap.
 
 Based on the current ENRG implementation and planned architecture.

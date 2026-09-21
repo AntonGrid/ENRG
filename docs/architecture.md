@@ -1,5 +1,13 @@
 # ENRG Architecture Overview
 
+> **Legacy design document (2026-09-21).** This page describes the "Part II"
+> shape of the system — a FastAPI service (`app/`, now in `legacy/app/`) that
+> imported the Axis-core reference implementation and never ran inside this
+> repository. The live architecture today is: `server.js` (Express oracle API on
+> devnet) → `programs/enrg-mvp` (58 on-chain instructions) → `storage.js`
+> (Postgres/SQLite), with `firmware/esp32_proof_sender` as the device side. See
+> the "The trust path" section of `README.md` for the current picture.
+
 ## Main components
 
 1. **Backend API (FastAPI)**
@@ -97,7 +105,8 @@
      ```
 
 7. **Tools and demos**
-   - `tools/client.py`
+   - `legacy/tools/client.py` (legacy: speaks the Part II **mock** schema on port
+     8000, not the live `server.js`)
      - A minimal `httpx` client for the API.
      - Supports:
        - `health()` — GET `/health`.
