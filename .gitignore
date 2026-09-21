@@ -88,11 +88,14 @@ keypairs/
 enrg-wallet.json
 .config/
 deploy/
-# OTA-образы прошивки, публикуемые оракулом (ADR-0008)
+# OTA firmware images published by the orchestrator (ADR-0008)
 firmware/updates/
-# Legacy-прошивки v1/v2 (заархивированы, НЕ трекать — D-1, ADR-0001/0007)
-firmware/legacy/
-# Медиа демо-записи (тяжёлые, генерируются локально). Сам сценарий, субтитры и
-# текст озвучки ТРЕКАЮТСЯ — см. demo/.
+# Legacy firmware v1/v2 (archived, NEVER track — D-1, ADR-0001/0007) and the
+# pre-SE050 identity helper that stored the key in NVS in plaintext (H-4).
+# Only the quarantine note is kept in the repository.
+firmware/legacy/*
+!firmware/legacy/README.md
+# Demo recordings (heavy, generated locally). The script, the captions and the
+# narration text ARE tracked — see demo/ and demo/pitch-video/.
 demo/*.mp4
 demo/voice/

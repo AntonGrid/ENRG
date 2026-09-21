@@ -1,0 +1,24 @@
+# Keep the GitHub language bar honest: the Rust program and the services are the
+# project — everything under these paths is a dependency or a build output.
+onchain/lib/**      linguist-vendored
+vendor/**           linguist-vendored
+node_modules/**     linguist-vendored
+landing/**          linguist-vendored
+target/**           linguist-vendored
+**/*.min.js         linguist-vendored
+**/*.min.css        linguist-vendored
+
+# Prose, not source.
+docs/**             linguist-documentation
+books/**            linguist-documentation
+
+# Machine-generated, but kept in the tree on purpose (verifiable interface).
+idls/*.json         linguist-generated
+
+# Binary assets.
+*.png binary
+*.jpg binary
+*.mp4 binary
+*.onnx binary
+*.woff2 binary
+*.db binary
