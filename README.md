@@ -55,6 +55,7 @@ table is wrong.
 | A physical ESP32 has sent a proof to devnet | ⚠️ **not yet** | this is the next milestone; no bring-up log exists in this repository |
 | AI layer (forecast, anomaly, federated rounds) | 🟡 sibling repo, currently a fallback | [ENRG-AI](https://github.com/AntonGrid/ENRG-AI) publishes signed `assessments.json`; the live file reports `"source": "offline-fallback"` (Holt trend, not a trained round). The on-chain `commit_contribution` (proof-of-intelligence) instruction exists and is not yet used in production |
 | 295 tests green | ✅ measured 2026-09-21 | 125 Rust / 122 Node / 30 Python / 18 Foundry. Note: the Python suite is mock-level **simulation** of the tokenomics math, not a verification of the Rust implementation, and the Foundry suite covers the EVM attestation sink, not the Solana program |
+| CI | 🟡 5 of 6 jobs green | Node, Python, Rust, Foundry and gitleaks pass on every push. The `anchor test` job needs the `ENRG_MVP_PROGRAM_KEYPAIR` repository secret: a CI checkout has no `target/` (gitignored), so `anchor build` would pick a random program id while the suite pins `HkuC3FT…` — it was red on 30+ runs since 2026-08-31 before anyone noticed, and now fails with that explanation instead of a mysterious test error. Locally the suite is green: 55 passing / 4 pending |
 
 ## Verify it yourself in two minutes
 

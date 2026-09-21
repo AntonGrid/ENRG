@@ -68,6 +68,7 @@ Everything below was **measured**, not inferred.
 | Removing the 10 idle registry keys | `oracle_admin` is the offline deployer key `H3tXm4…` |
 | Live API serving the new `/balance` | the Render deployment has to pick up this commit (verified: the instance still answers the old shape) |
 | ATECC608A tier | `cryptoauthlib` needs an `atca_config.h` for the target board |
+| CI: the Anchor job (`anchor test`) | it was red on **30+ consecutive runs since 2026-08-31**: a CI checkout has no `target/deploy/enrg_mvp-keypair.json` (`target/` is gitignored), so `anchor build` used a random program id while the tests pin `HkuC3FT…`. The workflow now restores it from the `ENRG_MVP_PROGRAM_KEYPAIR` repository secret and fails with that explanation when the secret is absent (locally, where the keypair exists, the suite is green: 55 passing / 4 pending) |
 
 ## 1. Overview
 
