@@ -1,7 +1,7 @@
 # ENRG — pitch video (Colosseum submission)
 
 `ENRG_pitch.mp4` — the **project pitch**: who I am, the problem, the solution,
-what is already built, why me, and the ask. 2:23, 1920×1080, MP4 (H.264 + AAC).
+what is already built, why me, and the ask. 2:24, 1920×1080, MP4 (H.264 + AAC).
 
 This is **not** the technical demo. The devnet walkthrough is a separate video
 and must stay in the Colosseum *Technical demo* field; this file goes into
@@ -26,7 +26,7 @@ The exact rendered timings and every spoken line are in [`narration.md`](narrati
 
 | requirement | how it is met |
 |---|---|
-| 2:00–2:30 | 2:23.5 |
+| 2:00–2:30 | **2:24.0** — 143.8 s of timeline, 143.93 s in the file (AAC tail) |
 | 1920×1080, MP4 | H.264 (CRF 18, 30 fps) + AAC 192 kb/s, `+faststart` |
 | dark `#0B1020`, accent `#4FC3F7` | palette in `beats.json → meta`; every frame uses it |
 | ENRG logo in a corner | flat accent mark + wordmark, top left of every scene |
