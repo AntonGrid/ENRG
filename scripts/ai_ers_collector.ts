@@ -30,7 +30,31 @@ import * as nacl from 'tweetnacl';
 import * as anchor from '@coral-xyz/anchor';
 import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { patchIdl } from '../tests/helpers/patch-idl';
-import rawIdl from '../target/idl/enrg_mvp.json';
+
+/**
+ * `target/` is gitignored, so a fresh CI checkout has no build output. A static
+ * `import rawIdl from '../target/idl/enrg_mvp.json'` therefore made this
+ * collector fail to even *load* in CI (MODULE_NOT_FOUND at import time — before
+ * any of the checks below could run, which is why the ERS loop was red on every
+ * scheduled run). Load the build output first, fall back to the bundled IDL
+ * (`idls/enrg_mvp.json` — byte-identical, same address, same 58 instructions);
+ * same pattern as the authority guard in `scripts/verify-authorities.ts`.
+ */
+function loadEnrgIdl(): any {
+  const candidates = ['../target/idl/enrg_mvp.json', '../idls/enrg_mvp.json'];
+  for (const rel of candidates) {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      return require(rel);
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  throw new Error('ENRG IDL not found: run `anchor build` or restore idls/enrg_mvp.json');
+}
+
+const rawIdl = loadEnrgIdl();
+
 
 const RPC = process.env.RPC_ENDPOINT || 'https://api.devnet.solana.com';
 const ORACLE_KEY_PATH =

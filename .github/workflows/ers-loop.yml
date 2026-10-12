@@ -28,7 +28,15 @@ jobs:
         env:
           RPC_ENDPOINT: ${{ vars.RPC_ENDPOINT }}
           ORACLE_KEY: ${{ secrets.ORACLE_KEY }}
-          AXIS_AI_SIGNING_PUBKEY: ${{ secrets.AXIS_AI_SIGNING_PUBKEY }}
+          # The AI signing key is a PUBLIC value — it is published inside every
+          # bundle as `public_key` and is only used to verify the signature of
+          # the assessments file. Keeping it in `secrets` meant the loop died
+          # with "AXIS_AI_SIGNING_PUBKEY is required" on every scheduled run
+          # because nobody had set it. The literal below is the committed
+          # default; a rotated key can still be supplied as a repository secret
+          # (the secret wins), which keeps rotation possible without a code
+          # change.
+          AXIS_AI_SIGNING_PUBKEY: ${{ secrets.AXIS_AI_SIGNING_PUBKEY || 'mvHbZFlWqd2wvWFZMPGO1pk4AvzdK1lch26DgTw8F0s=' }}
           DEVICES: ${{ vars.ERS_DEVICES }}
           MIN_REPORT_INTERVAL_H: "24"
         run: npx ts-node --transpile-only scripts/ai_ers_collector.ts
