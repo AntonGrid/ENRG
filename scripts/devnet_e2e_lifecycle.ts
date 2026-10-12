@@ -142,7 +142,7 @@ function loadProgram(idlPath: string, programId: PublicKey): Program {
 }
 
 const program = loadProgram(
-  path.join(process.cwd(), "target/idl/enrg_mvp.json"),
+  require("./lib/load-idl").enrgIdlSource(),
   PROGRAM_ID
 );
 const profileProgram = loadProgram(

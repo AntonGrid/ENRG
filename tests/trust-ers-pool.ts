@@ -34,8 +34,8 @@ import * as os from 'os';
 import * as path from 'path';
 import nacl from 'tweetnacl';
 import { patchIdl } from './helpers/patch-idl';
-import rawIdl from '../target/idl/enrg_mvp.json';
-
+import { loadEnrgIdl } from "../scripts/lib/load-idl";
+const rawIdl = loadEnrgIdl();
 const PROGRAM_ID = new PublicKey('HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb');
 const RPC_ENDPOINT = process.env.RPC_ENDPOINT || 'http://127.0.0.1:8899';
 

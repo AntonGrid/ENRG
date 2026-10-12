@@ -28,7 +28,8 @@ import { getOrCreateAssociatedTokenAccount, TOKEN_PROGRAM_ID } from "@solana/spl
 import { PROGRAM_ID, LOCAL_ENDPOINT } from "./helpers/program";
 import { ensureFunded, loadAuthority } from "./helpers/accounts";
 import { patchIdl } from "./helpers/patch-idl";
-import rawIdl from "../target/idl/enrg_mvp.json";
+import { loadEnrgIdl } from "../scripts/lib/load-idl";
+const rawIdl = loadEnrgIdl();
 import * as assert from "assert";
 
 const TIMELOCK_SEC = 7 * 24 * 60 * 60; // 604_800

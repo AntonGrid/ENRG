@@ -37,7 +37,7 @@ const DEVICE_ID = new PublicKey(Buffer.from(DEVICE_ID_HEX, "hex"));
 
 const ENDPOINT = process.env.ANCHOR_PROVIDER_URL || "https://api.devnet.solana.com";
 const WALLET_PATH = process.env.ANCHOR_WALLET || `${process.env.HOME}/.config/solana/founder-wallet.json`;
-const IDL = JSON.parse(fs.readFileSync("target/idl/enrg_mvp.json", "utf8"));
+const IDL = require("./lib/load-idl").loadEnrgIdl();
 
 const operator = Keypair.fromSecretKey(
   Uint8Array.from(JSON.parse(fs.readFileSync(WALLET_PATH, "utf8")))

@@ -45,8 +45,8 @@ import * as os from "os";
 import * as path from "path";
 import { patchIdl } from "./helpers/patch-idl";
 import { ensureFunded } from "./helpers/accounts";
-import rawIdl from "../target/idl/enrg_mvp.json";
-
+import { loadEnrgIdl } from "../scripts/lib/load-idl";
+const rawIdl = loadEnrgIdl();
 const PROGRAM_ID = new PublicKey(
   "HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb",
 );

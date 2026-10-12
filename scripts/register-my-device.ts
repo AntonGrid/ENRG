@@ -17,7 +17,7 @@ async function main() {
   const provider = anchor.AnchorProvider.env();
   anchor.setProvider(provider);
 
-  const idl = JSON.parse(fs.readFileSync("target/idl/enrg_mvp.json", "utf8"));
+  const idl = require("./lib/load-idl").loadEnrgIdl();
   const program = new anchor.Program(idl, provider);
 
   const [producerPda] = PublicKey.findProgramAddressSync(

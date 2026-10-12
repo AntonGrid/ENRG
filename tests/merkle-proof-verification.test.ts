@@ -7,8 +7,8 @@ import { Program, BN, AnchorProvider } from "@coral-xyz/anchor";
 import * as assert from "assert";
 import nacl from "tweetnacl";
 import { EnrgMvp } from "../target/types/enrg_mvp";
-import rawIdl from "../target/idl/enrg_mvp.json";
-
+import { loadEnrgIdl } from "../scripts/lib/load-idl";
+const rawIdl = loadEnrgIdl();
 import { buildMerkleTree, getProof, sha256 } from "./helpers/merkle";
 import { registryPda, verificationPda, proofPda } from "./helpers/pda";
 import { loadAuthority, ensureFunded, randomManifestId } from "./helpers/accounts";

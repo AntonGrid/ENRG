@@ -97,9 +97,7 @@ async function main(): Promise<number> {
     new Wallet(Keypair.generate()),
     { commitment: "confirmed" }
   );
-  const rawIdl = JSON.parse(
-    fs.readFileSync(path.join(process.cwd(), "target/idl/enrg_mvp.json"), "utf8")
-  );
+  const rawIdl = require("./lib/load-idl").loadEnrgIdl();
   rawIdl.address = PROGRAM_ID.toBase58();
   rawIdl.metadata = rawIdl.metadata ?? {};
   rawIdl.metadata.address = PROGRAM_ID.toBase58();

@@ -79,7 +79,7 @@ const provider = new AnchorProvider(connection, new Wallet(operator), {
   commitment: "confirmed",
   preflightCommitment: "confirmed",
 });
-const rawIdl = JSON.parse(fs.readFileSync(path.join(process.cwd(), "target/idl/enrg_mvp.json"), "utf8"));
+const rawIdl = require("./lib/load-idl").loadEnrgIdl();
 const PROGRAM_ID = new PublicKey(rawIdl.address || "HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb");
 rawIdl.address = PROGRAM_ID.toBase58();
 const program: any = new Program(patchIdl(rawIdl), provider);

@@ -108,7 +108,7 @@ const ownerProvider = new AnchorProvider(connection, new Wallet(owner), {
   preflightCommitment: "confirmed",
 });
 
-const MVP_IDL = path.join(process.cwd(), "target/idl/enrg_mvp.json");
+const MVP_IDL = require("./lib/load-idl").enrgIdlSource();
 const PROFILE_IDL = path.join(process.cwd(), "idls/enrg_profile.json");
 
 /** Mint side — the ORACLE is the wallet. */

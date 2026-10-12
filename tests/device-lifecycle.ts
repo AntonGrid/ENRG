@@ -29,7 +29,8 @@ import {
 } from "@solana/web3.js";
 import * as assert from "assert";
 import nacl from "tweetnacl";
-import rawIdl from "../target/idl/enrg_mvp.json";
+import { loadEnrgIdl } from "../scripts/lib/load-idl";
+const rawIdl = loadEnrgIdl();
 import { patchIdl } from "./helpers/patch-idl";
 import { loadAuthority, ensureFunded } from "./helpers/accounts";
 

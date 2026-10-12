@@ -32,28 +32,13 @@ import { Connection, Keypair, PublicKey } from '@solana/web3.js';
 import { patchIdl } from '../tests/helpers/patch-idl';
 
 /**
- * `target/` is gitignored, so a fresh CI checkout has no build output. A static
- * `import rawIdl from '../target/idl/enrg_mvp.json'` therefore made this
- * collector fail to even *load* in CI (MODULE_NOT_FOUND at import time — before
- * any of the checks below could run, which is why the ERS loop was red on every
- * scheduled run). Load the build output first, fall back to the bundled IDL
- * (`idls/enrg_mvp.json` — byte-identical, same address, same 58 instructions);
- * same pattern as the authority guard in `scripts/verify-authorities.ts`.
+ * Единый лоадер IDL (scripts/lib/load-idl.ts): сначала артефакт сборки
+ * `target/idl/enrg_mvp.json` (в CI его нет — `target/` gitignored), затем
+ * закоммиченный `idls/enrg_mvp.json`. Раньше здесь был статический
+ * `import ... from '../target/idl/enrg_mvp.json'`, из-за которого модуль вообще
+ * не загружался в CI.
  */
-function loadEnrgIdl(): any {
-  const candidates = ['../target/idl/enrg_mvp.json', '../idls/enrg_mvp.json'];
-  for (const rel of candidates) {
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      return require(rel);
-    } catch {
-      /* try the next candidate */
-    }
-  }
-  throw new Error('ENRG IDL not found: run `anchor build` or restore idls/enrg_mvp.json');
-}
-
-const rawIdl = loadEnrgIdl();
+const rawIdl = require('./lib/load-idl').loadEnrgIdl();
 
 
 const RPC = process.env.RPC_ENDPOINT || 'https://api.devnet.solana.com';

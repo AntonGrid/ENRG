@@ -21,8 +21,8 @@ import * as path from 'path';
 import * as anchor from '@coral-xyz/anchor';
 import { Connection, Keypair, PublicKey, SystemProgram } from '@solana/web3.js';
 import { patchIdl } from '../tests/helpers/patch-idl';
-import rawIdl from '../target/idl/enrg_mvp.json';
-
+import { loadEnrgIdl } from "./lib/load-idl";
+const rawIdl = loadEnrgIdl();
 const RPC = process.env.RPC_ENDPOINT || 'https://api.mainnet-beta.solana.com';
 const AUTHORITY_KEY_PATH =
   process.env.AUTHORITY_KEY_PATH || path.join(os.homedir(), '.config/solana/founder-wallet.json');

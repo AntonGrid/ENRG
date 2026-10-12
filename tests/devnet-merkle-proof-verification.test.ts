@@ -4,8 +4,8 @@ import { PublicKey } from "@solana/web3.js";
 import { assert } from "chai";
 import { createHash } from "crypto";
 import type { EnrgMvp } from "../target/types/enrg_mvp";
-import rawIdl from "../target/idl/enrg_mvp.json";
-
+import { loadEnrgIdl } from "../scripts/lib/load-idl";
+const rawIdl = loadEnrgIdl();
 /**
  * Devnet test: Merkle Proof Verification (Variant A).
  * Single SHA-256, binary Merkle tree.

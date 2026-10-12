@@ -33,7 +33,8 @@
  */
 import * as anchor from "@coral-xyz/anchor";
 import { Connection, Keypair, PublicKey } from "@solana/web3.js";
-import rawIdl from "../target/idl/enrg_mvp.json";
+import { loadEnrgIdl } from "./lib/load-idl";
+const rawIdl = loadEnrgIdl();
 import { patchIdl } from "../tests/helpers/patch-idl";
 
 const PROGRAM_ID = new PublicKey("HkuC3FTGAf9ryPqH7fi3RbUHwP4TKFMg5WgHNWm6Vaxb");
