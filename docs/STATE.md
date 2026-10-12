@@ -32,21 +32,24 @@ Everything below was **measured**, not inferred.
   remove idle keys; on devnet that needs the **offline** `oracle_admin` key
   `H3tXm4…`, so the script refuses without it and now prints both registry roles
   next to your signer.
-  **Обновлено 2026-10-12 — состояние изменилось, зафиксировано как есть:**
-  managed Postgres на Render удалён, оракул переехал на SQLite
-  (`storage.js`: `DATABASE_URL` → Postgres, иначе SQLite по `ENRG_SQLITE_PATH`).
-  Переезд технический удался, **но история в БД потеряна**: прод теперь отдаёт
-  `GET /api/v1/stats` → все нули и `/api/v1/proofs` → `count: 0`, а
-  `with_proofs` в `/api/v1/oracles` = 0 (`registered: 12` читается из цепочки и
-  потому верно). Источник истины — цепочка, поэтому история минтов
-  восстанавливается скриптом `scripts/backfill-from-chain.ts` (см.
-  `docs/BACKFILL.md`): он вернёт `minted`-строки, но не `accepted`/`deferred` —
-  те жили только в удалённой Postgres.
-  `/device/EAv5ND…/balance` по-прежнему отдаёт реальное значение из devnet
-  (`0.000536313` SRC из ATA `F5TGjRA1…`) — ключи, RPC и чтение сети не пострадали.
-  Ранее в этом разделе стояли цифры «на 2026-09-21: `counts{12,2,10}` +
-  `unattributed_proofs{15}`» — они относились к состоянию **до** переезда и
-  больше не соответствуют прод-ответам.
+  **Обновлено 2026-10-12 — хранилище прода и восстановление истории:**
+  managed Postgres был удалён, оракул на время переехал на SQLite и **потерял
+  историю в БД** (прод отдавал нули). Что сделано: поднят Render Postgres
+  `enrg-oracle-db` (free, frankfurt, истекает 2026-11-11), его внутренний URL
+  прописан в `DATABASE_URL` обоих сервисов (`enrg-oracle`, `enrg-oracle-2`) —
+  в логах прода теперь `[storage] Postgres storage ready (DATABASE_URL)` и
+  `storage: postgres` (было `SQLite storage ready (./enrg.db)`, `storage: sqlite`).
+  История минтов восстановлена **из цепочки** (`npm run backfill:chain`,
+  `docs/BACKFILL.md`): `inserted: 7`, прод отдаёт
+  `/stats` → `total_proofs: 7, minted_proofs: 7, total_energy_wh: 189000,
+  total_energy_mwh: 0.19, active_producers: 7` и
+  `/oracles` → `counts{registered: 12, with_proofs: 2, idle: 10}`,
+  `unattributed_proofs: 0` (у всех строк заполнен `oracle_id`).
+  Границы честности: восстановлены только строки с on-chain инструкцией
+  `mint_energy` (7); строки `accepted`/`deferred` жили только в удалённой
+  Postgres и без её бэкапа не восстанавливаются, поэтому `total_proofs` меньше,
+  чем было до переезда. `/device/EAv5ND…/balance` отдаёт реальное значение из
+  devnet (`0.000536313` SRC из ATA `F5TGjRA1…`).
 - Claims were corrected wherever they overstated reality: the SE050 tier built
   nothing (and now does — see below), no physical board has sent a proof,
   the AI layer runs in `offline-fallback` mode, and the two oracle instances

@@ -64,6 +64,36 @@ npm run backfill:chain
 в anchor 0.32 принимает **Buffer**, а не base58-строку (на строке тихо возвращает
 `undefined`).
 
+## Запуск против прод-базы (Render Postgres)
+
+Прод ENRG (`enrg-oracle`, `enrg-oracle-2`) с 2026-10-12 пишет в Render Postgres
+`enrg-oracle-db`. Он же — цель backfill. Два условия внешнего подключения:
+
+1. **TLS**: к внешнему URL обязательно добавить `?sslmode=no-verify` (без него
+   `Connection terminated unexpectedly`; `sslmode=require` в этой связке тоже
+   падает — pg-connection-string трактует его как `verify-full`).
+2. **IP allowlist**: у базы должен быть разрешён ваш IP (пустой `ipAllowList`
+   означает «снаружи не пускает»). Включить «отовсюду»:
+
+```bash
+curl -X PATCH -H "Authorization: Bearer $RENDER_API_KEY" \
+  -H 'Content-Type: application/json' \
+  https://api.render.com/v1/postgres/<PG_ID> \
+  -d '{"ipAllowList":[{"cidrBlock":"0.0.0.0/0","description":"all"}]}'
+```
+
+Строку подключения даёт `GET /v1/postgres/<PG_ID>/connection-info`
+(`externalConnectionString` для запуска снаружи, `internalConnectionString` — для
+env сервисов внутри Render).
+
+```bash
+DATABASE_URL="<externalConnectionString>?sslmode=no-verify" \
+  npm run backfill:chain            # или backfill:chain:dry для проверки
+```
+
+Проверка результата — не локальный лог, а прод: `curl .../api/v1/stats` должен
+показать ненулевые `total_proofs` / `minted_proofs`.
+
 ## Ограничения
 
 * Публичный devnet RPC может не отдавать очень старые транзакции — `MAX_TX`
