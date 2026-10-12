@@ -62,7 +62,11 @@ export RPC_ENDPOINTS="https://mainnet.helius-rpc.com,https://api.mainnet-beta.so
 export FOUNDER_KEY_PATH=/secure/founder-wallet.json     # or removed after bootstrap
 export ORACLE_KEY_PATH=/secure/oracle-keypair.json
 export FIRMWARE_SIGNING_KEY_PATH=/secure/firmware-keypair.json
-export DATABASE_URL=postgres://...                     # managed Postgres, backups
+export DATABASE_URL=postgres://...                     # необязательно: managed Postgres, бэкапы
+# Хранилище (обновлено 2026-10-12): без DATABASE_URL оракул пишет в SQLite по
+# ENRG_SQLITE_PATH (по умолчанию ./enrg.db). Для прода это допустимо ТОЛЬКО на
+# persistent-томе — иначе история сотрётся при каждом деплое/рестарте:
+export ENRG_SQLITE_PATH=/var/data/enrg.db
 export MINT_QUEUE_MAX=10000 MINT_MAX_ATTEMPTS=8 DEVICE_MIN_INTERVAL_MS=0
 docker compose up -d oracle
 ```

@@ -28,7 +28,10 @@ export ORACLE_KEY_PATH=/secure/oracle-keypair.json        # your registered key
 export FOUNDER_KEY_PATH=/secure/founder-wallet.json       # signer for mint txs
 # RPC failover list (different provider than other operators!):
 export RPC_ENDPOINTS="https://mainnet.helius-rpc.com,https://api.mainnet-beta.solana.com"
-export DATABASE_URL=postgres://user:pass@host:5432/enrg   # your own DB
+# Хранилище (обновлено 2026-10-12): с DATABASE_URL — ваш Postgres; без него —
+# SQLite по ENRG_SQLITE_PATH. Каждый оператор держит СВОЮ БД, поэтому upstream здесь
+# только пример:
+export DATABASE_URL=postgres://user:pass@host:5432/enrg   # или ENRG_SQLITE_PATH=/var/data/enrg.db
 export MINT_QUEUE_MAX=10000 MINT_MAX_ATTEMPTS=8
 
 node server.js

@@ -29,6 +29,8 @@ services:
       # P1 (audit 2026-09-21): the SQLite file lives in the mounted ./data directory
       # (see the volumes note below) — never point this at ./enrg.db, which is
       # gitignored and would be created as a directory on a fresh clone.
+      # 2026-10-12: на проде (Render) managed Postgres удалён, оракул живёт на SQLite —
+      # там том обязателен (Render Disk), иначе история теряется при каждом деплое.
       ENRG_SQLITE_PATH: /app/data/enrg.db
     volumes:
       # Persistence of the SQLite store and OTA images (ADR-0008).

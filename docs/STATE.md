@@ -32,11 +32,21 @@ Everything below was **measured**, not inferred.
   remove idle keys; on devnet that needs the **offline** `oracle_admin` key
   `H3tXm4…`, so the script refuses without it and now prints both registry roles
   next to your signer.
-  **Verified live on 2026-09-21** (Render picked up the commits):
-  `/api/v1/oracles` → `counts{registered: 12, with_proofs: 2, idle: 10}` +
-  `unattributed_proofs{proofs: 15}`; `/device/EAv5ND…/balance` →
-  `0.000536313` SRC from ATA `F5TGjRA1…` — the public dashboard no longer reads
-  a fake zero.
+  **Обновлено 2026-10-12 — состояние изменилось, зафиксировано как есть:**
+  managed Postgres на Render удалён, оракул переехал на SQLite
+  (`storage.js`: `DATABASE_URL` → Postgres, иначе SQLite по `ENRG_SQLITE_PATH`).
+  Переезд технический удался, **но история в БД потеряна**: прод теперь отдаёт
+  `GET /api/v1/stats` → все нули и `/api/v1/proofs` → `count: 0`, а
+  `with_proofs` в `/api/v1/oracles` = 0 (`registered: 12` читается из цепочки и
+  потому верно). Источник истины — цепочка, поэтому история минтов
+  восстанавливается скриптом `scripts/backfill-from-chain.ts` (см.
+  `docs/BACKFILL.md`): он вернёт `minted`-строки, но не `accepted`/`deferred` —
+  те жили только в удалённой Postgres.
+  `/device/EAv5ND…/balance` по-прежнему отдаёт реальное значение из devnet
+  (`0.000536313` SRC из ATA `F5TGjRA1…`) — ключи, RPC и чтение сети не пострадали.
+  Ранее в этом разделе стояли цифры «на 2026-09-21: `counts{12,2,10}` +
+  `unattributed_proofs{15}`» — они относились к состоянию **до** переезда и
+  больше не соответствуют прод-ответам.
 - Claims were corrected wherever they overstated reality: the SE050 tier built
   nothing (and now does — see below), no physical board has sent a proof,
   the AI layer runs in `offline-fallback` mode, and the two oracle instances

@@ -12,6 +12,8 @@
     "test:keyrotation": "mocha tests/keyrotation-api.test.js",
     "test:mint": "mocha tests/mint-oracle.test.js",
     "test:anchor": "anchor test --skip-build",
+    "backfill:chain": "ts-node scripts/backfill-from-chain.ts",
+    "backfill:chain:dry": "DRY_RUN=1 ts-node scripts/backfill-from-chain.ts",
     "e2e:local": "RPC_ENDPOINT=http://127.0.0.1:8899 ts-node scripts/devnet_e2e_lifecycle.ts",
     "e2e:local:smoke": "RPC_ENDPOINT=http://127.0.0.1:8899 ts-node scripts/devnet_e2e_lifecycle.ts --smoke",
     "devnet:e2e": "RPC_ENDPOINT=https://api.devnet.solana.com ts-node scripts/devnet_e2e_lifecycle.ts",
