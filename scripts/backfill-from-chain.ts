@@ -47,6 +47,20 @@ const rawIdl = require('./lib/load-idl').loadEnrgIdl();
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/**
+ * Декодирует инструкцию. У `getParsedTransaction` поле `data` — это base58-строка,
+ * а `BorshInstructionCoder.decode()` в anchor 0.32 корректно работает с Buffer
+ * (на строке молча возвращает undefined). Поэтому конвертируем явно.
+ */
+function decodeInstruction(coder: anchor.BorshInstructionCoder, data: unknown): any {
+  try {
+    const raw = typeof data === 'string' ? (anchor as any).utils.bytes.bs58.decode(data) : data;
+    return coder.decode(Buffer.from(raw as Uint8Array));
+  } catch {
+    return null;
+  }
+}
+
 interface MintedProof {
   device_id: string;
   nonce: number;
@@ -105,17 +119,15 @@ async function collectMintReports(
       continue;
     }
     if (tx.meta?.err) stats.failed_txs++;
+    // `ix.programId` у getParsedTransaction — PublicKey, а не строка: сравнение
+    // `=== base58` молча даёт 0 совпадений (на этом первый прогон и потерял все
+    // инструкции). Нормализуем через String().
     const ixs = (tx.transaction?.message?.instructions || []).filter(
-      (ix: any) => ix.programId === PROGRAM_ID.toBase58(),
+      (ix: any) => String(ix.programId) === PROGRAM_ID.toBase58(),
     );
     stats.program_ixs += ixs.length;
     for (const ix of ixs) {
-      let decoded: any = null;
-      try {
-        decoded = coder.decode(ix.data);
-      } catch {
-        stats.undecodable++;
-      }
+      const decoded = decodeInstruction(coder, ix.data);
       if (!decoded?.name) {
         stats.undecodable++;
         continue;

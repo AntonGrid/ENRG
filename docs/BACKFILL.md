@@ -49,10 +49,20 @@ npm run backfill:chain
 
 ## Как проверено (2026-10-12)
 
-* `DRY_RUN=1 MAX_TX=1000` — план печатается, в БД ничего не пишется (см. вывод в
-  отчёте аудита).
-* Идемпотентность: второй запуск с теми же данными даёт `would insert: 0`.
-* `npx tsc --noEmit` — чисто.
+* `DRY_RUN=1 MAX_TX=60` → `scan: {"signatures":60,"program_ixs":57,"mint_energy":4,"undecodable":0}`,
+  найдены 4 mint-записи (включая тот самый `2ANc1Lf3…KT6`), `would insert: 4`, БД не изменена
+  (`total_proofs` остался 100).
+* Запись на копии БД (`ENRG_SQLITE_PATH=/tmp/idem.db MAX_TX=30`): `inserted: 3`,
+  `stats: total_proofs 100→103, minted_proofs 0→3, total_energy_wh 5000→97000`.
+* Идемпотентность: повторный запуск по той же БД → `inserted: 0, already present: 3`,
+  статистика не изменилась.
+* `npx tsc --noEmit` — чисто; `npm test` — 122 passing.
+
+Две ловушки, на которые скрипт уже наступил и которые здесь зафиксированы, чтобы
+не повторять: `ix.programId` у `getParsedTransaction` — это **PublicKey**, а не
+строка (сравнение с base58 молча даёт 0 совпадений), а `BorshInstructionCoder.decode()`
+в anchor 0.32 принимает **Buffer**, а не base58-строку (на строке тихо возвращает
+`undefined`).
 
 ## Ограничения
 
