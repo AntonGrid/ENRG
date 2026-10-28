@@ -335,7 +335,7 @@ npx ts-node scripts/register-onchain.ts --check --device-id 0x<cbec…>
 
 ```bash
 # A. build flag — поднять счётчик при старте (значение = текущий on-chain nonce)
-pio run -e esp32dev -D ENRG_MIN_START_NONCE=1029
+PLATFORMIO_BUILD_FLAGS='-D ENRG_MIN_START_NONCE=1029' pio run -e esp32dev -t upload
 ```
 
 ```text
@@ -540,7 +540,7 @@ Data-Zone — в `ENRG_ATECC_SLOT`, по умолчанию 4). Если чип 
 
 ```bash
 # mainnet-сборка с агрегацией 15 мин:
-pio run -e esp32dev-mainnet -D ENRG_AGGREGATE_WINDOW_MS=900000
+PLATFORMIO_BUILD_FLAGS='-D ENRG_AGGREGATE_WINDOW_MS=900000' pio run -e esp32dev-mainnet
 ```
 
 ### Key Management
