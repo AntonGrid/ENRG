@@ -208,6 +208,19 @@ CLEARWIFI
 # → креды полностью стираются из NVS, устройство перезагружается в AP-режим
 ```
 
+**Полный список Serial-команд** (та же выдача по `HELP`):
+
+```text
+HELP              — список команд
+INFO              — device_id, public_key (base64/hex), WiFi/mDNS/signer, storage
+SIGN <hex>        — подписать произвольное сообщение (hex, ≤256 байт) ключом
+                    устройства; в лог уходит только sig_base64/sig_hex
+WIFI <ssid> <pass> — сохранить Wi-Fi-креды в NVS и перезагрузиться в STA
+CLEARWIFI         — стереть Wi-Fi-креды из NVS и перезагрузиться в AP-режим
+NONCE             — показать сохранённый anti-replay счётчик
+SETNONCE <n>      — выставить счётчик (n ≥ on-chain nonce, иначе 400 InvalidNonce)
+```
+
 > ⚠️ «Защищённость» NVS на уровне физического доступа требует включения
 > **flash-encryption** в eFuse (`CONFIG_SECURE_FLASH_ENC_ENABLED`) для
 > production-прошивок. Без него NVS читается при физическом доступе к чипу —
