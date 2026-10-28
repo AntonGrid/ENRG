@@ -43,7 +43,8 @@ Arduino sketches for ESP32 that read energy data from a PZEM-004T sensor, sign i
 ### Requirements
 
 - ESP32 DevKit V1
-- PZEM-004T sensor (опционально: `ENRG_USE_PZEM=1`)
+- PZEM-004T sensor (v3.0, Modbus) — подключён на `Serial2`, RX=16/TX=17;
+  `ENRG_USE_PZEM=1` уже включён в build_flags всех env
 - PlatformIO (рекомендуется) или Arduino IDE
 
 ### Setup (PlatformIO)
@@ -55,8 +56,9 @@ pio run -t upload -e esp32dev
 ```
 
 Конфигурация — в шапке `src/esp32_proof_sender_v3/esp32_proof_sender_v3.ino`:
-`ENRG_ORACLE_URL`, `ENRG_CA_CERT`, `ENRG_NTP_SERVER`, `ENRG_USE_ATECC608`,
-`ENRG_USE_PZEM` + Plug & Play (`ENRG_SIGNER_PORT`, `ENRG_SIGNER_LAN_ONLY`).
+`ENRG_ORACLE_URL`, `ENRG_CA_CERT`, `ENRG_NTP_SERVER`, `ENRG_USE_ATECC608`;
+`ENRG_USE_PZEM=1` и `ENRG_MIN_START_NONCE` задаются в `platformio.ini`
+(`build_flags`), плюс Plug & Play (`ENRG_SIGNER_PORT`, `ENRG_SIGNER_LAN_ONLY`).
 **Wi-Fi-креды здесь не настраиваются** — только через Captive Portal (см. ниже).
 
 > ⚠️ Системный `pio` может быть сломан (несовместимость с `click`). В этом
@@ -64,7 +66,7 @@ pio run -t upload -e esp32dev
 > `/home/enrg/Axis-workspace/.venv/bin/pio`. Скрипт
 > [`upload-firmware.sh`](upload-firmware.sh) находит его автоматически.
 
-## Build matrix — что реально собирается (измерено 2026-09-21)
+## Build matrix — что реально собирается (измерено 2026-10-21)
 
 Перед сборкой SE050-тиров один раз вендорим middleware (BSD-3-Clause, не
 реестровый пакет): `scripts/vendor-se050.sh` → `vendor/se05x/` (gitignored,
@@ -72,14 +74,17 @@ pio run -t upload -e esp32dev
 
 | env | tier (ADR-0007) | Статус | Почему |
 |---|---|---|---|
-| `esp32dev` | `basic` (ключ в NVS, подпись в CPU) | ✅ `SUCCESS` | — |
-| `esp32dev-ota` | `basic` + A/B OTA + eFuse anti-rollback | ✅ `SUCCESS` | — |
-| `esp32dev-se050` | `conforming` (Ed25519 внутри SE050) | ✅ `SUCCESS` | вендоренный middleware + порт `lib/enrg_se050_port/`; 93.6% слота (1.23 МБ из 1.31 МБ) |
-| `esp32dev-mainnet` | production (SE050 обязателен) | ✅ `SUCCESS` | `extends = esp32dev-se050` + production-флаги; 67.0% слота (1.23 МБ из 1.83 МБ) |
+| `esp32dev` | `basic` (ключ в NVS, подпись в CPU) | ✅ `SUCCESS` | PZEM включён; 89.5% слота (1.17 МБ из 1.31 МБ) |
+| `esp32dev-ota` | `basic` + A/B OTA + eFuse anti-rollback | ✅ `SUCCESS` | PZEM включён; 64.1% слота (1.18 МБ из 1.83 МБ) |
+| `esp32dev-se050` | `conforming` (Ed25519 внутри SE050) | ✅ `SUCCESS` | вендоренный middleware + порт `lib/enrg_se050_port/`; 94.1% слота (1.23 МБ из 1.31 МБ) |
+| `esp32dev-mainnet` | production (SE050 обязателен) | ✅ `SUCCESS` | `extends = esp32dev-se050` + production-флаги; 67.3% слота (1.24 МБ из 1.83 МБ) |
 | `esp32dev-atecc` | `hardware-aided` (seed в ATECC608A, подпись в CPU) | ❌ не собирается | `cryptoauthlib` требует `atca_config.h` (HAL-конфиг под вашу плату) — не вендорен |
 
+> ℹ️ С 2026-10-21 PZEM (`-D ENRG_USE_PZEM=1` + `mandulaj/PZEM-004T-v30`)
+> включён во все собираемые env; это +~60 КБ к flash (в цифрах выше уже учтено).
+
 **Важно про размер:** дефолтная таблица разделов даёт приложению 1.31 МБ, и
-SE050-образ занимает 93.6% — впритык. `esp32dev-mainnet` собирается с
+SE050-образ занимает 94.1% — впритык. `esp32dev-mainnet` собирается с
 `partitions_ota.csv` (слот 1.83 МБ) и укладывается в 67%. Практический вывод: для
 SE050-тира берите OTA-таблицу разделов, даже если A/B пока не нужен, — иначе
 любое добавление кода упрётся в потолок.
@@ -101,7 +106,7 @@ cd firmware/esp32_proof_sender
 # Fail-closed: без SE050 устройство НЕ запускается. Требует ПЛАТУ с NXP SE050 и
 # middleware NXP Plug & Trust в lib/ (НЕ `pio pkg install se050` — такого пакета
 # в реестре нет; см. SE050-HARDWARE-SIGNING.md §Vendoring).
-pio run -e esp32dev-mainnet     # сейчас: ожидаемый #error до vendoring'а
+pio run -e esp32dev-mainnet     # SE050 обязателен (fail-closed); 67.3% слота
 
 # OTA-версия (dual-bank A/B + anti-rollback, ADR-0008) — dev/QA
 pio run -e esp32dev-ota
@@ -117,9 +122,9 @@ pio run -e esp32dev-atecc
 Успешная сборка: `[SUCCESS]`, размер `firmware.bin` выводится в конце
 (RAM/Flash usage). Пример:
 ```
-RAM:   [=         ]  14.5% (used 47456 bytes from 327680 bytes)
-Flash: [=====     ]  54.9% (used 1007289 bytes from 1835008 bytes)
-========================= [SUCCESS] Took 7.33 seconds =========================
+RAM:   [==        ]  15.3% (used 50120 bytes from 327680 bytes)
+Flash: [========= ]  89.5% (used 1172761 bytes from 1310720 bytes)
+========================= [SUCCESS] Took 49.51 seconds =========================
 ```
 
 ### 2. Загрузка на устройство
@@ -170,8 +175,14 @@ pio device monitor --port /dev/ttyUSB0 --baud 115200
   HTTP-signer на `:8080` (Plug & Play, см. ниже).
 - `[MANIFEST]` — загрузка и проверка Device Manifest (ADR-0004), если включён.
 - `[OTA]` — проверка обновлений / анти-откат (`ota_mark_boot_ok()`).
+- `[NONCE] stored = N, the next proof uses N+1` — счётчик анти-replay; перед
+  первым запуском он должен быть ≥ on-chain nonce (см. `SETNONCE` ниже).
+- `[SENSOR] PZEM total=… baseline=… delta=…` — кумулятивный счётчик PZEM,
+  подтверждённый baseline и дельта, которая уйдёт в proof.
 - `[PROOF] sent` — отправка подписанного proof на оракул
   (интервал — `ENRG_REPORT_INTERVAL_MS`, по умолчанию 60 с).
+- `[SENSOR] baseline committed: …` — оракул ответил `200`, baseline сдвинут;
+  если этой строки нет, энергия уйдёт следующим отчётом.
 
 Если логов нет — проверьте baud (115200), порт и состояние NVS.
 
@@ -237,56 +248,124 @@ POST /api/device/sign → тело {"hex":"<message hex>"} (или raw binary)
   `secure_version` в eFuse. **Это необратимо.** Не смешивайте env'ы на одной
   плате (не заливайте `esp32dev` поверх `esp32dev-ota` и наоборот).
 
-### Регистрация устройства в оракуле (PoP-подпись через Serial-команду `SIGN`)
+### Регистрация устройства — строго on-chain (PoP через Serial-команду `SIGN`)
 
-Оракул принимает proof'ы только от зарегистрированных устройств
-(`POST /api/v1/proof/submit` → `400 unknown device` иначе). Регистрация —
-по proof-of-possession: устройство подписывает строку
-`` `${device_id}|${public_key}` `` **своим** Ed25519-ключом (ADR-0001: ключ
-не покидает устройство, наружу уходит только подпись).
+Приём proof'ов открывает **только** on-chain регистрация в программе
+`enrg-mvp`. `POST /api/v1/proof/submit` берёт публичный ключ и nonce устройства
+из аккаунта `EnergyProducer`, поэтому незарегистрированное устройство получает
+`404 device_not_registered_on_chain` (см. `server.js` и
+`policy.validateProofAsync`).
 
-Прошивка v3 поддерживает Serial-команды (в `pio device monitor`):
+> ⚠️ Локальный `POST /api/v1/device/register` (скрипт
+> `scripts/register-device.js`) пишет только запись в БД оракула
+> (метаданные/история) и **НЕ открывает приём proof'ов**. Прежняя редакция
+> этого README утверждала, что оракул отвечает `400 unknown device` — это
+> устарело: источник истины — блокчейн.
 
-```text
-HELP              — список команд
-INFO              — device_id, public_key (base64/hex), WiFi/mDNS/signer, хранилище
-SIGN <hex>        — подписать ПРОИЗВОЛЬНОЕ сообщение (hex, max 256 байт) ключом
-                    устройства → вывод [SIGN] sig_base64 / sig_hex
-CLEARWIFI         — стереть WiFi-креды из NVS и перезагрузиться в AP-режим
-```
+Жизненный цикл аккаунта:
+`register_device → claim_device → provision_device → activate_device`
+(`programs/enrg-mvp/src/instructions/device_lifecycle.rs`).
 
-**Шаг 1 — подготовка (утилита):**
-
-```bash
-node scripts/register-device.js --prepare --device-id 0xcbec5afc...
-# → выводит public_key (base64) и hex PoP-сообщения для команды SIGN
-```
-
-**Шаг 2 — подпись на устройстве:**
+**Шаг 1 — узнать device_id** (в `pio device monitor`, физический доступ):
 
 ```text
-# в pio device monitor:
-SIGN <hex из шага 1>
-# скопировать строку [SIGN] sig_base64 = <...>
+INFO
+# [INFO] device_id     = 0x<cbec…>
+# [INFO] public_key_hex= <hex>
 ```
 
-**Шаг 3 — регистрация (утилита):**
+**Шаг 2 — подготовить сообщения и подписать их на устройстве**
+(ADR-0001: приватный ключ не покидает ESP32):
 
 ```bash
-node scripts/register-device.js --send --device-id 0xcbec5afc... --signature <sig_base64> \
-    --url https://oracle.enrg.network
-# → ✅ Device registered successfully (HTTP 200)
+npx ts-node scripts/register-onchain.ts --prepare --device-id 0x<cbec…>
+# → REGISTER_MESSAGE_HEX / CLAIM_MESSAGE_HEX / ts
 ```
 
-После этого ESP32 отправляет proof'ы и получает `200 OK`; энергия
-накапливается в `energyStore`, при binary-подписи оракул вызывает
-`mint_energy` (если mint временно невозможен — proof принимается,
-`mint: "deferred"`, энергия не теряется).
+```text
+SIGN <REGISTER_MESSAGE_HEX>
+SIGN <CLAIM_MESSAGE_HEX>
+# скопировать обе строки [SIGN] sig_base64 = ...
+```
 
-> ⚠️ On-chain регистрация (`register_device`/`claim_device` на Solana) —
-> отдельный шаг: для него устройство подписывает бинарные сообщения
-> (`enrg:device:register ‖ device_id ‖ ts` и `enrg:device:claim ‖ …`),
-> которые также можно получить через `SIGN <hex>` и передать оператору.
+**Шаг 3 — отправить транзакции** (обязательно тот же `ts`, что вывел
+`--prepare`, иначе подписи не совпадут):
+
+```bash
+TS=<ts> REG_SIG=<reg> CLAIM_SIG=<claim> \
+  npx ts-node scripts/register-onchain.ts --send --device-id 0x<cbec…>
+# ✅ register_device → claim_device → provision_device → activate_device
+```
+
+**Шаг 4 — проверить (read-only, ничего не отправляет):**
+
+```bash
+npx ts-node scripts/register-onchain.ts --check --device-id 0x<cbec…>
+# state            : registered on-chain ✅
+# device_state     : {"active":{}}
+# nonce            : 1029
+```
+
+Кластер задаётся `--cluster <url>` (или `ANCHOR_PROVIDER_URL`/`RPC_ENDPOINT`),
+кошелёк оператора — `--wallet`, device_id — `--device-id` или `DEVICE_ID`.
+`--prepare` печатает предупреждение, если аккаунт уже существует, а `--send`
+в этом случае отказывается отправлять `register_device` (иначе
+`account already in use`).
+
+### Nonce: догнать on-chain счётчик перед первым proof
+
+Сервер принимает proof только если `nonce > nonce` аккаунта `EnergyProducer`
+(`validateNonce`, `policy.js`). После перепрошивки или замены платы NVS пуст →
+счётчик начинается с 1, и все отправки получают `400 InvalidNonce`.
+
+Любой из вариантов:
+
+```bash
+# A. build flag — поднять счётчик при старте (значение = текущий on-chain nonce)
+pio run -e esp32dev -D ENRG_MIN_START_NONCE=1029
+```
+
+```text
+# B. Serial-команда, без перепрошивки
+SETNONCE 1029
+NONCE
+# [NONCE] stored = 1029, the next proof uses 1030
+```
+
+Текущее значение on-chain:
+
+```bash
+npx ts-node scripts/register-onchain.ts --check --device-id 0x<cbec…> | grep nonce
+```
+
+### Энергия: отправляется ДЕЛЬТА, а не счётчик PZEM
+
+PZEM-004T отдаёт кумулятивный счётчик (кВт·ч с момента сброса), а оракул
+прибавляет `energyWh` к накопленному итогу устройства. Поэтому прошивка хранит
+в NVS (`enrg` / `pzem_wh`) показание, уже подтверждённое оракулом, и отправляет
+разницу `current − baseline`:
+
+- baseline обновляется **только после HTTP 200** — при сетевой ошибке энергия
+  не теряется, а уходит следующим отчётом;
+- на первом старте baseline := текущее показание (энергия, накопленная до
+  ввода в эксплуатацию, не отправляется);
+- сброс/переполнение счётчика PZEM трактуется как reset, а не как
+  отрицательная дельта;
+- при `ENRG_USE_PZEM=1` и неотвечающем датчике отчёт не отправляется
+  (`energyWh=0` сервер всё равно отверг бы).
+
+Датчик включён в env `esp32dev`, `esp32dev-ota`, `esp32dev-atecc`,
+`esp32dev-se050`, `esp32dev-mainnet` (`-D ENRG_USE_PZEM=1` +
+`mandulaj/PZEM-004T-v30`); подключение — `Serial2`, RX=16, TX=17.
+
+```bash
+pio run -e esp32dev -t upload
+# в мониторе: [SENSOR] PZEM total=… baseline=… delta=…
+```
+
+> Первый proof после прошивки появится только после того, как счётчик прибавит
+> энергию: baseline на первом запуске берётся из текущего показания.
+
 
 ### Device Manifest (ADR-0004)
 
@@ -432,15 +511,18 @@ Data-Zone — в `ENRG_ATECC_SLOT`, по умолчанию 4). Если чип 
 Снижает число on-chain транзакций в 10–60 раз без изменения контракта.
 
 - `ENRG_AGGREGATE_WINDOW_MS` (по умолчанию 0 — выключено): если > 0,
-  устройство НЕ шлёт каждое показание, а накапливает энергию и подписывает
-  **один агрегированный proof** раз в окно.
+  устройство НЕ шлёт каждое показание, а раз в окно подписывает **один
+  агрегированный proof**.
 - Формат подписи тот же: `device_id(32) || nonce(8) || ts(8) || energy_wh(8)`,
-  где `energy_wh` — накопленное значение. On-chain `mint_energy` принимает
-  произвольное `energy_wh` — контракт не меняется.
-- **Безопасность:** агрегат сбрасывается досрочно при достижении
+  где `energy_wh` — вся энергия, ещё не подтверждённая оракулом (разница с
+  baseline в NVS; дельты не суммируются повторно). On-chain `mint_energy`
+  принимает произвольное `energy_wh` — контракт не меняется.
+- **Безопасность:** окно закрывается досрочно при достижении
   `rated_power` (пер-отчётный лимит on-chain, иначе `ExcessiveEnergy`) или
   абсолютного капа `ENRG_AGGREGATE_MAX_WH` (1 MWh) — валидный proof никогда
   не превысит лимит.
+- При ошибке отправки baseline не сдвигается: та же неучтённая энергия уйдёт
+  следующим отчётом.
 - Рекомендуемое окно для mainnet: 900000 мс (15 мин).
 
 ```bash
@@ -452,13 +534,19 @@ pio run -e esp32dev-mainnet -D ENRG_AGGREGATE_WINDOW_MS=900000
 
 - Keypair генерируется на устройстве при первой загрузке и никогда не
   печатается в Serial/log.
-- Публичный ключ (device_id) печатается при старте и регистрируется в oracle
-  (`POST /api/v1/device/register` с подписью `device_id|public_key`).
-- Nonce персистентный (NVS) — анти-replay между перезагрузками.
+- Публичный ключ (device_id) печатается при старте и регистрируется **on-chain**
+  (`scripts/register-onchain.ts`, см. раздел «Регистрация устройства — строго
+  on-chain»). Локальный `POST /api/v1/device/register` приём proof'ов не
+  открывает.
+- Nonce персистентный (NVS) — анти-replay между перезагрузками; перед первым
+  отправлением он должен быть не меньше on-chain nonce (`SETNONCE <n>` или
+  `ENRG_MIN_START_NONCE`).
 
 ### Operation
 
-- Читает энергию (kWh) с PZEM-004T каждые `ENRG_REPORT_INTERVAL_MS` (60 c).
+- Читает кумулятивный счётчик PZEM-004T каждые `ENRG_REPORT_INTERVAL_MS` (60 c)
+  и отправляет **дельту** с последнего подтверждённого (HTTP 200) показания;
+  baseline хранится в NVS (`enrg`/`pzem_wh`).
 - Подписывает бинарное сообщение `device_id(32)||nonce||ts||energy_wh(8)`
   Ed25519-ключом устройства.
 - Отправляет proof по HTTPS на `ENRG_ORACLE_URL` в формате:

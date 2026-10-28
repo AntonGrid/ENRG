@@ -101,6 +101,30 @@ Everything below was **measured**, not inferred.
 | Removing the 10 idle registry keys | `oracle_admin` is the offline deployer key `H3tXm4…` — confirmed on-chain by the audit script, which now prints `registry.authority` / `registry.oracle_admin` next to your signer and refuses `--remove-empty` when they differ |
 | ATECC608A tier | `cryptoauthlib` needs an `atca_config.h` for the target board |
 
+**2026-10-21 — pilot firmware blockers B1–B4/B9 (code side closed):**
+
+- **B1 (data correctness):** the firmware sent the PZEM **cumulative** counter
+  while the oracle accumulates (`server.js: newEnergy = stored + energyWh`).
+  Now `read_energy_wh()` returns `total_now − baseline`, the baseline is
+  persisted in NVS (`enrg`/`pzem_wh`) and advanced **only after HTTP 200**; the
+  first boot seeds the baseline from the current counter, and a backwards
+  counter is treated as a reset. Aggregation now keeps the pending total instead
+  of summing deltas (no double counting).
+- **B2:** `mandulaj/PZEM-004T-v30` + `-D ENRG_USE_PZEM=1` added to every
+  buildable env; measured flash: `esp32dev` 89.5%, `esp32dev-ota` 64.1%,
+  `esp32dev-se050` 94.1%, `esp32dev-mainnet` 67.3% — all `SUCCESS`.
+- **B3:** `ENRG_MIN_START_NONCE` (build flag) + `SETNONCE <n>` / `NONCE`
+  Serial commands raise the anti-replay counter above the on-chain nonce
+  (pilot device is at **1029**).
+- **B4:** `scripts/register-onchain.ts` no longer hard-codes the device id:
+  `--device-id` (hex or base58) / `DEVICE_ID`, `--cluster`, `--wallet`,
+  `--claim-nonce`, `--ts`, plus a read-only `--check` (verified live:
+  `Ej2o…` → PDA `4FCwMe…`, `{"active":{}}`, nonce 1029).
+- **B9:** the firmware README now states that proof intake is opened **only** by
+  on-chain registration (`404 device_not_registered_on_chain`), that
+  `POST /api/v1/device/register` does not open it, and documents the delta-energy
+  and nonce procedures.
+
 ## 1. Overview
 
 **Implemented (in `programs/enrg-mvp`):**

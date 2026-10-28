@@ -18,6 +18,13 @@
  *        device_id(32) || nonce(8 LE) || timestamp(8 LE) || energy_wh(8 LE)
  *   4. Wall-clock via NTP (not millis()).
  *   5. HTTPS with root certificate verification; mTLS optional.
+ *   6. (B1) Energy is reported as a DELTA, not as the PZEM cumulative
+ *      counter: the last acknowledged counter value is persisted in NVS and
+ *      energyWh = total_now − baseline (see "ENERGY" below). The oracle adds
+ *      every proof to the lifetime total, so a raw counter would multiply it.
+ *   7. (B3) The oracle rejects nonce <= the device's on-chain nonce; the
+ *      stored counter can be raised with ENRG_MIN_START_NONCE (build flag)
+ *      or with the Serial command SETNONCE <n>.
  *
  * Dependencies (PlatformIO):
  *   - platform: espressif32 (Arduino framework)
@@ -257,6 +264,17 @@ static const char ENRG_CA_CERT[] =
 // ── PZEM-004T sensor (optional). Without it — a read_energy_wh() stub. ──
 #ifndef ENRG_USE_PZEM
 #define ENRG_USE_PZEM 0
+#endif
+
+// ── Nonce floor (B3, audit 2026-10-21) ──
+// The oracle accepts a proof only if nonce > the device nonce stored on-chain
+// (server.js: validateNonce / EnergyProducer.nonce). A freshly flashed board
+// starts from 0 and would send nonce=1, which the oracle rejects with
+// 400 InvalidNonce when the on-chain nonce is already higher.
+// Set it at build time, e.g. -D ENRG_MIN_START_NONCE=1029, or at runtime with
+// the Serial command `SETNONCE <n>`.
+#ifndef ENRG_MIN_START_NONCE
+#define ENRG_MIN_START_NONCE 0
 #endif
 
 // Proof send interval, ms (default 60 s).
@@ -687,6 +705,29 @@ uint32_t next_nonce() {
     return n;
 }
 
+/**
+ * B3 (audit 2026-10-21): the oracle accepts a proof only when
+ * nonce > the nonce stored on-chain for this device (server.js:
+ * validateNonce, EnergyProducer.nonce). A freshly flashed board has no NVS
+ * counter and starts at 1, so every proof is rejected with 400 InvalidNonce
+ * as soon as the on-chain counter is higher (e.g. a repaired/re-flashed unit).
+ *
+ * ENRG_MIN_START_NONCE raises the stored counter at boot; `SETNONCE <n>` does
+ * the same at runtime (see the Serial commands section).
+ */
+void nonce_init_floor() {
+    uint32_t stored = g_prefs.getUInt("nonce", 0);
+    uint32_t floorValue = (uint32_t)ENRG_MIN_START_NONCE;
+    if (floorValue > 0 && stored < floorValue) {
+        g_prefs.putUInt("nonce", floorValue);
+        Serial.printf("[NONCE] raised %lu -> %lu (ENRG_MIN_START_NONCE)\n",
+                      (unsigned long)stored, (unsigned long)floorValue);
+        stored = floorValue;
+    }
+    Serial.printf("[NONCE] stored = %lu, the next proof uses %lu\n",
+                  (unsigned long)stored, (unsigned long)(stored + 1));
+}
+
 // ════════════════════════════════════════════════════════════════
 //  BINARY SIGNATURE (on-chain format)
 //  message = device_id(32) || nonce(8 LE) || timestamp(8 LE) || energy_wh(8 LE)
@@ -714,17 +755,133 @@ static PZEM004Tv30 g_pzem(Serial2, 16, 17); // RX=16, TX=17
 static bool g_pzem_ok = false;
 #endif
 
-uint64_t read_energy_wh() {
+// ════════════════════════════════════════════════════════════════
+//  ENERGY (delta Wh since the last ACKNOWLEDGED report)
+//
+//  B1 (audit 2026-10-21): the PZEM-004T reports a CUMULATIVE counter since
+//  its own last reset, while the oracle treats energyWh as energy produced
+//  DURING THE REPORT INTERVAL and adds it to the lifetime total
+//  (server.js: `newEnergy = stored + energyWh`). Sending the raw counter
+//  therefore multiplies the reported energy on every report.
+//
+//  The firmware persists the counter value already acknowledged by the oracle
+//  in NVS (namespace "enrg", key "pzem_wh") and reports the DIFFERENCE:
+//
+//      energyWh = pzem_total_now − persisted_baseline
+//
+//  The baseline is advanced ONLY after an HTTP 200, so a failed upload is
+//  retried with the same energy on the next report instead of losing it.
+// ════════════════════════════════════════════════════════════════
+
+static uint64_t g_energy_baseline_wh = 0; // counter value acknowledged by the oracle
+static uint64_t g_energy_total_wh = 0;    // last raw counter read
+static bool g_energy_total_valid = false;
+
+/** Reads the PZEM cumulative counter in Wh. false = sensor absent/failed. */
+static bool pzem_read_total_wh(uint64_t *outWh) {
 #if ENRG_USE_PZEM
-    float energy = g_pzem.energy(); // kWh
-    if (isnan(energy)) {
-        Serial.println("[SENSOR] PZEM error (NaN)");
-        return 0;
-    }
-    return (uint64_t)(energy * 1000.0f); // kWh -> Wh
+    if (!g_pzem_ok) return false;
+    float energy = g_pzem.energy(); // kWh, cumulative
+    if (isnan(energy) || energy < 0.0f) return false;
+    *outWh = (uint64_t)(energy * 1000.0f + 0.5f); // kWh -> Wh (rounded)
+    return true;
 #else
-    // Stub without a sensor. Connect a PZEM-004T and enable ENRG_USE_PZEM=1.
-    return 1; // 1 Wh per interval
+    (void)outWh;
+    return false;
+#endif
+}
+
+/**
+ * B1: energy produced since the last acknowledged report (Wh).
+ *
+ * PZEM counters roll over at 9999.99 kWh and can be reset by hand; a counter
+ * that went backwards is therefore treated as a counter reset (the whole
+ * counter is unreported energy) instead of a negative delta.
+ */
+uint64_t read_energy_wh() {
+    uint64_t totalWh = 0;
+    if (!pzem_read_total_wh(&totalWh)) {
+#if ENRG_USE_PZEM
+        Serial.println("[SENSOR] PZEM read failed (NaN/absent) — 0 Wh this interval");
+        return 0;
+#else
+        // Stub without a sensor. Connect a PZEM-004T and enable ENRG_USE_PZEM=1.
+        return 1; // 1 Wh per interval
+#endif
+    }
+
+    g_energy_total_wh = totalWh;
+    g_energy_total_valid = true;
+
+    uint64_t baseline = g_energy_baseline_wh;
+    if (totalWh < baseline) {
+        Serial.printf("[SENSOR] PZEM counter went backwards (%lluWh < baseline %lluWh) — "
+                      "treating it as a counter reset\n",
+                      (unsigned long long)totalWh, (unsigned long long)baseline);
+        baseline = 0;
+        g_energy_baseline_wh = 0;
+    }
+
+    uint64_t deltaWh = totalWh - baseline;
+    Serial.printf("[SENSOR] PZEM total=%lluWh baseline=%lluWh delta=%lluWh\n",
+                  (unsigned long long)totalWh, (unsigned long long)baseline,
+                  (unsigned long long)deltaWh);
+    return deltaWh;
+}
+
+/**
+ * B1: the counter value read last becomes the new baseline.
+ * Call it ONLY after the oracle acknowledged the proof (HTTP 200).
+ */
+void commit_energy_baseline() {
+#if ENRG_USE_PZEM
+    if (!g_energy_total_valid) return;
+    g_energy_baseline_wh = g_energy_total_wh;
+    g_prefs.putULong64("pzem_wh", g_energy_baseline_wh);
+    Serial.printf("[SENSOR] baseline committed: %lluWh\n",
+                  (unsigned long long)g_energy_baseline_wh);
+#else
+    (void)g_energy_total_valid;
+#endif
+}
+
+/**
+ * B1: restores the persisted baseline at boot.
+ * On the very first boot there is no baseline yet — the CURRENT counter is
+ * stored as the baseline, so energy accumulated before commissioning is not
+ * reported as if it had just been produced.
+ */
+void energy_init() {
+#if ENRG_USE_PZEM
+    g_pzem_ok = true;
+    bool haveBaseline = g_prefs.isKey("pzem_wh");
+    g_energy_baseline_wh = g_prefs.getULong64("pzem_wh", 0);
+
+    uint64_t totalWh = 0;
+    if (!pzem_read_total_wh(&totalWh)) {
+        Serial.println("[SENSOR] PZEM not responding at boot — will retry on every report");
+        return;
+    }
+    g_energy_total_wh = totalWh;
+    g_energy_total_valid = true;
+
+    if (!haveBaseline) {
+        g_energy_baseline_wh = totalWh;
+        g_prefs.putULong64("pzem_wh", g_energy_baseline_wh);
+        Serial.printf("[SENSOR] first boot: baseline := %lluWh "
+                      "(the existing counter is NOT reported)\n",
+                      (unsigned long long)g_energy_baseline_wh);
+    } else {
+        uint64_t pending = (totalWh >= g_energy_baseline_wh)
+                               ? (totalWh - g_energy_baseline_wh)
+                               : totalWh;
+        Serial.printf("[SENSOR] PZEM total=%lluWh baseline=%lluWh pending=%lluWh\n",
+                      (unsigned long long)totalWh,
+                      (unsigned long long)g_energy_baseline_wh,
+                      (unsigned long long)pending);
+    }
+#else
+    Serial.println("[SENSOR] PZEM disabled (ENRG_USE_PZEM=0) — stub 1 Wh per interval");
 #endif
 }
 
@@ -1204,22 +1361,25 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
         return;
     }
 
-    uint64_t readingWh = read_energy_wh();
+    // B1: everything the oracle has NOT acknowledged yet (delta since the
+    // persisted baseline) — never the raw PZEM counter.
+    uint64_t energyWh = read_energy_wh();
 
     // ADR-0004: if the rated power is known (rated_power from the manifest),
     // the energy of one report is capped by it (coarse protection against false readings).
-    if (g_rated_power > 0 && readingWh > g_rated_power) {
+    if (g_rated_power > 0 && energyWh > g_rated_power) {
         Serial.printf("[PROOF] WARN: energy %lluWh > rated_power %lluW — clamping\n",
-                      (unsigned long long)readingWh, (unsigned long long)g_rated_power);
-        readingWh = g_rated_power;
+                      (unsigned long long)energyWh, (unsigned long long)g_rated_power);
+        energyWh = g_rated_power;
     }
-
-    uint64_t energyWh = readingWh;
 
 #if ENRG_AGGREGATE_WINDOW_MS > 0
     // P3: accumulate within the window and send ONE aggregated proof.
-    g_agg_energy_wh += readingWh;
-    g_agg_readings++;
+    // read_energy_wh() already returns EVERYTHING since the last acknowledged
+    // report, so the window only remembers the latest sample — adding the
+    // deltas up here would double-count the same energy.
+    g_agg_energy_wh = energyWh;
+    if (energyWh > 0) g_agg_readings++;
     if (g_agg_start_ms == 0) g_agg_start_ms = millis();
 
     bool windowElapsed = (millis() - g_agg_start_ms) >= (unsigned long)ENRG_AGGREGATE_WINDOW_MS;
@@ -1235,6 +1395,16 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
     Serial.printf("[AGG] flush window: %llu Wh from %llu readings\n",
                   (unsigned long long)energyWh, (unsigned long long)g_agg_readings);
 #endif
+
+    // The oracle rejects energyWh <= 0 (policy.validateEnergyWh): nothing new
+    // to report means no proof, no nonce burned and no baseline moved.
+    if (energyWh == 0) {
+        Serial.println("[PROOF] skip: no new energy since the last acknowledged report");
+#if ENRG_AGGREGATE_WINDOW_MS > 0
+        g_agg_start_ms = 0; // restart the window with nothing pending
+#endif
+        return;
+    }
 
     uint32_t nonce = next_nonce();
     int64_t timestamp = (int64_t)time(nullptr); // wall-clock (epoch)
@@ -1283,14 +1453,25 @@ void send_proof(const uint8_t privateKey[32], const uint8_t publicKey[32]) {
     if (WiFi.status() != WL_CONNECTED) {
         if (!connect_wifi_from_nvs(20000)) return;
     }
-    send_proof_http(body);
-
+    // B1: the persisted baseline moves ONLY when the oracle acknowledged the
+    // proof. On any other outcome the same unaccounted energy is re-sent with
+    // the next report (nonce is monotonic, so the retry is a fresh proof).
+    int httpCode = send_proof_http(body);
+    if (httpCode == 200) {
+        commit_energy_baseline();
 #if ENRG_AGGREGATE_WINDOW_MS > 0
-    // Reset the accumulator after a successful flush.
-    g_agg_energy_wh = 0;
-    g_agg_readings = 0;
-    g_agg_start_ms = 0;
+        g_agg_energy_wh = 0;
+        g_agg_readings = 0;
+        g_agg_start_ms = 0;
 #endif
+    } else {
+        Serial.println("[PROOF] not acknowledged — baseline kept, energy will be retried");
+#if ENRG_AGGREGATE_WINDOW_MS > 0
+        // Make the window expire immediately so the retry happens on the next
+        // interval instead of one full window later.
+        g_agg_start_ms = millis() - (unsigned long)ENRG_AGGREGATE_WINDOW_MS;
+#endif
+    }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1438,9 +1619,13 @@ static void print_help_serial() {
     Serial.println("                      (the device will start the Axis-Device-XXXX Captive Portal)");
     Serial.println("  WIFI <ssid> <pass> — save WiFi credentials to NVS and reboot into STA mode");
     Serial.println("                      (alternative to the Captive Portal; no WiFiManager needed)");
+    Serial.println("  NONCE             — print the stored anti-replay counter");
+    Serial.println("  SETNONCE <n>      — set the anti-replay counter to n (must be >= the");
+    Serial.println("                      on-chain nonce, otherwise proofs get 400 InvalidNonce)");
     Serial.println("  Examples:");
     Serial.println("    SIGN 68656c6c6f           (sign 'hello')");
     Serial.println("    SIGN <hex(device_id|public_key)>   (PoP for the oracle)");
+    Serial.println("    SETNONCE 1029             (continue after an on-chain nonce of 1029)");
 }
 
 static void print_device_info_serial() {
@@ -1513,6 +1698,41 @@ static void cmd_sign(const String &hexArg) {
     Serial.printf("[SIGN] sig_hex      = %s\n", to_hex(signature, 64).c_str());
 }
 
+/**
+ * NONCE / SETNONCE <n> (B3): inspect or raise the anti-replay counter.
+ * The oracle requires nonce > the on-chain nonce, so after a re-flash (which
+ * wipes NVS) the counter has to be raised to at least the on-chain value.
+ */
+static void cmd_nonce(const String &arg) {
+    uint32_t stored = g_prefs.getUInt("nonce", 0);
+    if (arg.length() == 0) {
+        Serial.printf("[NONCE] stored = %lu, the next proof uses %lu\n",
+                      (unsigned long)stored, (unsigned long)(stored + 1));
+        Serial.println("[NONCE] usage: SETNONCE <n>  (must be >= the device nonce on-chain)");
+        return;
+    }
+
+    char *end = nullptr;
+    unsigned long v = strtoul(arg.c_str(), &end, 10);
+    if (end == arg.c_str() || (end != nullptr && *end != '\0') || v == 0 || v > 0xFFFFFFFFUL) {
+        Serial.println("[NONCE] ERR: usage: SETNONCE <positive integer>");
+        return;
+    }
+    uint32_t target = (uint32_t)v;
+    if (target == stored) {
+        Serial.printf("[NONCE] already %lu — nothing to do\n", (unsigned long)stored);
+        return;
+    }
+
+    g_prefs.putUInt("nonce", target);
+    Serial.printf("[NONCE] %lu -> %lu, the next proof uses %lu\n",
+                  (unsigned long)stored, (unsigned long)target, (unsigned long)(target + 1));
+    if (target < stored) {
+        Serial.println("[NONCE] WARN: the counter was DECREASED — proofs will be rejected "
+                       "until it exceeds the last accepted nonce");
+    }
+}
+
 static void process_serial_command(const String &line) {
     int sp = line.indexOf(' ');
     String cmd = (sp < 0) ? line : line.substring(0, sp);
@@ -1525,6 +1745,8 @@ static void process_serial_command(const String &line) {
     if (cmd == "SIGN") { cmd_sign(arg); return; }
     if (cmd == "WIFI") { cmd_wifi(arg); return; }
     if (cmd == "CLEARWIFI" || cmd == "WIFIRESET") { cmd_clear_wifi(); return; }
+    if (cmd == "NONCE") { cmd_nonce(""); return; }
+    if (cmd == "SETNONCE") { cmd_nonce(arg); return; }
 
     Serial.printf("[SERIAL] unknown command: %s (HELP for the list)\n", cmd.c_str());
 }
@@ -1648,6 +1870,11 @@ void setup() {
     delay(500);
     Serial.println("\n[BOOT] ENRG Proof Sender v3 (secure)");
 
+    // NVS namespace for the key, nonce, PZEM baseline, manifest and WiFi creds.
+    // Opened here so that every storage path (including SE050, which does not
+    // call identity_init_v3) can use g_prefs; a repeated begin() is a no-op.
+    g_prefs.begin("enrg", false);
+
     // H-3: key generation on first boot / loading from NVS/ATECC608.
     // Storage priority (ADR-0001): NXP SE050 (hardware Ed25519) →
     // ATECC608A (seed-vault) → NVS.
@@ -1695,9 +1922,13 @@ void setup() {
     }
     Serial.printf("[KEY] device_id = %s\n", device_id_from_pubkey(g_publicKey).c_str());
 
-#if ENRG_USE_PZEM
-    g_pzem_ok = true;
-#endif
+    // B3: raise the anti-replay counter above the on-chain nonce if requested
+    //     (build flag ENRG_MIN_START_NONCE, or SETNONCE <n> over Serial).
+    nonce_init_floor();
+
+    // B1: restore the persisted PZEM baseline — proofs carry the DELTA since
+    //     the last acknowledged report, not the cumulative counter.
+    energy_init();
 
     // ADR-0008: LittleFS — the staging area for the OTA image.
     if (!LittleFS.begin()) {
