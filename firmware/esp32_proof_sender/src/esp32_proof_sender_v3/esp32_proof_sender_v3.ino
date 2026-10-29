@@ -1147,21 +1147,31 @@ int send_proof_http(const String &body) {
     return code;
 }
 
-/**
- * Simple HTTP(S) GET (to fetch the Device Manifest, ADR-0004, and
- * OTA metadata). Returns the response body (empty string on error).
- */
-String http_get(const String &url) {
-    String body = "";
-    int code;
+// ── HTTP read timeouts ──
+// Render's free tier sleeps after 15 min of inactivity: the first request to a
+// cold container can hang for ~50 s before the first byte arrives. With the
+// HTTPClient default (5 s) that shows up as HTTPC_ERROR_READ_TIMEOUT (-11)
+// even though the network itself is fine. A longer read window + one retry
+// makes the manifest/OTA fetch survive a cold start.
+#ifndef ENRG_HTTP_READ_TIMEOUT_MS
+#define ENRG_HTTP_READ_TIMEOUT_MS 45000UL
+#endif
+#ifndef ENRG_HTTP_GET_ATTEMPTS
+#define ENRG_HTTP_GET_ATTEMPTS 2
+#endif
+#ifndef ENRG_HTTP_RETRY_DELAY_MS
+#define ENRG_HTTP_RETRY_DELAY_MS 3000UL
+#endif
 
-    if (!transport_allowed(url)) {
-        return "";
-    }
+/** One GET attempt; returns the HTTP code (negative = transport error). */
+static int http_get_attempt(const String &url, String &body) {
+    body = "";
+    int code = 0;
 
     if (url.startsWith("https://")) {
         WiFiClientSecure client;
         client.setCACert(ENRG_CA_CERT); // mandatory root CA verification
+        client.setHandshakeTimeout(20); // seconds (the default 120 is fine, but 20 bounds the blocking)
 #if ENRG_MTLS
         client.setCertificate(ENRG_CLIENT_CERT);
         client.setPrivateKey(ENRG_CLIENT_PRIVKEY);
@@ -1169,26 +1179,62 @@ String http_get(const String &url) {
         HTTPClient http;
         if (!http.begin(client, url)) {
             Serial.println("[HTTP] GET begin failed (https)");
-            return "";
+            return -1;
         }
+        http.setTimeout(ENRG_HTTP_READ_TIMEOUT_MS);
+        http.setReuse(false);
         code = http.GET();
         if (code == 200) body = http.getString();
-        else Serial.printf("[HTTP] GET %s -> %d\n", url.c_str(), code);
         http.end();
     } else {
         WiFiClient client;
         HTTPClient http;
         if (!http.begin(client, url)) {
             Serial.println("[HTTP] GET begin failed (http)");
-            return "";
+            return -1;
         }
+        http.setTimeout(ENRG_HTTP_READ_TIMEOUT_MS);
+        http.setReuse(false);
         code = http.GET();
         if (code == 200) body = http.getString();
-        else Serial.printf("[HTTP] GET %s -> %d\n", url.c_str(), code);
         http.end();
     }
+    return code;
+}
 
-    return body;
+/**
+ * Simple HTTP(S) GET (to fetch the Device Manifest, ADR-0004, and
+ * OTA metadata). Returns the response body (empty string on error).
+ *
+ * Retries ONLY transport-level failures and 5xx (a cold Render container),
+ * never a definitive 4xx answer.
+ */
+String http_get(const String &url) {
+    if (!transport_allowed(url)) {
+        return "";
+    }
+
+    for (int attempt = 1; attempt <= (int)ENRG_HTTP_GET_ATTEMPTS; attempt++) {
+        String body;
+        int code = http_get_attempt(url, body);
+        if (code == 200) return body;
+
+        bool retryable = (code < 0) || (code >= 500 && code <= 599);
+        if (code < 0) {
+            Serial.printf("[HTTP] GET %s -> %d (%s)\n", url.c_str(), code,
+                          HTTPClient::errorToString(code).c_str());
+        } else {
+            Serial.printf("[HTTP] GET %s -> %d\n", url.c_str(), code);
+        }
+        if (!retryable || attempt == (int)ENRG_HTTP_GET_ATTEMPTS) break;
+
+        Serial.printf("[HTTP] retrying in %lu ms (attempt %d/%d) — a cold backend can take ~50 s\n",
+                      (unsigned long)ENRG_HTTP_RETRY_DELAY_MS, attempt + 1,
+                      (int)ENRG_HTTP_GET_ATTEMPTS);
+        delay(ENRG_HTTP_RETRY_DELAY_MS);
+    }
+
+    return "";
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1622,6 +1668,8 @@ static void print_help_serial() {
     Serial.println("  NONCE             — print the stored anti-replay counter");
     Serial.println("  SETNONCE <n>      — set the anti-replay counter to n (must be >= the");
     Serial.println("                      on-chain nonce, otherwise proofs get 400 InvalidNonce)");
+    Serial.println("  PZEM              — live V/A/W/Hz/PF + counter/baseline/pending Wh");
+    Serial.println("                      (shows how many seconds 1 Wh takes at the current load)");
     Serial.println("  Examples:");
     Serial.println("    SIGN 68656c6c6f           (sign 'hello')");
     Serial.println("    SIGN <hex(device_id|public_key)>   (PoP for the oracle)");
@@ -1733,6 +1781,44 @@ static void cmd_nonce(const String &arg) {
     }
 }
 
+/**
+ * `PZEM` — live sensor readout: V/A/W/Hz/PF plus the cumulative counter, the
+ * persisted baseline and the delta the next proof would carry.
+ *
+ * The PZEM counter has a resolution of 1 Wh and the proof carries whole Wh, so
+ * a small load produces a proof only occasionally: 6 W → 1 Wh in ~10 min,
+ * 100 W → 1 Wh in 36 s. This command shows P and the seconds needed per 1 Wh,
+ * i.e. whether the load is actually being measured.
+ */
+static void cmd_sensor() {
+#if ENRG_USE_PZEM
+    float v = g_pzem.voltage();
+    float a = g_pzem.current();
+    float w = g_pzem.power();
+    float hz = g_pzem.frequency();
+    float pf = g_pzem.pf();
+    if (isnan(v) || isnan(a) || isnan(w)) {
+        Serial.println("[SENSOR] PZEM not responding — check TX/RX = GPIO16/17, 5 V and a common GND");
+        return;
+    }
+    Serial.printf("[SENSOR] V=%.1f V  I=%.3f A  P=%.1f W  f=%.1f Hz  PF=%.2f\n", v, a, w, hz, pf);
+
+    uint64_t totalWh = 0;
+    if (!pzem_read_total_wh(&totalWh)) {
+        Serial.println("[SENSOR] energy counter unreadable");
+        return;
+    }
+    uint64_t baseline = g_energy_baseline_wh;
+    uint64_t pending = (totalWh >= baseline) ? (totalWh - baseline) : totalWh;
+    float secPerWh = (w > 0.5f) ? (3600.0f / w) : 0.0f;
+    Serial.printf("[SENSOR] total=%lluWh baseline=%lluWh pending=%lluWh  (1 Wh ≈ %.0f s at P=%.1f W)\n",
+                  (unsigned long long)totalWh, (unsigned long long)baseline,
+                  (unsigned long long)pending, secPerWh, w);
+#else
+    Serial.println("[SENSOR] PZEM disabled (ENRG_USE_PZEM=0) — build with -D ENRG_USE_PZEM=1");
+#endif
+}
+
 static void process_serial_command(const String &line) {
     int sp = line.indexOf(' ');
     String cmd = (sp < 0) ? line : line.substring(0, sp);
@@ -1747,6 +1833,7 @@ static void process_serial_command(const String &line) {
     if (cmd == "CLEARWIFI" || cmd == "WIFIRESET") { cmd_clear_wifi(); return; }
     if (cmd == "NONCE") { cmd_nonce(""); return; }
     if (cmd == "SETNONCE") { cmd_nonce(arg); return; }
+    if (cmd == "PZEM" || cmd == "SENSOR") { cmd_sensor(); return; }
 
     Serial.printf("[SERIAL] unknown command: %s (HELP for the list)\n", cmd.c_str());
 }
@@ -1931,8 +2018,15 @@ void setup() {
     energy_init();
 
     // ADR-0008: LittleFS — the staging area for the OTA image.
-    if (!LittleFS.begin()) {
+    // formatOnFail=true: a partition that was never formatted (the log shows
+    // "Corrupted dir pair at {0x0, 0x1}") is formatted once instead of leaving
+    // OTA permanently unavailable. LittleFS holds ONLY the temporary firmware
+    // image (/fw_update.bin) — no device state is stored there.
+    if (!LittleFS.begin(true)) {
         Serial.println("[OTA] WARN: LittleFS not mounted — OTA unavailable");
+    } else {
+        Serial.printf("[OTA] LittleFS mounted: %u/%u bytes used\n",
+                      (unsigned)LittleFS.usedBytes(), (unsigned)LittleFS.totalBytes());
     }
 
     // Plug & Play: NVS credentials → 30s connect → otherwise Captive Portal.

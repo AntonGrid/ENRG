@@ -124,6 +124,16 @@ Everything below was **measured**, not inferred.
   on-chain registration (`404 device_not_registered_on_chain`), that
   `POST /api/v1/device/register` does not open it, and documents the delta-energy
   and nonce procedures.
+- **Bring-up on the pilot board (same day):** the first real boot showed
+  `[PROOF] skip: no new energy` (a 6 W lamp adds 1 Wh only every ~10 min — the
+  PZEM counter is integer Wh, so this is expected), `[HTTP] GET … -> -11`
+  (read timeout on a cold Render free-tier container: the GET timeout was the
+  5 s HTTPClient default) and `Corrupted dir pair at {0x0, 0x1}` (LittleFS never
+  formatted → OTA unavailable). Fixes: `ENRG_HTTP_READ_TIMEOUT_MS=45000` + one
+  retry for GET (transport errors and `5xx` only), `LittleFS.begin(true)`,
+  a new `PZEM` Serial command (V/A/W/Hz/PF + pending Wh + seconds per 1 Wh) and a
+  README section on counter resolution. Verified: `esp32dev` 89.6%,
+  `esp32dev-ota` SUCCESS.
 
 ## 1. Overview
 
