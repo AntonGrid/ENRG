@@ -70,28 +70,56 @@
 #define ENRG_AP_TIMEOUT_SEC 600
 #endif
 
-// ── WiFi: NVS is the source of truth; nothing is baked into the source ──
+// ── WiFi: BUILD-TIME FLAGS WIN; NVS is only the fallback store ──────────────
 // Boot order (see setup_wifi()):
-//   1. NVS — namespace "enrg", keys wifi_ssid/wifi_pass (written by the Serial
-//      command `WIFI <ssid> <pass>` or by the Captive Portal);
-//   2. a build-time seed network, used ONLY when NVS is empty and never
-//      written into NVS;
-//   3. Captive Portal "Axis-Device-XXXX".
+//   1. BUILD-TIME network — WIFI_SSID/WIFI_PASS (plus the optional second pair
+//      WIFI_SSID2/WIFI_PASS2) passed through PLATFORMIO_BUILD_FLAGS. When they
+//      are present they are the ONLY networks the board will join: NVS is not
+//      consulted for the decision, and an NVS entry for any other network is
+//      OVERWRITTEN at boot. A build that names its network must behave the same
+//      on every boot — that is what makes `pio run -t upload` a one-command
+//      deployment with no portal and no manual step.
+//   2. NVS — namespace "enrg", keys wifi_ssid/wifi_pass (written by the Serial
+//      command `WIFI <ssid> <pass>`, by the Captive Portal, or by step 1).
+//   3. Captive Portal "Axis-Device-XXXX" — only when neither of the above exists.
 //
-// The pilot build hard-coded Anton's home pair here and wrote it to NVS on
-// EVERY boot. That single line is why `WIFI RT-5GPON-4F18 ...` "did not stick":
-// the command saved the new network, the reboot put the old SSID back, and the
-// board knocked on a router that was in another flat. Credentials live only in
-// NVS now (audit 2026-08-18 P1: no real-network secrets in a tracked file).
+// History: the pilot build hard-coded a pair in this file and wrote it to NVS on
+// EVERY boot, so `WIFI <new> <pass>` looked ignored after the reboot. The
+// hard-code is gone from the source (defaults are empty strings — a plain
+// `pio run -e esp32dev` has no network at all), and a baked network is now
+// opt-in through the build flags below, where it is the explicit winner.
+// No real-network secrets are committed here (audit 2026-08-18 P1).
 //
-// To bake a fallback into a private build (it stays a fallback — the user's
-// saved network always wins):
 //   PLATFORMIO_BUILD_FLAGS='-D WIFI_SSID=\"MyNet\" -D WIFI_PASS=\"secret\"'
 #ifndef WIFI_SSID
 #define WIFI_SSID ""
 #endif
 #ifndef WIFI_PASS
 #define WIFI_PASS ""
+#endif
+// Optional SECOND build-time network, tried when the first does not answer —
+// e.g. the same router published under another name (RT-GPON-XXXX vs
+// RT-5GPON-XXXX) or its 2.4 GHz SSID next to the 5 GHz one. The candidate that
+// connects is the one written to NVS, so later boots and retries agree.
+#ifndef WIFI_SSID2
+#define WIFI_SSID2 ""
+#endif
+#ifndef WIFI_PASS2
+#define WIFI_PASS2 ""
+#endif
+// Open the Captive Portal when a build-time network exists but does not answer?
+// 0 (default): no. A build with baked credentials must never park in a portal —
+// the setup AP stays up (signer on 192.168.4.1), loop() keeps retrying, and a
+// wrong pair is corrected with `WIFI <ssid> <pass>` over Serial, no reflash.
+#ifndef ENRG_SEED_OPEN_PORTAL
+#define ENRG_SEED_OPEN_PORTAL 0
+#endif
+// How many build-time networks can be baked (WIFI_SSID, WIFI_SSID2). Declared
+// here, in the configuration section, because the Arduino preprocessor emits the
+// function prototypes above the first declaration in the sketch — a #define used
+// in a signature further down would not be visible there.
+#ifndef ENRG_WIFI_SEED_MAX
+#define ENRG_WIFI_SEED_MAX 2
 #endif
 
 // How many times the saved network is tried before the Captive Portal opens.
@@ -293,6 +321,30 @@ static const char ENRG_CA_CERT[] =
 // ── PZEM-004T sensor (optional). Without it — a read_energy_wh() stub. ──
 #ifndef ENRG_USE_PZEM
 #define ENRG_USE_PZEM 0
+#endif
+// UART: Serial2 @9600 8N1, pins fixed by the pilot wiring —
+//   ESP32 GPIO16 (RX) <- PZEM TX,  ESP32 GPIO17 (TX) -> PZEM RX, common GND.
+// (The PZEM-004Tv30 hardware-serial constructor calls
+// `Serial2.begin(9600, SERIAL_8N1, rx, tx)` itself, so the pins below are the
+// only place where the port is configured.)
+#ifndef ENRG_PZEM_RX
+#define ENRG_PZEM_RX 16
+#endif
+#ifndef ENRG_PZEM_TX
+#define ENRG_PZEM_TX 17
+#endif
+// The PZEM-004T has its own mains SMPS: it needs ~1 s after the 230 V comes up
+// before it answers on the UART, while the ESP32 is ready in ~300 ms. The first
+// read in setup() therefore used to fail with "PZEM not responding at boot" even
+// on a perfectly wired sensor. Wait once, then retry a few times.
+#ifndef ENRG_PZEM_WARMUP_MS
+#define ENRG_PZEM_WARMUP_MS 1000UL
+#endif
+#ifndef ENRG_PZEM_BOOT_ATTEMPTS
+#define ENRG_PZEM_BOOT_ATTEMPTS 5
+#endif
+#ifndef ENRG_PZEM_BOOT_RETRY_MS
+#define ENRG_PZEM_BOOT_RETRY_MS 500UL
 #endif
 
 // ── Nonce floor (B3, audit 2026-10-21) ──
@@ -780,7 +832,12 @@ void build_proof_message(uint8_t msg[56], const uint8_t pubkey[32],
 // ════════════════════════════════════════════════════════════════
 
 #if ENRG_USE_PZEM
-static PZEM004Tv30 g_pzem(Serial2, 16, 17); // RX=16, TX=17
+// Serial2 on GPIO16/17 (see ENRG_PZEM_RX / ENRG_PZEM_TX). The constructor also
+// opens the UART, so the port is Serial2 for everyone else too — do not call
+// Serial2.begin() anywhere else.
+static PZEM004Tv30 g_pzem(Serial2, ENRG_PZEM_RX, ENRG_PZEM_TX);
+// true once the sensor has answered at least one read (it is not a switch: the
+// reads keep being attempted, so a sensor that wakes up later is picked up).
 static bool g_pzem_ok = false;
 #endif
 
@@ -809,9 +866,15 @@ static bool g_energy_total_valid = false;
 /** Reads the PZEM cumulative counter in Wh. false = sensor absent/failed. */
 static bool pzem_read_total_wh(uint64_t *outWh) {
 #if ENRG_USE_PZEM
-    if (!g_pzem_ok) return false;
-    float energy = g_pzem.energy(); // kWh, cumulative
-    if (isnan(energy) || energy < 0.0f) return false;
+    // No `g_pzem_ok` gate here on purpose: the read must be attempted even
+    // before the sensor answered once, otherwise a sensor that wakes up after
+    // boot would never be picked up.
+    float energy = g_pzem.energy(); // kWh, cumulative (also refreshes V/I/P/Hz/PF)
+    if (isnan(energy) || energy < 0.0f) {
+        g_pzem_ok = false;
+        return false;
+    }
+    g_pzem_ok = true;
     *outWh = (uint64_t)(energy * 1000.0f + 0.5f); // kWh -> Wh (rounded)
     return true;
 #else
@@ -879,16 +942,41 @@ void commit_energy_baseline() {
  * On the very first boot there is no baseline yet — the CURRENT counter is
  * stored as the baseline, so energy accumulated before commissioning is not
  * reported as if it had just been produced.
+ *
+ * The PZEM-004T powers up after the ESP32 (its own mains SMPS needs ~1 s), so
+ * the first register read is attempted only after ENRG_PZEM_WARMUP_MS and is
+ * retried ENRG_PZEM_BOOT_ATTEMPTS times. A boot-time "PZEM not responding" used
+ * to be reported on a perfectly healthy sensor that was simply not awake yet.
  */
 void energy_init() {
 #if ENRG_USE_PZEM
-    g_pzem_ok = true;
+    Serial.printf("[SENSOR] PZEM on Serial2 @9600, RX=GPIO%d TX=GPIO%d — "
+                  "warm-up %lu ms\n",
+                  (int)ENRG_PZEM_RX, (int)ENRG_PZEM_TX,
+                  (unsigned long)ENRG_PZEM_WARMUP_MS);
+    delay(ENRG_PZEM_WARMUP_MS);   // let the sensor's own SMPS settle
+
     bool haveBaseline = g_prefs.isKey("pzem_wh");
     g_energy_baseline_wh = g_prefs.getULong64("pzem_wh", 0);
 
     uint64_t totalWh = 0;
-    if (!pzem_read_total_wh(&totalWh)) {
-        Serial.println("[SENSOR] PZEM not responding at boot — will retry on every report");
+    bool answered = false;
+    for (int attempt = 1; attempt <= ENRG_PZEM_BOOT_ATTEMPTS; attempt++) {
+        if (pzem_read_total_wh(&totalWh)) {
+            answered = true;
+            break;
+        }
+        if (attempt < ENRG_PZEM_BOOT_ATTEMPTS) {
+            Serial.printf("[SENSOR] PZEM no answer yet (%d/%d) — retrying in %lu ms\n",
+                          attempt, (int)ENRG_PZEM_BOOT_ATTEMPTS,
+                          (unsigned long)ENRG_PZEM_BOOT_RETRY_MS);
+            delay(ENRG_PZEM_BOOT_RETRY_MS);
+        }
+    }
+    if (!answered) {
+        Serial.println("[SENSOR] PZEM not responding at boot — check 5 V, a common GND and "
+                       "the crossed UART (ESP32 GPIO16 <- PZEM TX, GPIO17 -> PZEM RX); "
+                       "reads are retried on every report");
         return;
     }
     g_energy_total_wh = totalWh;
@@ -1190,6 +1278,95 @@ static void start_mdns() {
     }
 }
 
+// ════════════════════════════════════════════════════════════════
+//  BUILD-TIME NETWORK (the operator's explicit choice)
+//
+//  WIFI_SSID/WIFI_PASS (and the optional WIFI_SSID2/WIFI_PASS2) come from
+//  PLATFORMIO_BUILD_FLAGS. When present they WIN: NVS is not consulted for the
+//  decision and is overwritten if it holds another network. That is the point —
+//  a flashed board must not come back up on a network an earlier build left in
+//  NVS (bug 2026-10-30), and deployment must be one command, no portal.
+//  ENRG_WIFI_SEED_MAX is defined in the configuration section at the top.
+// ════════════════════════════════════════════════════════════════
+
+/** Fills the build-time candidate list; returns how many are non-empty. */
+static int wifi_build_seeds(String ssids[ENRG_WIFI_SEED_MAX],
+                            String passes[ENRG_WIFI_SEED_MAX]) {
+    int n = 0;
+    if (String(WIFI_SSID).length() > 0) {
+        ssids[n] = WIFI_SSID;
+        passes[n] = WIFI_PASS;
+        n++;
+    }
+    if (n < ENRG_WIFI_SEED_MAX && String(WIFI_SSID2).length() > 0) {
+        ssids[n] = WIFI_SSID2;
+        passes[n] = WIFI_PASS2;
+        n++;
+    }
+    return n;
+}
+
+/** true when `ssid` is one of the build-time networks. */
+static bool wifi_is_build_seed(const String &ssid,
+                               const String ssids[ENRG_WIFI_SEED_MAX], int n) {
+    if (ssid.length() == 0) return false;
+    for (int i = 0; i < n; i++) {
+        if (ssids[i] == ssid) return true;
+    }
+    return false;
+}
+
+/**
+ * Try the candidates in order and stop at the first one that answers.
+ *
+ * `seedMode` = the build-time pair(s); otherwise the single NVS pair. The winner
+ * is written back to NVS, so the retry loop, `INFO` and the Serial commands all
+ * agree on one answer afterwards.
+ */
+static bool wifi_try_candidates(bool seedMode) {
+    String ssids[ENRG_WIFI_SEED_MAX];
+    String passes[ENRG_WIFI_SEED_MAX];
+    int n = 0;
+
+    if (seedMode) {
+        n = wifi_build_seeds(ssids, passes);
+        // The network NVS remembers is the one that worked here last time: put it
+        // first so the common case costs one attempt, not two.
+        String lastGood = wifi_ssid_from_nvs();
+        for (int i = 1; i < n; i++) {
+            if (ssids[i] == lastGood) {
+                String ts = ssids[0];
+                ssids[0] = ssids[i];
+                ssids[i] = ts;
+                String tp = passes[0];
+                passes[0] = passes[i];
+                passes[i] = tp;
+                break;
+            }
+        }
+    } else {
+        String ssid = wifi_ssid_from_nvs();
+        if (ssid.length() > 0) {
+            ssids[0] = ssid;
+            passes[0] = wifi_pass_from_nvs();
+            n = 1;
+        }
+    }
+    if (n == 0) return false;
+
+    for (int i = 0; i < n; i++) {
+        if (n > 1) {
+            Serial.printf("[WIFI] candidate %d/%d: %s\n", i + 1, n, ssids[i].c_str());
+        }
+        if (!wifi_connect_creds(ssids[i], passes[i], ENRG_WIFI_CONNECT_TIMEOUT_MS)) continue;
+        if (wifi_ssid_from_nvs() != ssids[i] || wifi_pass_from_nvs() != passes[i]) {
+            wifi_save_creds(ssids[i], passes[i]);   // remember the winner
+        }
+        return true;
+    }
+    return false;
+}
+
 /**
  * Background Wi-Fi recovery, called from loop().
  *
@@ -1210,58 +1387,126 @@ static void wifi_retry_tick() {
     if ((now - lastMs) < ENRG_WIFI_RETRY_MS) return;
     lastMs = now;
 
-    String ssid = wifi_ssid_from_nvs();
-    if (ssid.length() == 0) return;   // nothing saved — the portal is the answer
+    String seedSsids[ENRG_WIFI_SEED_MAX];
+    String seedPasses[ENRG_WIFI_SEED_MAX];
+    int seeds = wifi_build_seeds(seedSsids, seedPasses);
+    bool seedMode = (seeds > 0);
 
+    String primary = seedMode ? seedSsids[0] : wifi_ssid_from_nvs();
+    if (primary.length() == 0) return;   // nothing saved — the portal is the answer
+
+    // Scan gate: do not knock on a network that is not there.
     bool seen = false;
     String visible;
-    int found = wifi_scan(ssid, &seen, &visible);
+    int found = wifi_scan(primary, &seen, &visible);
+    for (int i = 1; i < seeds && found > 0 && !seen; i++) {
+        wifi_scan(seedSsids[i], &seen, nullptr);
+    }
     if (found > 0 && !seen) {
         Serial.printf("[WIFI] waiting: \"%s\" is not in range (visible: %s)\n",
-                      ssid.c_str(), visible.length() > 0 ? visible.c_str() : "<none>");
+                      primary.c_str(), visible.length() > 0 ? visible.c_str() : "<none>");
         return;
     }
-    Serial.printf("[WIFI] \"%s\" is in range — retrying the connection\n", ssid.c_str());
-    if (wifi_connect_creds(ssid, wifi_pass_from_nvs(), ENRG_WIFI_CONNECT_TIMEOUT_MS)) {
+    Serial.printf("[WIFI] \"%s\" is in range — retrying the connection\n", primary.c_str());
+    if (wifi_try_candidates(seedMode)) {
         start_mdns();
     }
 }
 
 /**
- * Boot Wi-Fi policy — NVS first, always.
+ * Boot Wi-Fi policy — BUILD-TIME FLAGS first, then NVS, then the portal.
  *
- * 1. NVS ("enrg"/wifi_ssid+wifi_pass) is the source of truth. It is read here
- *    and never written from this path: the pilot build used to write its
- *    hard-coded pair into NVS on every boot, so `WIFI <new> <pass>` looked
- *    ignored after the reboot — the boot put the old SSID back.
- * 2. Only when NVS is empty may a build-time seed network be used, and it is
- *    not persisted (a baked default must never replace the user's choice).
- * 3. No network → Captive Portal "Axis-Device-XXXX". If the portal closes
- *    without a network, the AP stays up and loop() retries the saved network at
- *    most once a minute, and only when a scan can see it.
+ * 1. WIFI_SSID/WIFI_PASS (WIFI_SSID2/WIFI_PASS2) from PLATFORMIO_BUILD_FLAGS =
+ *    the operator's explicit choice. In this mode NVS is not consulted for the
+ *    decision: an NVS entry for another network is OVERWRITTEN, so the board can
+ *    never come back up on a network a previous build left behind. The portal is
+ *    not opened either (ENRG_SEED_OPEN_PORTAL=0): the setup AP stays up for the
+ *    signer and loop() keeps retrying the baked network.
+ * 2. No build-time network → NVS ("enrg"/wifi_ssid+wifi_pass) is the truth.
+ * 3. Neither → Captive Portal "Axis-Device-XXXX" (first setup). If the portal
+ *    closes without a network, the AP stays up and loop() retries the saved
+ *    network at most once a minute, and only when a scan can see it.
  */
 static bool setup_wifi() {
     // The driver keeps its own copy of the creds in NVS ("nvs.net80211") unless
     // told not to; with persistence off, our Preferences is the only store.
     WiFi.persistent(false);
 
+    String seedSsids[ENRG_WIFI_SEED_MAX];
+    String seedPasses[ENRG_WIFI_SEED_MAX];
+    int seeds = wifi_build_seeds(seedSsids, seedPasses);
+
+    if (seeds > 0) {
+        String nvsSsid = wifi_ssid_from_nvs();
+        String nvsPass = wifi_pass_from_nvs();
+        bool nvsIsSeed = wifi_is_build_seed(nvsSsid, seedSsids, seeds);
+
+        Serial.printf("[WIFI] build-time network (WIFI_SSID): %s — NVS is not used "
+                      "for the choice\n", seedSsids[0].c_str());
+        if (seeds > 1) {
+            Serial.printf("[WIFI] second build-time network: %s\n", seedSsids[1].c_str());
+        }
+
+        if (nvsSsid.length() == 0) {
+            Serial.println("[WIFI] NVS is empty — seeding it with the build-time network");
+        } else if (!nvsIsSeed) {
+            Serial.printf("[WIFI] NVS holds \"%s\" (another network) — OVERWRITING it "
+                          "with %s\n", nvsSsid.c_str(), seedSsids[0].c_str());
+        } else if (nvsSsid != seedSsids[0]) {
+            Serial.printf("[WIFI] NVS holds \"%s\" — one of this build's networks, "
+                          "keeping it\n", nvsSsid.c_str());
+        }
+
+        // Force NVS to agree with the build: this is the guarantee that the board
+        // cannot come back up on a network this build never heard of.
+        if (!nvsIsSeed) {
+            wifi_save_creds(seedSsids[0], seedPasses[0]);
+        } else if (nvsSsid == seedSsids[0] && nvsPass != seedPasses[0]) {
+            wifi_save_creds(seedSsids[0], seedPasses[0]);   // password changed in the build
+        }
+
+        if (wifi_try_candidates(true)) return true;
+
+        Serial.println("[WIFI] the build-time network did not answer");
+#if ENRG_SEED_OPEN_PORTAL
+        Serial.println("[WIFI] opening the Captive Portal");
+        if (start_captive_portal()) {
+            Serial.println("[WIFI] setup complete — rebooting for a clean STA start");
+            delay(1000);
+            ESP.restart();
+        }
+#else
+        Serial.println("[WIFI] no portal in a build-time build — the setup AP stays up and "
+                       "the network is retried every minute");
+        Serial.println("[WIFI] a wrong pair can be corrected with `WIFI <ssid> <pass>`, "
+                       "or reflash with the right -D WIFI_SSID/-D WIFI_PASS");
+        Serial.println("[WIFI] note: the ESP32 radio is 2.4 GHz only — a 5 GHz-only SSID "
+                       "is invisible to it");
+#endif
+        wifi_ensure_ap();
+        return false;
+    }
+
     String ssid = wifi_ssid_from_nvs();
     String pass = wifi_pass_from_nvs();
 
-    if (ssid.length() > 0) {
-        Serial.printf("[WIFI] saved network: %s (from NVS)\n", ssid.c_str());
-        if (wifi_connect_creds(ssid, pass, ENRG_WIFI_CONNECT_TIMEOUT_MS)) return true;
-        Serial.println("[WIFI] saved network unavailable — opening the Captive Portal");
-    } else {
-        Serial.println("[WIFI] no credentials in NVS");
-        if (String(WIFI_SSID).length() > 0) {
-            Serial.printf("[WIFI] trying the build-time network %s (NVS stays empty)\n", WIFI_SSID);
-            if (wifi_connect_creds(WIFI_SSID, WIFI_PASS, ENRG_WIFI_CONNECT_TIMEOUT_MS)) return true;
-            Serial.println("[WIFI] build-time network unavailable");
-        }
+    if (ssid.length() == 0) {
+        Serial.println("[WIFI] no credentials in NVS and no build-time network");
         Serial.println("[WIFI] starting the Captive Portal (first setup)");
+        if (start_captive_portal()) {
+            Serial.println("[WIFI] setup complete — rebooting for a clean STA start");
+            delay(1000);
+            ESP.restart();
+        }
+        // Portal timed out or the user cancelled: stay reachable and keep looking.
+        wifi_ensure_ap();
+        return WiFi.status() == WL_CONNECTED;
     }
 
+    Serial.printf("[WIFI] saved network: %s (from NVS)\n", ssid.c_str());
+    if (wifi_connect_creds(ssid, pass, ENRG_WIFI_CONNECT_TIMEOUT_MS)) return true;
+
+    Serial.println("[WIFI] saved network unavailable — opening the Captive Portal");
     if (start_captive_portal()) {
         Serial.println("[WIFI] setup complete — rebooting for a clean STA start");
         delay(1000);
@@ -1909,8 +2154,9 @@ static void print_help_serial() {
     Serial.println("                      (the device will start the Axis-Device-XXXX Captive Portal)");
     Serial.println("  WIFI <ssid> <pass> — save WiFi credentials to NVS and reboot into STA mode");
     Serial.println("                      (alternative to the Captive Portal; no WiFiManager needed)");
-    Serial.println("                      (the password may be omitted for an open network;");
-    Serial.println("                      the boot always prefers NVS over anything else)");
+    Serial.println("                      (the password may be omitted for an open network)");
+    Serial.println("                      NOTE: a build with -D WIFI_SSID/-D WIFI_PASS ignores");
+    Serial.println("                      NVS and restores its own network at every boot");
     Serial.println("  NONCE             — print the stored anti-replay counter");
     Serial.println("  SETNONCE <n>      — set the anti-replay counter to n (must be >= the");
     Serial.println("                      on-chain nonce, otherwise proofs get 400 InvalidNonce)");
@@ -1941,6 +2187,23 @@ static void print_device_info_serial() {
                   savedSsid.length() > 0 ? savedSsid.c_str() : "<none>");
     Serial.printf("[INFO] wifi_pass_len = %u (the password itself is never printed)\n",
                   (unsigned)wifi_pass_from_nvs().length());
+    String seedSsids[ENRG_WIFI_SEED_MAX];
+    String seedPasses[ENRG_WIFI_SEED_MAX];
+    int seedCount = wifi_build_seeds(seedSsids, seedPasses);
+    if (seedCount > 0) {
+        String alt = (seedCount > 1) ? (" + " + seedSsids[1]) : String("");
+        Serial.printf("[INFO] wifi_buildtime= %s%s (this build wins over NVS)\n",
+                      seedSsids[0].c_str(), alt.c_str());
+    } else {
+        Serial.println("[INFO] wifi_buildtime= <none> (NVS decides)");
+    }
+#if ENRG_USE_PZEM
+    Serial.printf("[INFO] pzem          = %s (Serial2 @9600, RX=GPIO%d TX=GPIO%d)\n",
+                  g_pzem_ok ? "answering" : "NOT responding",
+                  (int)ENRG_PZEM_RX, (int)ENRG_PZEM_TX);
+#else
+    Serial.println("[INFO] pzem          = disabled (ENRG_USE_PZEM=0)");
+#endif
 }
 
 /** CLEARWIFI: fully erase the WiFi credentials from NVS + reboot into AP mode. */
@@ -1985,6 +2248,12 @@ static void cmd_wifi(const String &arg) {
         Serial.println("[WIFI] ERR: the credentials did not reach NVS — NOT rebooting. "
                        "Run CLEARWIFI and send the command again.");
         return;
+    }
+    // In a build-time build the boot re-writes NVS from WIFI_SSID, so a value
+    // stored here survives only when the build does not name the network.
+    if (String(WIFI_SSID).length() > 0 || String(WIFI_SSID2).length() > 0) {
+        Serial.println("[WIFI] WARN: this build embeds a network (WIFI_SSID) — the next boot "
+                       "restores it; reflash without the flag to keep this one");
     }
     Serial.printf("[WIFI] saved %s — rebooting into STA mode...\n", ssid.c_str());
     delay(500);

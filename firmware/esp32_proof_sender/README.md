@@ -43,7 +43,8 @@ Arduino sketches for ESP32 that read energy data from a PZEM-004T sensor, sign i
 ### Requirements
 
 - ESP32 DevKit V1
-- PZEM-004T sensor (v3.0, Modbus) — подключён на `Serial2`, RX=16/TX=17;
+- PZEM-004T sensor (v3.0, Modbus) — подключён на `Serial2` @9600, RX=GPIO16 /
+  TX=GPIO17 (общий GND), опрос начинается после прогрева 1 с;
   `ENRG_USE_PZEM=1` уже включён в build_flags всех env
 - PlatformIO (рекомендуется) или Arduino IDE
 
@@ -187,21 +188,63 @@ pio device monitor --port /dev/ttyUSB0 --baud 115200
 
 Если логов нет — проверьте baud (115200), порт и состояние NVS.
 
-### ⚠️ Plug & Play онбординг (Wi-Fi только из NVS, без хардкода)
+### ⚠️ Wi-Fi: build-time флаги → NVS → портал
 
-Wi-Fi-креды **никогда** не зашиваются в прошивку — они хранятся только в
-NVS (`Preferences`, namespace `enrg`, ключи `wifi_ssid`/`wifi_pass`).
-При старте устройство:
+Приоритет (см. `setup_wifi()`):
 
-1. Читает креды из NVS — **это единственный источник правды**; хардкод в
-   прошивке NVS не перезаписывает никогда.
+1. **Build-time сеть** — `WIFI_SSID`/`WIFI_PASS` (и вторая пара
+   `WIFI_SSID2`/`WIFI_PASS2`), переданные через `PLATFORMIO_BUILD_FLAGS`.
+   Если они заданы — они **главные**: NVS для выбора не читается, а если в NVS
+   лежит другая сеть, она **перезаписывается** при загрузке. Плата физически не
+   может «вернуться» в сеть, которую оставила предыдущая прошивка. Портал в
+   такой сборке **не поднимается** (`ENRG_SEED_OPEN_PORTAL=0`): AP для signer'а
+   остаётся, а сеть повторяется раз в минуту.
+2. **NVS** (`Preferences`, namespace `enrg`, ключи `wifi_ssid`/`wifi_pass`) —
+   когда build-time флагов нет. Это режим «обычной» сборки `pio run -e esp32dev`.
+3. **Captive Portal** `Axis-Device-XXXX` — когда нет ни того, ни другого.
+
+Лог загрузки сборки с вшитой сетью:
+
+```text
+[WIFI] build-time network (WIFI_SSID): RT-GPON-4F18 — NVS is not used for the choice
+[WIFI] second build-time network: RT-5GPON-4F18
+[WIFI] NVS holds "<старый SSID>" (another network) — OVERWRITING it with RT-GPON-4F18
+[WIFI] credentials saved in NVS: RT-GPON-4F18 (password: 11 chars)
+[WIFI] candidate 1/2: RT-GPON-4F18
+[WIFI] connecting to RT-GPON-4F18 ...
+[WIFI] connected, IP=192.168.1.57
+```
+
+#### Прошивка одной командой, с вшитой сетью, без портала
+
+```bash
+cd ENRG/firmware/esp32_proof_sender
+
+PLATFORMIO_BUILD_FLAGS='-D WIFI_SSID=\"<SSID>\" -D WIFI_PASS=\"<ПАРОЛЬ>\" -D WIFI_SSID2=\"<SSID2>\" -D WIFI_PASS2=\"<ПАРОЛЬ2>\"' \
+  pio run -e esp32dev -t upload
+
+pio device monitor -b 115200
+```
+
+`WIFI_SSID2`/`WIFI_PASS2` — необязательны (одного `-D WIFI_SSID` достаточно).
+Если плата не на первом порту: `... -t upload --upload-port /dev/ttyUSB1`
+(Windows — `--upload-port COM5`). Пароль в git **не** попадает: он живёт только
+в переменной окружения этой команды и в NVS платы.
+
+> Вторая пара `WIFI_SSID2` — страховка от опечатки/другого имени того же роутера
+> (`RT-GPON-XXXX` и `RT-5GPON-XXXX`) и от раздельных 2.4/5 ГГц SSID: кандидаты
+> пробуются по порядку, победитель записывается в NVS и в следующий раз идёт
+> первым.
+
+#### Режим «из NVS» (без build-time флагов)
+
+1. Читает креды из NVS.
 2. Делает **скан сетей** и смотрит, видна ли сохранённая сеть:
    - видна → подключается (до `ENRG_WIFI_ATTEMPTS` = 2 попыток по 30 с);
    - не видна → печатает в Serial, какие сети есть вокруг, делает одну
      короткую попытку (8 с — на случай скрытого SSID) и уходит в портал,
-     вместо того чтобы 30 секунд «долбиться» в несуществующую сеть;
-     (ESP32 работает только в **2.4 ГГц**: если у роутера отдельные SSID для
-     2.4 и 5 ГГц — сохраняйте 2.4-гигагерцевый, иначе плата его не увидит);
+     вместо того чтобы 30 секунд «долбиться» в несуществующую сеть
+     (ESP32 работает только в **2.4 ГГц** — 5-гигагерцевый SSID он не увидит);
    - пароль отвергнут роутером (`WL_CONNECT_FAILED` / wrong password) →
      попытки прекращаются сразу, в лог уходит `refused the password`.
 3. Если сети нет / подключение не удалось — поднимает **защищённую AP**
@@ -227,9 +270,9 @@ CLEARWIFI
 #### Переезд / смена роутера: `WIFI <ssid> <pass>`
 
 ```text
-WIFI RT-5GPON-4F18 TekbbvSaM1
-# [WIFI] credentials saved in NVS: RT-5GPON-4F18 (password: 11 chars)
-# [WIFI] saved RT-5GPON-4F18 — rebooting into STA mode...
+WIFI RT-GPON-4F18 <пароль>
+# [WIFI] credentials saved in NVS: RT-GPON-4F18 (password: 11 chars)
+# [WIFI] saved RT-GPON-4F18 — rebooting into STA mode...
 ```
 
 Команда пишет оба ключа (`Preferences.putString` → внутри фреймворка
@@ -239,26 +282,33 @@ WIFI RT-5GPON-4F18 TekbbvSaM1
 этом и **не перезагружается**. Пароль можно не указывать — тогда сеть
 считается открытой.
 
+> ⚠️ В сборке с build-time флагами (`-D WIFI_SSID=...`) команда `WIFI` тоже
+> работает, но при следующей загрузке NVS будет перезаписана вшитой сетью —
+> плата честно предупреждает об этом в логе (`WARN: this build embeds a
+> network`). Менять сеть в такой сборке нужно флагами, а не командой.
+
 > **Исправленный баг (2026-10-30).** В пилотной сборке креды были захардкожены
 > (`WIFI_SSID/WIFI_PASS`) и `setup_wifi()` писал их в NVS **на каждой
 > загрузке**. Поэтому `WIFI <новый ssid> <pass>` выглядел «несохранённым»:
 > команда записывала новую сеть, а при следующем boot'е прошивка возвращала
 > старую (`[WIFI] credentials saved in NVS: <старый SSID>`) и искала роутер,
-> которого рядом уже нет. Теперь хардкода в исходнике нет: `WIFI_SSID`/
-> `WIFI_PASS` по умолчанию пустые и, если заданы через
-> `PLATFORMIO_BUILD_FLAGS`, используются **только при пустой NVS** и никогда в
-> NVS не пишутся.
+> которого рядом уже нет. Теперь хардкода в исходнике нет (по умолчанию
+> `WIFI_SSID`/`WIFI_PASS` пустые), а если сеть задана флагами — она **явно
+> главнее NVS** и NVS с другим значением перезаписывается при загрузке: именно
+> так прошивка становится предсказуемой.
 
 **Полный список Serial-команд** (та же выдача по `HELP`):
 
 ```text
 HELP              — список команд
-INFO              — device_id, public_key (base64/hex), WiFi (сохранённый SSID,
-                    длина пароля)/mDNS/signer, storage
+INFO              — device_id, public_key (base64/hex), WiFi (SSID из NVS,
+                    вшитая в сборку сеть, длина пароля)/PZEM/mDNS/signer, storage
 SIGN <hex>        — подписать произвольное сообщение (hex, ≤256 байт) ключом
                     устройства; в лог уходит только sig_base64/sig_hex
 WIFI <ssid> <pass> — сохранить Wi-Fi-креды в NVS (с проверкой) и перезагрузиться
                     в STA; пароль можно опустить для открытой сети
+                    (в сборке с -D WIFI_SSID=... при следующем boot'е NVS
+                    перезапишется вшитой сетью — см. предупреждение в логе)
 CLEARWIFI         — стереть Wi-Fi-креды из NVS и перезагрузиться в AP-режим
 NONCE             — показать сохранённый anti-replay счётчик
 SETNONCE <n>      — выставить счётчик (n ≥ on-chain nonce, иначе 400 InvalidNonce)
@@ -414,7 +464,20 @@ PZEM-004T отдаёт кумулятивный счётчик (кВт·ч с м
 
 Датчик включён в env `esp32dev`, `esp32dev-ota`, `esp32dev-atecc`,
 `esp32dev-se050`, `esp32dev-mainnet` (`-D ENRG_USE_PZEM=1` +
-`mandulaj/PZEM-004T-v30`); подключение — `Serial2`, RX=16, TX=17.
+`mandulaj/PZEM-004T-v30`); подключение — `Serial2` @9600,8N1, RX=GPIO16
+(<- PZEM TX), TX=GPIO17 (-> PZEM RX), общий GND. Пины заданы в прошивке
+(`ENRG_PZEM_RX`/`ENRG_PZEM_TX`) и печатаются при старте:
+`[SENSOR] PZEM on Serial2 @9600, RX=GPIO16 TX=GPIO17 — warm-up 1000 ms`.
+
+> **Почему раньше в логе было `[SENSOR] PZEM not responding at boot`.** У
+> PZEM-004T свой импульсный БП на 230 В: после подачи питания он отвечает по
+> UART только через ~1 с, а ESP32 готов уже через ~300 мс и опрашивал его
+> первым делом. Сейчас прошивка ждёт `ENRG_PZEM_WARMUP_MS` (1000 мс) и делает
+> до `ENRG_PZEM_BOOT_ATTEMPTS` (5) попыток с паузой
+> `ENRG_PZEM_BOOT_RETRY_MS` (500 мс). Если датчик всё равно молчит в логе будет
+> `[SENSOR] PZEM no answer yet (n/5)` и затем подсказка про 5 V/GND/перекрещенные
+> TX-RX; опрос продолжается на каждом отчёте, так что «проснувшийся» позже
+> датчик подхватывается сам.
 
 ```bash
 pio run -e esp32dev -t upload
@@ -650,6 +713,9 @@ PLATFORMIO_BUILD_FLAGS='-D ENRG_AGGREGATE_WINDOW_MS=900000' pio run -e esp32dev-
 | `[MANIFEST] WARN: … hard-coded config` | манифест не получен; при `ENRG_MANIFEST_REQUIRED=0` устройство работает на встроенных настройках |
 | `E (…) esp_littlefs: Corrupted dir pair at {0x0, 0x1}` + `[OTA] WARN: LittleFS not mounted` | раздел LittleFS не был отформатирован. С 2026-10-21 прошивка монтирует его с `formatOnFail=true` (в LittleFS лежит только временный образ `/fw_update.bin`, состояние устройства — в NVS), поэтому OTA-раздел форматируется один раз и дальше доступен |
 | `[PROOF] skip: no new energy …` | корректное поведение: счётчик PZEM не прибавил ни одного Wh (см. «Разрешение счётчика» выше) |
+| `[WIFI] build-time network (WIFI_SSID): X — NVS is not used for the choice` | прошивка собрана с вшитой сетью: NVS игнорируется, см. «Wi-Fi: build-time флаги → NVS → портал» |
+| `[WIFI] NVS holds "Y" (another network) — OVERWRITING it with X` | так и задумано: старая сеть из NVS заменена вшитой |
+| `[SENSOR] PZEM no answer yet (n/5)` | датчик ещё не проснулся (свой БП) — прошивка дочитывает; если повторяется все 5 раз: 5 V, общий GND, перекрещенные TX(ESP32 GPIO17)→RX(PZEM) / RX(GPIO16)←TX(PZEM) |
 
 Настройки сети/HTTP (build flags):
 
