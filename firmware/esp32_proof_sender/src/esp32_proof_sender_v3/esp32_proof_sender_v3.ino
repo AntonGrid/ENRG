@@ -70,15 +70,44 @@
 #define ENRG_AP_TIMEOUT_SEC 600
 #endif
 
-// ── WiFi: HARD-CODED credentials (temporary pilot — no Captive Portal) ──
-// Anton's home Wi-Fi, baked in for the pilot. The device connects directly
-// and skips the Axis-Device-XXXX portal. Set both to "" to restore the
-// normal NVS + Captive Portal flow.
+// ── WiFi: NVS is the source of truth; nothing is baked into the source ──
+// Boot order (see setup_wifi()):
+//   1. NVS — namespace "enrg", keys wifi_ssid/wifi_pass (written by the Serial
+//      command `WIFI <ssid> <pass>` or by the Captive Portal);
+//   2. a build-time seed network, used ONLY when NVS is empty and never
+//      written into NVS;
+//   3. Captive Portal "Axis-Device-XXXX".
+//
+// The pilot build hard-coded Anton's home pair here and wrote it to NVS on
+// EVERY boot. That single line is why `WIFI RT-5GPON-4F18 ...` "did not stick":
+// the command saved the new network, the reboot put the old SSID back, and the
+// board knocked on a router that was in another flat. Credentials live only in
+// NVS now (audit 2026-08-18 P1: no real-network secrets in a tracked file).
+//
+// To bake a fallback into a private build (it stays a fallback — the user's
+// saved network always wins):
+//   PLATFORMIO_BUILD_FLAGS='-D WIFI_SSID=\"MyNet\" -D WIFI_PASS=\"secret\"'
 #ifndef WIFI_SSID
-#define WIFI_SSID "MTSRouter_004386"
+#define WIFI_SSID ""
 #endif
 #ifndef WIFI_PASS
-#define WIFI_PASS "23988521"
+#define WIFI_PASS ""
+#endif
+
+// How many times the saved network is tried before the Captive Portal opens.
+// One attempt is enough for a network that is in range; the second covers a
+// router that is still finishing its own boot.
+#ifndef ENRG_WIFI_ATTEMPTS
+#define ENRG_WIFI_ATTEMPTS 2
+#endif
+// Short attempt for a saved SSID that the scan did not see: a hidden network
+// does not broadcast its name, so it still deserves one knock.
+#ifndef ENRG_WIFI_HIDDEN_TIMEOUT_MS
+#define ENRG_WIFI_HIDDEN_TIMEOUT_MS 8000UL
+#endif
+// How often loop() re-checks for the saved network while running in AP mode.
+#ifndef ENRG_WIFI_RETRY_MS
+#define ENRG_WIFI_RETRY_MS 60000UL
 #endif
 
 // Oracle HTTP(S) endpoint. The firmware supports both modes: http://
@@ -910,16 +939,46 @@ static const char WIFI_PREF_PASS[] = "wifi_pass";
 static String wifi_ssid_from_nvs() { return g_prefs.getString(WIFI_PREF_SSID, ""); }
 static String wifi_pass_from_nvs() { return g_prefs.getString(WIFI_PREF_PASS, ""); }
 
-static void wifi_save_creds(const String &ssid, const String &pass) {
-    g_prefs.putString(WIFI_PREF_SSID, ssid);
-    g_prefs.putString(WIFI_PREF_PASS, pass);
-    Serial.printf("[WIFI] credentials saved in NVS: %s\n", ssid.c_str());
+/**
+ * Write both keys and prove they landed.
+ *
+ * `Preferences::putString` is not buffered: inside the framework it calls
+ * `nvs_set_str` and then directly `nvs_commit`
+ * (framework-arduinoespressif32/libraries/Preferences/src/Preferences.cpp,
+ * `putString`), and the class exposes no public `commit()` — the commit is done
+ * by the write itself, not deferred to `end()`. What `putString` cannot promise
+ * is that the value read back equals the value written, so the keys are read back
+ * here: a save that only *looked* saved is the exact bug this path prevents.
+ *
+ * Returns true only when both keys read back equal what was written.
+ */
+static bool wifi_save_creds(const String &ssid, const String &pass) {
+    if (ssid.length() == 0) {
+        Serial.println("[WIFI] ERR: refusing to save an empty SSID");
+        return false;
+    }
+    size_t ssidWritten = g_prefs.putString(WIFI_PREF_SSID, ssid);
+    size_t passWritten = g_prefs.putString(WIFI_PREF_PASS, pass);
+
+    String ssidBack = wifi_ssid_from_nvs();
+    String passBack = wifi_pass_from_nvs();
+    if (ssidBack != ssid || passBack != pass) {
+        Serial.printf("[WIFI] ERR: NVS write did not stick (ssid %u/%u bytes, pass %u/%u) — "
+                      "erase with CLEARWIFI and retry\n",
+                      (unsigned)ssidWritten, (unsigned)ssid.length(),
+                      (unsigned)passWritten, (unsigned)pass.length());
+        return false;
+    }
+    Serial.printf("[WIFI] credentials saved in NVS: %s (password: %u chars)\n",
+                  ssidBack.c_str(), (unsigned)passBack.length());
+    return true;
 }
 
 static void wifi_clear_creds() {
     g_prefs.remove(WIFI_PREF_SSID);
     g_prefs.remove(WIFI_PREF_PASS);
-    Serial.println("[WIFI] credentials erased from NVS");
+    Serial.printf("[WIFI] credentials erased from NVS (wifi_ssid key present: %s)\n",
+                  g_prefs.isKey(WIFI_PREF_SSID) ? "yes" : "no");
 }
 
 // ── Plug & Play: names are derived from deviceId (last pubkey hex), ──
@@ -939,30 +998,123 @@ static String mdns_hostname() {
     return "axis-device-" + tail;
 }
 
-/** Connect to Wi-Fi with explicit credentials and a timeout. */
-bool connect_wifi_creds(const String &ssid, const String &pass, unsigned long timeoutMs) {
-    if (WiFi.status() == WL_CONNECTED) return true;
-    WiFi.mode(WIFI_STA);
+// ── Network discovery ────────────────────────────────────────────────────
+// A device with no screen cannot be told "your router is gone" any other way
+// than by a scan: the answer to "why is it not connecting" is usually "that
+// network is not here — these are". So every boot and every retry starts with a
+// scan, and the scan both gates the attempt and fills one log line.
+
+// How one connection attempt ended. Plain #defines rather than an enum: the
+// Arduino preprocessor emits function prototypes above the first declaration in
+// the sketch, so a sketch-local type in a signature would not be visible there.
+#define WIFI_OK 0            // connected
+#define WIFI_NOT_IN_RANGE 1  // the driver reports the SSID as absent
+#define WIFI_WRONG_PASS 2    // the driver reports the key as refused
+#define WIFI_TIMEOUT 3       // no answer within the timeout
+
+/**
+ * Scan for visible networks (hidden ones included).
+ * Fills `found` and `seen` (true when `ssid` is among them), plus up to 8 names
+ * for the log. Returns the number of networks found; 0 when the scan failed.
+ */
+static int wifi_scan(const String &ssid, bool *seen, String *names) {
+    if (seen != nullptr) *seen = false;
+    if (names != nullptr) *names = "";
+
+    int found = WiFi.scanNetworks(/*async=*/false, /*show_hidden=*/true);
+    if (found < 0) {
+        Serial.printf("[WIFI] scan failed (%d) — trying the saved network blind\n", found);
+        return 0;
+    }
+    for (int i = 0; i < found; i++) {
+        String name = WiFi.SSID(i);
+        if (seen != nullptr && name == ssid) *seen = true;
+        if (names != nullptr && i < 8) *names += (i == 0 ? "" : ", ") + name;
+    }
+    if (names != nullptr && found > 8) *names += ", …";
+    WiFi.scanDelete();
+    return found;
+}
+
+/**
+ * One bounded attempt. Returns *why* it ended, not just false: a refused
+ * password and an absent network do not become true by waiting, and the caller
+ * must not spend 30 s on an answer the driver has already given.
+ */
+static int wifi_try_connect(const String &ssid, const String &pass, unsigned long timeoutMs) {
+    if (WiFi.status() == WL_CONNECTED) return WIFI_OK;
+    // Keep the setup AP alive when it is up: dropping to WIFI_STA alone would
+    // close the very door the user is standing at.
+    WiFi.mode((WiFi.getMode() & WIFI_AP) ? WIFI_AP_STA : WIFI_STA);
     WiFi.begin(ssid.c_str(), pass.c_str());
     Serial.printf("[WIFI] connecting to %s ...\n", ssid.c_str());
     unsigned long start = millis();
-    while (WiFi.status() != WL_CONNECTED && (millis() - start) < timeoutMs) {
+    while ((millis() - start) < timeoutMs) {
+        wl_status_t status = WiFi.status();
+        if (status == WL_CONNECTED) {
+            Serial.printf("[WIFI] connected, IP=%s\n", WiFi.localIP().toString().c_str());
+            return WIFI_OK;
+        }
+        if (status == WL_NO_SSID_AVAIL) return WIFI_NOT_IN_RANGE;
+        if (status == WL_CONNECT_FAILED) return WIFI_WRONG_PASS;
+#ifdef WL_STATION_WRONG_PASSWORD
+        if (status == WL_STATION_WRONG_PASSWORD) return WIFI_WRONG_PASS;
+#endif
         delay(200);
     }
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.printf("[WIFI] connected, IP=%s\n", WiFi.localIP().toString().c_str());
-        return true;
+    Serial.println("[WIFI] connect FAILED (timeout)");
+    return WIFI_TIMEOUT;
+}
+
+/**
+ * Connect with explicit credentials: scan, then a bounded number of attempts,
+ * stopping early on an answer that will not change.
+ */
+static bool wifi_connect_creds(const String &ssid, const String &pass, unsigned long timeoutMs) {
+    if (ssid.length() == 0) return false;
+
+    bool seen = false;
+    String visible;
+    int found = wifi_scan(ssid, &seen, &visible);
+    unsigned long timeout = timeoutMs;
+    if (found > 0 && !seen) {
+        Serial.printf("[WIFI] \"%s\" is not in range; visible now: %s\n",
+                      ssid.c_str(), visible.length() > 0 ? visible.c_str() : "<none>");
+        Serial.println("[WIFI] note: the ESP32 radio is 2.4 GHz only — if the router "
+                       "publishes a separate 5 GHz SSID, save the 2.4 GHz one");
+        Serial.println("[WIFI] one short attempt anyway — a hidden SSID does not appear in a scan");
+        timeout = ENRG_WIFI_HIDDEN_TIMEOUT_MS;
     }
-    Serial.println("[WIFI] connect FAILED");
+
+    for (int attempt = 1; attempt <= ENRG_WIFI_ATTEMPTS; attempt++) {
+        int result = wifi_try_connect(ssid, pass, timeout);
+        if (result == WIFI_OK) return true;
+        if (result == WIFI_NOT_IN_RANGE) {
+            Serial.printf("[WIFI] attempt %d/%d: %s is not in range\n",
+                          attempt, (int)ENRG_WIFI_ATTEMPTS, ssid.c_str());
+            WiFi.disconnect(false, false);
+            return false;   // waiting again will not make it appear
+        }
+        if (result == WIFI_WRONG_PASS) {
+            Serial.printf("[WIFI] attempt %d/%d: %s refused the password — check the key\n",
+                          attempt, (int)ENRG_WIFI_ATTEMPTS, ssid.c_str());
+            WiFi.disconnect(false, false);
+            return false;   // the same key will be refused the same way
+        }
+        Serial.printf("[WIFI] attempt %d/%d: %s did not connect\n",
+                      attempt, (int)ENRG_WIFI_ATTEMPTS, ssid.c_str());
+        delay(500);
+    }
+    WiFi.disconnect(false, false);
     return false;
 }
 
-/** Connect using the credentials from NVS. */
+/** Connect using the credentials from NVS (no-op when already connected). */
 bool connect_wifi_from_nvs(unsigned long timeoutMs) {
     if (WiFi.status() == WL_CONNECTED) return true;
     String ssid = wifi_ssid_from_nvs();
     if (ssid.length() == 0) return false;
-    return connect_wifi_creds(ssid, wifi_pass_from_nvs(), timeoutMs);
+    return wifi_connect_creds(ssid, wifi_pass_from_nvs(), timeoutMs);
 }
 
 /**
@@ -994,30 +1146,120 @@ static bool start_captive_portal() {
         Serial.println("[PORTAL] WiFiManager did not return an SSID — continuing without WiFi");
         return false;
     }
-    wifi_save_creds(ssid, pass);
+    if (!wifi_save_creds(ssid, pass)) {
+        Serial.println("[PORTAL] WARN: the credentials did not reach NVS — the device runs on "
+                       "them now, but a reboot will need the portal again");
+        return false;
+    }
     return true;
 }
 
-/** Orchestration: NVS credentials → 30s connect → otherwise Captive Portal. */
-static bool setup_wifi() {
-    // Temporary pilot: hard-coded credentials — connect directly, no portal.
-    if (String(WIFI_SSID).length() > 0) {
-        wifi_save_creds(WIFI_SSID, WIFI_PASS);  // keep NVS in sync (INFO / Serial WIFI)
-        if (connect_wifi_creds(WIFI_SSID, WIFI_PASS, ENRG_WIFI_CONNECT_TIMEOUT_MS)) {
-            return true;
-        }
-        Serial.println("[WIFI] hard-coded network unavailable — continuing without WiFi");
+/**
+ * Make sure the setup AP is up.
+ *
+ * After the portal closes without a network (timeout, or the user gave up), the
+ * board must not go dark: the AP stays up, the HTTP signer answers at
+ * 192.168.4.1, and loop() keeps looking for the saved network. Reachable and
+ * waiting beats silent and waiting.
+ */
+static bool wifi_ensure_ap() {
+    if (WiFi.getMode() & WIFI_AP) return true;
+    String apName = ap_name();
+    String apPass = ap_password();
+    WiFi.mode(WIFI_AP_STA);
+    if (!WiFi.softAP(apName.c_str(), apPass.c_str())) {
+        Serial.println("[WIFI] WARN: could not raise the setup AP");
         return false;
     }
+    Serial.printf("[WIFI] setup AP up: %s (password: %s) → http://192.168.4.1\n",
+                  apName.c_str(), apPass.c_str());
+    return true;
+}
+
+/** Start mDNS once (safe to call again after a late Wi-Fi connection). */
+static bool g_mdnsStarted = false;
+static void start_mdns() {
+    if (g_mdnsStarted) return;
+    if (MDNS.begin(mdns_hostname().c_str())) {
+        MDNS.addService("axis-connect", "tcp", ENRG_SIGNER_PORT);
+        MDNS.addServiceTxt("axis-connect", "tcp", "schema", "axis-energy-v1");
+        g_mdnsStarted = true;
+        Serial.printf("[MDNS] hostname: %s.local\n", mdns_hostname().c_str());
+    } else {
+        Serial.println("[MDNS] WARN: mDNS not started");
+    }
+}
+
+/**
+ * Background Wi-Fi recovery, called from loop().
+ *
+ * A board in AP mode must not sit there forever: the moment the saved network
+ * appears (the router came back, the new flat's Wi-Fi was configured later), the
+ * device should join it on its own — that is what auto-discovery means for a
+ * device with no screen. Retries are rate-limited and gated on a scan, so the
+ * radio does not hammer a network that is not there.
+ */
+static void wifi_retry_tick() {
+    if (WiFi.status() == WL_CONNECTED) return;
+    static unsigned long lastMs = 0;
+    unsigned long now = millis();
+    if (lastMs == 0) {          // start the clock: the boot path already tried
+        lastMs = now;
+        return;
+    }
+    if ((now - lastMs) < ENRG_WIFI_RETRY_MS) return;
+    lastMs = now;
 
     String ssid = wifi_ssid_from_nvs();
+    if (ssid.length() == 0) return;   // nothing saved — the portal is the answer
+
+    bool seen = false;
+    String visible;
+    int found = wifi_scan(ssid, &seen, &visible);
+    if (found > 0 && !seen) {
+        Serial.printf("[WIFI] waiting: \"%s\" is not in range (visible: %s)\n",
+                      ssid.c_str(), visible.length() > 0 ? visible.c_str() : "<none>");
+        return;
+    }
+    Serial.printf("[WIFI] \"%s\" is in range — retrying the connection\n", ssid.c_str());
+    if (wifi_connect_creds(ssid, wifi_pass_from_nvs(), ENRG_WIFI_CONNECT_TIMEOUT_MS)) {
+        start_mdns();
+    }
+}
+
+/**
+ * Boot Wi-Fi policy — NVS first, always.
+ *
+ * 1. NVS ("enrg"/wifi_ssid+wifi_pass) is the source of truth. It is read here
+ *    and never written from this path: the pilot build used to write its
+ *    hard-coded pair into NVS on every boot, so `WIFI <new> <pass>` looked
+ *    ignored after the reboot — the boot put the old SSID back.
+ * 2. Only when NVS is empty may a build-time seed network be used, and it is
+ *    not persisted (a baked default must never replace the user's choice).
+ * 3. No network → Captive Portal "Axis-Device-XXXX". If the portal closes
+ *    without a network, the AP stays up and loop() retries the saved network at
+ *    most once a minute, and only when a scan can see it.
+ */
+static bool setup_wifi() {
+    // The driver keeps its own copy of the creds in NVS ("nvs.net80211") unless
+    // told not to; with persistence off, our Preferences is the only store.
+    WiFi.persistent(false);
+
+    String ssid = wifi_ssid_from_nvs();
+    String pass = wifi_pass_from_nvs();
+
     if (ssid.length() > 0) {
-        if (connect_wifi_creds(ssid, wifi_pass_from_nvs(), ENRG_WIFI_CONNECT_TIMEOUT_MS)) {
-            return true;
-        }
-        Serial.println("[WIFI] saved network unavailable — starting the Captive Portal");
+        Serial.printf("[WIFI] saved network: %s (from NVS)\n", ssid.c_str());
+        if (wifi_connect_creds(ssid, pass, ENRG_WIFI_CONNECT_TIMEOUT_MS)) return true;
+        Serial.println("[WIFI] saved network unavailable — opening the Captive Portal");
     } else {
-        Serial.println("[WIFI] no credentials in NVS — starting the Captive Portal (first setup)");
+        Serial.println("[WIFI] no credentials in NVS");
+        if (String(WIFI_SSID).length() > 0) {
+            Serial.printf("[WIFI] trying the build-time network %s (NVS stays empty)\n", WIFI_SSID);
+            if (wifi_connect_creds(WIFI_SSID, WIFI_PASS, ENRG_WIFI_CONNECT_TIMEOUT_MS)) return true;
+            Serial.println("[WIFI] build-time network unavailable");
+        }
+        Serial.println("[WIFI] starting the Captive Portal (first setup)");
     }
 
     if (start_captive_portal()) {
@@ -1025,6 +1267,8 @@ static bool setup_wifi() {
         delay(1000);
         ESP.restart();
     }
+    // Portal timed out or the user cancelled: stay reachable and keep looking.
+    wifi_ensure_ap();
     return WiFi.status() == WL_CONNECTED;
 }
 
@@ -1665,6 +1909,8 @@ static void print_help_serial() {
     Serial.println("                      (the device will start the Axis-Device-XXXX Captive Portal)");
     Serial.println("  WIFI <ssid> <pass> — save WiFi credentials to NVS and reboot into STA mode");
     Serial.println("                      (alternative to the Captive Portal; no WiFiManager needed)");
+    Serial.println("                      (the password may be omitted for an open network;");
+    Serial.println("                      the boot always prefers NVS over anything else)");
     Serial.println("  NONCE             — print the stored anti-replay counter");
     Serial.println("  SETNONCE <n>      — set the anti-replay counter to n (must be >= the");
     Serial.println("                      on-chain nonce, otherwise proofs get 400 InvalidNonce)");
@@ -1690,8 +1936,11 @@ static void print_device_info_serial() {
     Serial.printf("[INFO] mDNS          = %s.local\n", mdns_hostname().c_str());
     Serial.printf("[INFO] signer        = :%d (LAN-only: %d)\n",
                   (int)ENRG_SIGNER_PORT, (int)ENRG_SIGNER_LAN_ONLY);
+    String savedSsid = wifi_ssid_from_nvs();
     Serial.printf("[INFO] wifi_ssid_nvs = %s\n",
-                  wifi_ssid_from_nvs().length() > 0 ? "<saved>" : "<none>");
+                  savedSsid.length() > 0 ? savedSsid.c_str() : "<none>");
+    Serial.printf("[INFO] wifi_pass_len = %u (the password itself is never printed)\n",
+                  (unsigned)wifi_pass_from_nvs().length());
 }
 
 /** CLEARWIFI: fully erase the WiFi credentials from NVS + reboot into AP mode. */
@@ -1703,19 +1952,40 @@ static void cmd_clear_wifi() {
     ESP.restart();
 }
 
-/** WIFI <ssid> <password>: save credentials to NVS and reboot into STA mode.
- *  Serial alternative to the Captive Portal (works even while the portal is up). */
+/**
+ * WIFI <ssid> [password]: save credentials to NVS and reboot into STA mode.
+ * Serial alternative to the Captive Portal (works even while the portal is up).
+ * An omitted password means an open network.
+ *
+ * The save is verified by reading both keys back before the reboot: the command
+ * prints "saved" only when NVS really holds them. (Bug 2026-10-30: a boot-time
+ * write of the pilot's hard-coded pair overwrote this save, so the board came
+ * back up on the old network and knocked on a router that was not there.)
+ */
 static void cmd_wifi(const String &arg) {
     int sp = arg.indexOf(' ');
-    String ssid = (sp < 0) ? "" : arg.substring(0, sp);
+    String ssid = (sp < 0) ? arg : arg.substring(0, sp);
     String pass = (sp < 0) ? "" : arg.substring(sp + 1);
     ssid.trim();
     pass.trim();
-    if (ssid.length() == 0 || pass.length() == 0) {
+    if (ssid.length() == 0) {
         Serial.println("[WIFI] ERR: usage: WIFI <ssid> <password>");
         return;
     }
-    wifi_save_creds(ssid, pass);
+    if (ssid.length() > 32) {
+        Serial.println("[WIFI] ERR: the SSID is longer than 32 bytes (802.11 limit)");
+        return;
+    }
+    if (pass.length() > 0 && pass.length() < 8) {
+        Serial.println("[WIFI] ERR: a WPA2 password is 8..63 characters "
+                       "(omit it entirely for an open network)");
+        return;
+    }
+    if (!wifi_save_creds(ssid, pass)) {
+        Serial.println("[WIFI] ERR: the credentials did not reach NVS — NOT rebooting. "
+                       "Run CLEARWIFI and send the command again.");
+        return;
+    }
     Serial.printf("[WIFI] saved %s — rebooting into STA mode...\n", ssid.c_str());
     delay(500);
     ESP.restart();
@@ -2029,16 +2299,10 @@ void setup() {
                       (unsigned)LittleFS.usedBytes(), (unsigned)LittleFS.totalBytes());
     }
 
-    // Plug & Play: NVS credentials → 30s connect → otherwise Captive Portal.
+    // Wi-Fi: NVS credentials → scan-gated connect → otherwise Captive Portal.
     if (setup_wifi()) {
         // mDNS responder + local HTTP signer (communication with Axis-connect).
-        if (MDNS.begin(mdns_hostname().c_str())) {
-            MDNS.addService("axis-connect", "tcp", ENRG_SIGNER_PORT);
-            MDNS.addServiceTxt("axis-connect", "tcp", "schema", "axis-energy-v1");
-            Serial.printf("[MDNS] hostname: %s.local\n", mdns_hostname().c_str());
-        } else {
-            Serial.println("[MDNS] WARN: mDNS not started");
-        }
+        start_mdns();
     } else {
         Serial.println("[WARN] WiFi not connected — the local signer is unavailable without a network");
     }
@@ -2073,6 +2337,10 @@ void setup() {
 void loop() {
     // Onboarding: handle Serial commands (HELP/INFO/SIGN/CLEARWIFI) — non-blocking.
     handle_serial_input();
+
+    // Wi-Fi recovery: join the saved network as soon as it appears again
+    // (rate-limited, scan-gated — see wifi_retry_tick()).
+    wifi_retry_tick();
 
     // Plug & Play: serve the local HTTP signer.
     g_signerServer.handleClient();
