@@ -243,7 +243,7 @@ WIFI RT-5GPON-4F18 TekbbvSaM1
 > (`WIFI_SSID/WIFI_PASS`) и `setup_wifi()` писал их в NVS **на каждой
 > загрузке**. Поэтому `WIFI <новый ssid> <pass>` выглядел «несохранённым»:
 > команда записывала новую сеть, а при следующем boot'е прошивка возвращала
-> старую (`[WIFI] credentials saved in NVS: MTSRouter_004386`) и искала роутер,
+> старую (`[WIFI] credentials saved in NVS: <старый SSID>`) и искала роутер,
 > которого рядом уже нет. Теперь хардкода в исходнике нет: `WIFI_SSID`/
 > `WIFI_PASS` по умолчанию пустые и, если заданы через
 > `PLATFORMIO_BUILD_FLAGS`, используются **только при пустой NVS** и никогда в
